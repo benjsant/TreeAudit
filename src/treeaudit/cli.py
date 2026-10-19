@@ -12,7 +12,14 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from treeaudit import __version__
-from treeaudit.core.config import AppConfig, default_config_path, is_container_mode, load_config
+from treeaudit.core.config import (
+    CONTAINER_BIND_HOST,
+    DEFAULT_PORT,
+    AppConfig,
+    default_config_path,
+    is_container_mode,
+    load_config,
+)
 from treeaudit.core.errors import TreeAuditError
 from treeaudit.roots.mountinfo import MountInfoError, parse_mountinfo, read_mountinfo
 from treeaudit.roots.registry import current_home, evaluate_roots
@@ -75,6 +82,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     commands.add_parser("serve", help="démarrer le serveur web local")
+
+    gateway = commands.add_parser(
+        "gateway", help="relais TCP vers le conteneur app (Docker uniquement, D-020)"
+    )
+    gateway.add_argument("--upstream-host", required=True, help="hôte du service app")
+    gateway.add_argument("--upstream-port", type=int, default=DEFAULT_PORT)
+    gateway.add_argument("--listen-port", type=int, default=DEFAULT_PORT)
     return parser
 
 
@@ -151,6 +165,22 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _cmd_gateway(args: argparse.Namespace) -> int:
+    import asyncio
+
+    from treeaudit.gateway import GatewayConfig, serve_gateway
+
+    container_mode = is_container_mode()
+    config = GatewayConfig(
+        listen_host=CONTAINER_BIND_HOST if container_mode else "127.0.0.1",
+        listen_port=args.listen_port,
+        upstream_host=args.upstream_host,
+        upstream_port=args.upstream_port,
+    )
+    asyncio.run(serve_gateway(config, container_mode=container_mode))
+    return EXIT_OK
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -165,6 +195,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_roots_list(args)
         if args.command == "serve":
             return _cmd_serve(args)
+        if args.command == "gateway":
+            return _cmd_gateway(args)
     except (TreeAuditError, MountInfoError, OSError) as exc:
         print(f"erreur : {exc}", file=sys.stderr)
         return EXIT_ERROR

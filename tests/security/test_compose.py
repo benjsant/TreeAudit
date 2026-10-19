@@ -69,7 +69,7 @@ def volumes_of(service: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def test_expected_services() -> None:
-    assert set(SERVICES) == {"app", "check", "dev"}
+    assert set(SERVICES) == {"app", "gateway", "check", "dev"}
 
 
 @pytest.mark.parametrize("name", sorted(SERVICES))
@@ -98,12 +98,32 @@ def test_no_dangerous_mounts(name: str) -> None:
         assert volume["selinux"] is None, "':z'/':Z' relabel host files (D-011)"
 
 
-def test_app_port_published_on_loopback_only() -> None:
-    ports = SERVICES["app"]["ports"]
+def test_only_the_gateway_publishes_a_port() -> None:
+    publishing = {name for name, service in SERVICES.items() if service.get("ports")}
+    assert publishing == {"gateway"}
+
+
+def test_gateway_port_published_on_loopback_only() -> None:
+    ports = SERVICES["gateway"]["ports"]
     assert ports
     for port in ports:
         assert isinstance(port, str)
         assert port.startswith("127.0.0.1:"), port
+
+
+def test_app_has_no_outbound_network() -> None:
+    """D-020: the container that sees the data is only on an internal network."""
+    assert SERVICES["app"].get("networks") == ["internal"]
+    assert COMPOSE["networks"]["internal"].get("internal") is True
+
+
+def test_gateway_sees_no_data() -> None:
+    gateway = SERVICES["gateway"]
+    assert not gateway.get("volumes")
+    assert not gateway.get("environment")
+    assert set(gateway["networks"]) == {"internal", "edge"}
+    assert gateway["command"][0] == "gateway"
+    assert gateway["command"][gateway["command"].index("--upstream-host") + 1] == "app"
 
 
 def test_audited_roots_are_read_only() -> None:

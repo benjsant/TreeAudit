@@ -44,8 +44,8 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Les options `:z` et `:Z` sont interdites sur les cibles, car elles écrivent des étiquettes SELinux dans les fichiers de l'hôte (D-011).
 - Sous SELinux enforcing, utiliser `compose.selinux.yaml` (`label=disable` pour ce conteneur). Compromis documenté dans D-011.
 - Sous AppArmor (Mint), le profil `docker-default` s'applique sans configuration particulière.
-- **Accès réseau sortant (limite connue, vérifiée le 2026-10-19)** : le conteneur `app` peut joindre Internet. Un réseau Docker `internal: true` coupe bien la sortie, mais Docker ne publie alors plus le port vers l'hôte. L'engagement « aucun envoi distant » repose donc aujourd'hui sur le code (aucune fonction réseau sortante), pas sur le confinement. Les conteneurs `dev` et `check` n'ont aucun réseau.
-- Vérifié sur l'image `app` (2026-10-19) : aucune capacité (`CapEff` à 0), `NoNewPrivs` actif, seccomp actif, AppArmor `docker-default`, système de fichiers racine en lecture seule, `/tmp` en `noexec`, aucun binaire setuid, au plus 256 processus, socket Docker absent.
+- **Accès réseau sortant** (D-020, vérifié le 2026-10-19) : le conteneur `app`, qui voit les données, est uniquement sur un réseau Docker interne. Il ne peut ni joindre Internet (`Network is unreachable`) ni résoudre de nom externe. Le port est publié par un conteneur `gateway` distinct, qui relaie les connexions TCP vers `app` sans les interpréter. La passerelle a accès au réseau mais **aucun volume** : elle ne voit aucune donnée auditée. Les conteneurs `dev` et `check` n'ont aucun réseau.
+- Vérifié sur l'image `app` (2026-10-19) : aucune capacité (`CapEff` à 0), `NoNewPrivs` actif, seccomp actif, AppArmor `docker-default`, système de fichiers racine en lecture seule, `/tmp` en `noexec`, aucun binaire setuid, au plus 256 processus, socket Docker absent ; `app` sans accès sortant ; `gateway` sans aucun montage.
 - Appartenir au groupe `docker` équivaut à être root sur la machine : c'est une propriété de Docker, pas de TreeAudit, mais elle doit être connue.
 
 ## API et navigateur

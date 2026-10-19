@@ -102,7 +102,7 @@ def parse_config(raw: Mapping[str, Any], *, container_mode: bool = False) -> App
     bind_host = raw.get("bind_host", default_host)
     if not isinstance(bind_host, str):
         raise ConfigError("bind_host must be a string")
-    _check_bind_host(bind_host, container_mode=container_mode)
+    check_bind_host(bind_host, container_mode=container_mode)
 
     port = raw.get("port", DEFAULT_PORT)
     if not isinstance(port, int) or isinstance(port, bool) or not 1024 <= port <= 65535:
@@ -128,7 +128,8 @@ def parse_config(raw: Mapping[str, Any], *, container_mode: bool = False) -> App
     )
 
 
-def _check_bind_host(bind_host: str, *, container_mode: bool) -> None:
+def check_bind_host(bind_host: str, *, container_mode: bool) -> None:
+    """Refuse any listening address reachable from outside this machine."""
     if bind_host in LOOPBACK_HOSTS:
         return
     if container_mode and bind_host == CONTAINER_BIND_HOST:

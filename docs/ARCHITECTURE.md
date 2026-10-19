@@ -1,7 +1,7 @@
 # Architecture
 
 ## Vue générale
-Application locale : un **moteur** Python indépendant (bibliothèque + ligne de commande), une **API web** FastAPI qui s'appuie sur ce moteur, et une base SQLite. Un seul dépôt, un seul service Docker.
+Application locale : un **moteur** Python indépendant (bibliothèque + ligne de commande), une **API web** FastAPI qui s'appuie sur ce moteur, et une base SQLite. Un seul dépôt, une seule image Docker pour l'application, utilisée par deux services (`app` et `gateway`).
 
 Le moteur est construit et testé avant l'interface web : chaque fonctionnalité est d'abord utilisable et vérifiable en ligne de commande.
 
@@ -19,6 +19,7 @@ TreeAudit/
 │   ├── techdirs/    règles déclaratives des dossiers techniques (phase 6)
 │   ├── reports/     JSON, CSV, puis HTML
 │   ├── web/         application FastAPI, routes, templates, fichiers statiques
+│   ├── gateway.py   relais TCP entre le port publié et le conteneur app (D-020)
 │   └── cli.py       point d'entrée en ligne de commande (argparse)
 ├── tests/
 │   ├── unit/
@@ -80,7 +81,7 @@ Mode WAL, clés étrangères actives. Chaque scan est un instantané indépendan
 - FastAPI + Uvicorn pour l'API locale.
 - `sqlite3`, `hashlib` (SHA-256), `re`, `fnmatch`, `tomllib`, `argparse`, `logging` de la bibliothèque standard.
 - `pytest`, `httpx`, `ruff`, `mypy` pour la qualité.
-- Un seul service Docker. Un éventuel runtime LLM serait un service séparé et facultatif.
+- Docker : `app` (données, réseau interne sans sortie) et `gateway` (port publié, aucune donnée), plus `dev` et `check` sans réseau (D-019, D-020). Un éventuel runtime LLM serait un service séparé et facultatif.
 
 ## À ne pas anticiper
 - Pas de framework frontend lourd sans prototype justifié.

@@ -54,7 +54,7 @@ check-root: build data ## Validate TREEAUDIT_ROOT_PATH on the host before mounti
 	  --home "$(HOME)" --data-dir "$(CURDIR)/data" -- "$(TREEAUDIT_ROOT_PATH)" < /proc/self/mountinfo
 
 up: check-root ## Validate the audited folder, then start TreeAudit on http://127.0.0.1:$(TREEAUDIT_PORT)
-	$(COMPOSE) up app
+	$(COMPOSE) up app gateway
 
 down: ## Stop TreeAudit
 	$(COMPOSE) down

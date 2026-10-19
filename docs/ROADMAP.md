@@ -41,9 +41,9 @@ Aucun parcours de fichiers dans cette phase.
 - Manuel (documenté, hors CI) : `touch` dans la cible depuis le conteneur échoue avec « Read-only file system ».
 
 ## Phase 1 bis — Confinement réseau (D-020)
-- [ ] Service `gateway` (relais TCP stdlib, sans montage de données).
-- [ ] `app` sur un réseau interne sans sortie.
-- [ ] Tests : `app` ne joint pas Internet ; l'API reste joignable via `127.0.0.1` ; `gateway` n'a aucun volume ; analyse du fichier Compose.
+- [x] Service `gateway` (relais TCP stdlib, sans montage de données).
+- [x] `app` sur un réseau interne sans sortie.
+- [x] Tests : `app` ne joint pas Internet ; l'API reste joignable via `127.0.0.1` ; `gateway` n'a aucun volume ; analyse du fichier Compose.
 
 ## Phase 2 — Inventaire
 - [ ] Parcours itératif par descripteurs (`O_NOFOLLOW`), profondeur maximale.

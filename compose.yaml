@@ -23,8 +23,9 @@ services:
       dockerfile: docker/Dockerfile
       target: app
     image: treeaudit-app:local
-    ports:
-      - "127.0.0.1:${TREEAUDIT_PORT:-8765}:8765"
+    # Sees the audited data: internal network only, no outbound access and no
+    # published port (D-020). It is reached through the gateway.
+    networks: [internal]
     volumes:
       - type: bind
         source: "${TREEAUDIT_ROOT_PATH:-/TREEAUDIT_ROOT_PATH_is_not_set}"
@@ -37,6 +38,18 @@ services:
         target: /data
         bind:
           create_host_path: false
+    restart: "no"
+
+  # Publishes the port on the host loopback and relays TCP to app (D-020).
+  # It has network access but no volume: it never sees any audited data.
+  gateway:
+    <<: *hardening
+    image: treeaudit-app:local
+    command: ["gateway", "--upstream-host", "app", "--upstream-port", "8765"]
+    networks: [internal, edge]
+    ports:
+      - "127.0.0.1:${TREEAUDIT_PORT:-8765}:8765"
+    depends_on: [app]
     restart: "no"
 
   # Validates a host path against the host mount table, received on stdin.
@@ -65,3 +78,10 @@ services:
       - type: bind
         source: .
         target: /app
+
+networks:
+  # No route outside the host: containers on it cannot reach the Internet.
+  internal:
+    internal: true
+  # Used only by the gateway, to publish its port on the host.
+  edge: {}
