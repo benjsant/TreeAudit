@@ -218,3 +218,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# TreeAudit — local data, never commit (contains full paths of audited disks)
+*.sqlite3
+*.sqlite3-journal
+*.db
+*.db-wal
+*.db-shm
+/data/
+/reports/
+
+# Local Docker settings (UID/GID, audited paths)
+compose.override.yaml
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
