@@ -62,15 +62,14 @@ En Docker, `path` vaut `/audit/roots/<id>` et `data_dir` vaut `/data`.
 8. À la fin, le scan est marqué `complete`, `incomplete`, `cancelled` ou `failed` (D-012), avec ses compteurs, erreurs et exclusions.
 9. Les analyses (doublons, filtres, rapports) travaillent ensuite sur l'index, pas sur le disque, sauf pour calculer les empreintes.
 
-## Modèle de données (provisoire, précisé en phase 2)
-- `root` : identifiant, chemin, options.
-- `scan` : identifiant, racine, état, dates de début et de fin, compteurs, paramètres utilisés.
-- `entry` : scan, parent, nom en octets (`BLOB`), nom affichable, type, taille logique, taille allouée, `mtime_ns`, mode, inode, périphérique, nombre de liens, cible du lien (texte).
-- `scan_error` : scan, chemin relatif, opération, `errno`, message.
-- `scan_exclusion` : scan, chemin relatif, motif (point de montage, règle d'exclusion…).
-- `hash` : entrée, type (partielle ou complète), algorithme, valeur, `mtime_ns` et taille au moment du calcul.
+## Modèle de données (schéma v1, `src/treeaudit/db/schema.py`)
+- `scan` : racine, sous-dossier, état (D-012), dates, options, compteurs (entrées, fichiers, dossiers, liens, autres, tailles logique et allouée, erreurs, exclusions), cause d'un échec.
+- `entry` : une ligne par entrée vue. Clé `(scan_id, entry_id)`, parent, profondeur, nom et chemin relatif en octets (`BLOB`) avec leur forme affichable, type, extension (fichiers), tailles, `mtime_ns`, mode, uid, gid, périphérique, inode, nombre de liens, cible d'un lien symbolique.
+- `dir_summary` : totaux du contenu de chaque dossier entièrement parcouru (D-022).
+- `scan_error` : chemin, opération (`open_dir`, `list_dir`, `stat_entry`…), `errno`, message système.
+- `scan_exclusion` : chemin et motif (point de montage).
 
-Mode WAL, clés étrangères actives. Chaque scan est un instantané indépendant : un nouveau scan ne modifie pas les anciens.
+Mode WAL, clés étrangères actives, version du schéma dans `PRAGMA user_version` ; une base plus récente que le code est refusée. Les totaux finaux d'un scan sont recalculés en SQL sur ce qui a réellement été enregistré, ce qui garantit qu'un scan annulé ou incomplet n'annonce jamais plus que ce qu'il a vu. Chaque scan est un instantané indépendant.
 
 ## Interface web
 - Pages HTML rendues par Jinja2 ; JavaScript natif minimal (suivi de la progression par interrogation périodique, filtres).

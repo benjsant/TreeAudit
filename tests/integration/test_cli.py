@@ -120,3 +120,47 @@ def test_roots_list(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
 def test_missing_config_is_an_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--config", str(tmp_path / "none.toml"), "roots", "list"]) == EXIT_ERROR
     assert "not found" in capsys.readouterr().err
+
+
+def _scan_config(tmp_path: Path) -> Path:
+    root = tmp_path / "root"
+    (root / "sub").mkdir(parents=True)
+    (root / "sub" / "a.txt").write_bytes(b"hello")
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f'data_dir = "{tmp_path / "data"}"\n'
+        "[[roots]]\n"
+        'id = "r"\n'
+        f'path = "{root}"\n'
+        # The test tree lives on whatever volume holds /tmp on this machine.
+        "allow_system_volume = true\n",
+        encoding="utf-8",
+    )
+    return config
+
+
+def test_scan_run_list_show(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    config = _scan_config(tmp_path)
+    assert main(["--config", str(config), "scan", "run", "r"]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "scan 1 : complet" in out
+    assert "1 fichiers" in out
+
+    assert main(["--config", str(config), "scan", "list"]) == EXIT_OK
+    assert "complet" in capsys.readouterr().out
+
+    assert main(["--config", str(config), "scan", "show", "1"]) == EXIT_OK
+    shown = capsys.readouterr().out
+    assert ".txt" in shown
+    assert "sub" in shown
+
+
+def test_scan_run_subfolder_and_unknown_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = _scan_config(tmp_path)
+    assert main(["--config", str(config), "scan", "run", "r", "--path", "sub"]) == EXIT_OK
+    assert main(["--config", str(config), "scan", "run", "r", "--path", "../x"]) == EXIT_ERROR
+    assert main(["--config", str(config), "scan", "run", "nope"]) == EXIT_ERROR
+    assert main(["--config", str(config), "scan", "show", "99"]) == EXIT_ERROR
+    capsys.readouterr()

@@ -6,6 +6,7 @@ data directory, which never overlaps an audited root (docs/DECISIONS.md D-009).
 
 from __future__ import annotations
 
+import fcntl
 import logging
 import os
 import stat
@@ -40,3 +41,43 @@ def prepare_data_dir(data_dir: str) -> Path:
             stat.S_IMODE(info.st_mode),
         )
     return path
+
+
+LOCK_FILENAME = "scan.lock"
+
+
+class ScanLockedError(ConfigError):
+    """Another scan is already running with this data directory."""
+
+
+class ScanLock:
+    """Exclusive, non-blocking lock: one scan at a time per data directory.
+
+    Based on flock(2): the kernel releases it if the process dies, so a crash
+    never leaves a stale lock behind.
+    """
+
+    def __init__(self, data_dir: str) -> None:
+        self.path = Path(data_dir) / LOCK_FILENAME
+        self._fd: int | None = None
+
+    def acquire(self) -> None:
+        fd = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            os.close(fd)
+            raise ScanLockedError("another scan is already running") from exc
+        self._fd = fd
+
+    def release(self) -> None:
+        if self._fd is not None:
+            os.close(self._fd)  # closing the descriptor releases the flock
+            self._fd = None
+
+    def __enter__(self) -> ScanLock:
+        self.acquire()
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.release()

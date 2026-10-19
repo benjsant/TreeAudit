@@ -1,0 +1,98 @@
+"""Schema migrations. Never edit a released migration: append a new one."""
+
+from __future__ import annotations
+
+_V1 = (
+    """
+    CREATE TABLE scan (
+        id              INTEGER PRIMARY KEY,
+        root_id         TEXT    NOT NULL,
+        root_path       TEXT    NOT NULL,
+        subpath         TEXT    NOT NULL DEFAULT '',
+        status          TEXT    NOT NULL CHECK (status IN (
+                            'pending', 'running', 'complete', 'incomplete', 'cancelled', 'failed'
+                        )),
+        started_at      TEXT    NOT NULL,
+        finished_at     TEXT,
+        options         TEXT    NOT NULL,
+        entries         INTEGER NOT NULL DEFAULT 0,
+        files           INTEGER NOT NULL DEFAULT 0,
+        dirs            INTEGER NOT NULL DEFAULT 0,
+        symlinks        INTEGER NOT NULL DEFAULT 0,
+        others          INTEGER NOT NULL DEFAULT 0,
+        logical_size    INTEGER NOT NULL DEFAULT 0,
+        allocated_size  INTEGER NOT NULL DEFAULT 0,
+        errors          INTEGER NOT NULL DEFAULT 0,
+        exclusions      INTEGER NOT NULL DEFAULT 0,
+        failure         TEXT
+    )
+    """,
+    """
+    CREATE TABLE entry (
+        scan_id           INTEGER NOT NULL REFERENCES scan(id) ON DELETE CASCADE,
+        entry_id          INTEGER NOT NULL,
+        parent_id         INTEGER,
+        depth             INTEGER NOT NULL,
+        name              BLOB    NOT NULL,
+        name_display      TEXT    NOT NULL,
+        name_valid_utf8   INTEGER NOT NULL,
+        rel_path          BLOB    NOT NULL,
+        rel_path_display  TEXT    NOT NULL,
+        kind              TEXT    NOT NULL CHECK (kind IN ('file', 'dir', 'symlink', 'other')),
+        extension         TEXT,
+        size              INTEGER NOT NULL,
+        allocated_size    INTEGER NOT NULL,
+        mtime_ns          INTEGER NOT NULL,
+        mode              INTEGER NOT NULL,
+        uid               INTEGER NOT NULL,
+        gid               INTEGER NOT NULL,
+        dev               INTEGER NOT NULL,
+        ino               INTEGER NOT NULL,
+        nlink             INTEGER NOT NULL,
+        link_target       BLOB,
+        PRIMARY KEY (scan_id, entry_id)
+    )
+    """,
+    "CREATE INDEX entry_by_parent ON entry (scan_id, parent_id)",
+    "CREATE INDEX entry_by_extension ON entry (scan_id, kind, extension)",
+    """
+    CREATE TABLE dir_summary (
+        scan_id         INTEGER NOT NULL,
+        entry_id        INTEGER NOT NULL,
+        files           INTEGER NOT NULL,
+        dirs            INTEGER NOT NULL,
+        symlinks        INTEGER NOT NULL,
+        others          INTEGER NOT NULL,
+        logical_size    INTEGER NOT NULL,
+        allocated_size  INTEGER NOT NULL,
+        errors          INTEGER NOT NULL,
+        PRIMARY KEY (scan_id, entry_id),
+        FOREIGN KEY (scan_id, entry_id) REFERENCES entry(scan_id, entry_id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX dir_summary_by_size ON dir_summary (scan_id, allocated_size)",
+    """
+    CREATE TABLE scan_error (
+        id                INTEGER PRIMARY KEY,
+        scan_id           INTEGER NOT NULL REFERENCES scan(id) ON DELETE CASCADE,
+        rel_path          BLOB    NOT NULL,
+        rel_path_display  TEXT    NOT NULL,
+        operation         TEXT    NOT NULL,
+        errno             INTEGER,
+        message           TEXT    NOT NULL
+    )
+    """,
+    "CREATE INDEX scan_error_by_scan ON scan_error (scan_id)",
+    """
+    CREATE TABLE scan_exclusion (
+        id                INTEGER PRIMARY KEY,
+        scan_id           INTEGER NOT NULL REFERENCES scan(id) ON DELETE CASCADE,
+        rel_path          BLOB    NOT NULL,
+        rel_path_display  TEXT    NOT NULL,
+        reason            TEXT    NOT NULL
+    )
+    """,
+    "CREATE INDEX scan_exclusion_by_scan ON scan_exclusion (scan_id)",
+)
+
+MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1,)

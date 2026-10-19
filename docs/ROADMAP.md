@@ -46,13 +46,14 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Tests : `app` ne joint pas Internet ; l'API reste joignable via `127.0.0.1` ; `gateway` n'a aucun volume ; analyse du fichier Compose.
 
 ## Phase 2 — Inventaire
-- [ ] Parcours itératif par descripteurs (`O_NOFOLLOW`), profondeur maximale.
-- [ ] Métadonnées, tailles logique et allouée, liens physiques comptés une fois.
-- [ ] Noms en octets, forme affichable.
-- [ ] Erreurs et exclusions enregistrées ; statuts D-012.
-- [ ] Annulation et progression.
-- [ ] Index SQLite par lots.
-- [ ] CLI : `treeaudit scan <id-racine>`, `treeaudit scan show <id-scan>`.
+- [x] Parcours itératif par descripteurs (`O_NOFOLLOW`), profondeur maximale.
+- [x] Analyse d'un sous-dossier de la racine (`--path`, D-021).
+- [x] Métadonnées, tailles logique et allouée, liens physiques comptés une fois.
+- [x] Noms en octets, forme affichable.
+- [x] Erreurs et exclusions enregistrées ; statuts D-012.
+- [x] Annulation et progression.
+- [x] Index SQLite par lots.
+- [x] CLI : `treeaudit scan <id-racine>`, `treeaudit scan show <id-scan>`.
 - [ ] Mesure de performance documentée (nombre d'entrées, durée, mémoire) sur une arborescence réelle.
 
 ## Phase 3 — Filtres

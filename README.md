@@ -4,7 +4,7 @@ Application locale d'audit, d'analyse et d'aide au rangement des fichiers et dos
 
 TreeAudit parcourt une arborescence explicitement autorisée, indexe ses métadonnées et aide à comprendre ce qu'elle contient : répartition de l'espace, doublons exacts, dossiers techniques (`.venv`, `node_modules`, `__pycache__`…), arborescences proches. L'outil **présente des preuves et des explications ; il ne modifie jamais les données auditées**.
 
-> **État : pré-alpha.** Seul le socle est implémenté (phase 1) : configuration, validation des racines autorisées, serveur local minimal et conteneurs durcis. **Aucun parcours de fichiers n'existe encore.** Les fonctionnalités ci-dessous sont des objectifs.
+> **État : pré-alpha.** Implémenté : validation des racines autorisées, conteneurs durcis et inventaire en ligne de commande (parcours, tailles, extensions, erreurs, statut du scan). Pas encore d'interface web pour les résultats, ni de filtres, ni de recherche de doublons. Les autres fonctionnalités ci-dessous sont des objectifs.
 
 ## Pourquoi un outil de plus ?
 
@@ -53,6 +53,8 @@ make up           # vérifie le dossier sur l'hôte, puis démarre sur http://12
 ```
 
 Le dossier est monté **en lecture seule**. Sous SELinux en mode enforcing : `make up COMPOSE_SELINUX=1` (voir [D-011](docs/DECISIONS.md)).
+
+Inventaire en ligne de commande : `make scan` (tout le dossier) ou `make scan SUBPATH=sous/dossier`, puis `make scans` pour lister les scans enregistrés.
 
 Développement : `make test`, `make lint`, `make typecheck`, ou `make check` pour tout lancer. `make help` liste les commandes.
 

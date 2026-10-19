@@ -18,7 +18,7 @@ COMPOSE := docker compose $(COMPOSE_FILES)
 DEV := $(COMPOSE) run --rm dev
 HOST_IDS := --user "$$(id -u):$$(id -g)"
 
-.PHONY: help env data lock build check-root up down test lint format typecheck check
+.PHONY: help env data lock build check-root up scan scans down test lint format typecheck check
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -55,6 +55,13 @@ check-root: build data ## Validate TREEAUDIT_ROOT_PATH on the host before mounti
 
 up: check-root ## Validate the audited folder, then start TreeAudit on http://127.0.0.1:$(TREEAUDIT_PORT)
 	$(COMPOSE) up app gateway
+
+scan: check-root ## Scan the audited folder (SUBPATH=sub/folder to scan only part of it)
+	$(COMPOSE) run --rm app scan run main $(if $(SUBPATH),--path "$(SUBPATH)")
+	$(COMPOSE) run --rm app scan show "$$($(COMPOSE) run --rm -T app scan list | head -1 | cut -f1)"
+
+scans: ## List recorded scans
+	$(COMPOSE) run --rm app scan list
 
 down: ## Stop TreeAudit
 	$(COMPOSE) down

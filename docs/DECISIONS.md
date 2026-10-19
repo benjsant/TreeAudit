@@ -116,3 +116,17 @@ Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers
 - Constat : un réseau Docker `internal: true` coupe l'accès sortant mais empêche aussi la publication du port vers l'hôte (vérifié avec Docker 29.9).
 - Décision : le service `app` (qui voit les racines auditées) est placé sur un réseau interne sans sortie. Un service `gateway` distinct, **sans aucun montage de données**, publie le port sur `127.0.0.1` de l'hôte et relaie les connexions TCP vers `app`. Il est écrit avec la bibliothèque standard (`asyncio`), durci comme les autres services, et ne relaie que vers `app:8765`.
 - *Motif* : l'engagement « aucun envoi distant » ne doit pas reposer uniquement sur le code. Un code compromis dans `app` ne peut plus joindre Internet ; la passerelle peut joindre le réseau mais n'a accès à aucune donnée.
+
+## D-021 — Zone autorisée et dossier analysé (2026-10-19)
+- La **racine** déclarée en configuration (et montée en lecture seule en Docker) est une **zone autorisée**, par exemple tout un disque de données.
+- L'utilisateur choisit ensuite, dans la CLI (`--path`) puis dans l'interface (phase 5), **le sous-dossier à analyser** à l'intérieur de cette zone.
+- Ce sous-dossier est transmis comme **chemin relatif** à la racine, jamais comme chemin absolu. Il est refusé s'il est vide de sens (`..`, `.`, composant vide, octet nul, chemin absolu), puis ouvert **composant par composant** depuis le descripteur de la racine avec `O_NOFOLLOW`. Aucun lien symbolique ne peut donc faire sortir de la zone.
+- Les chemins relatifs enregistrés restent relatifs à la racine, pas au sous-dossier, pour que les scans d'une même zone soient comparables.
+- *Motif* : concilier le choix du dossier depuis l'interface (souhait du mainteneur) avec un conteneur qui ne voit que ce qui a été monté à son démarrage.
+
+## D-022 — Inventaire : règles de comptage (2026-10-19)
+- Taille logique : somme des `st_size` des fichiers réguliers. Taille allouée : somme des `st_blocks × 512` de toutes les entrées (fichiers, dossiers, liens). Chaque inode n'est compté qu'une fois (couple périphérique + inode).
+- Un inode à liens physiques multiples est compté **dans le premier dossier où le parcours le rencontre**. Les totaux d'un sous-dossier peuvent donc dépendre de l'ordre du parcours ; le total du scan, lui, n'en dépend pas.
+- Un changement de numéro de périphérique qui ne correspond à aucun point de montage connu (sous-volume btrfs) n'est pas une exclusion : le parcours continue.
+- Un point de montage n'est détecté que s'il existe au début du scan (lecture de `mountinfo`). Un montage créé pendant le scan n'est pas détecté : limite documentée.
+- Les numéros d'inode et de périphérique sont des entiers non signés sur 64 bits ; ils sont convertis en entiers signés pour SQLite, sans perte.

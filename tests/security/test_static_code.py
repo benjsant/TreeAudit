@@ -14,8 +14,17 @@ import pytest
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "treeaudit"
 
-# Relative to src/treeaudit. db/ and reports/ will join in later phases.
-WRITE_ALLOWED = frozenset({"core/datadir.py"})
+# Relative to src/treeaudit; entries ending with "/" allow a whole package.
+# These modules only write inside the data directory. reports/ will join later.
+WRITE_ALLOWED = frozenset({"core/datadir.py", "db/"})
+
+
+def _may_write(rel_path: str) -> bool:
+    return any(
+        rel_path.startswith(allowed) if allowed.endswith("/") else rel_path == allowed
+        for allowed in WRITE_ALLOWED
+    )
+
 
 FORBIDDEN_MODULES = frozenset({"subprocess", "shutil", "pty", "ctypes", "tempfile"})
 FORBIDDEN_BUILTINS = frozenset({"eval", "exec", "compile", "__import__"})
@@ -105,7 +114,7 @@ def _mode_argument(call: ast.Call, position: int) -> str | None:
 def find_violations(source: str, rel_path: str) -> list[str]:
     """Return human-readable violations found in ``source``."""
     tree = ast.parse(source)
-    may_write = rel_path in WRITE_ALLOWED
+    may_write = _may_write(rel_path)
     found: list[str] = []
 
     def report(node: ast.AST, message: str) -> None:
@@ -180,7 +189,7 @@ def test_no_command_execution_or_file_modification(path: Path) -> None:
 
 def test_write_allowlist_entries_exist() -> None:
     for rel in WRITE_ALLOWED:
-        assert (SRC / rel).is_file(), rel
+        assert (SRC / rel).exists(), rel
 
 
 @pytest.mark.parametrize(
