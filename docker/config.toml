@@ -1,0 +1,15 @@
+# TreeAudit configuration used inside the Docker image. All paths are container paths.
+# The host folder is chosen with TREEAUDIT_ROOT_PATH in .env and mounted read-only
+# at /audit/roots/main by compose.yaml.
+
+data_dir = "/data"
+
+# Listen on all interfaces of the container's own network namespace only.
+# compose.yaml publishes the port on 127.0.0.1 of the host (docs/DECISIONS.md D-010).
+bind_host = "0.0.0.0"
+port = 8765
+
+[[roots]]
+id = "main"
+label = "Racine principale"
+path = "/audit/roots/main"

@@ -1,0 +1,151 @@
+"""Checks of the Docker configuration (docs/DECISIONS.md D-010, D-011, D-019)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+REPO = Path(__file__).resolve().parents[2]
+
+FORBIDDEN_SOURCES = frozenset(
+    {
+        "/",
+        "/home",
+        "/root",
+        "/etc",
+        "/proc",
+        "/sys",
+        "/dev",
+        "/run",
+        "/var/run",
+        "/var/run/docker.sock",
+        "/run/docker.sock",
+        "~",
+        "${HOME}",
+        "$HOME",
+    }
+)
+
+
+def load(name: str) -> dict[str, Any]:
+    with (REPO / name).open(encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    assert isinstance(data, dict)
+    return data
+
+
+COMPOSE = load("compose.yaml")
+SERVICES: dict[str, dict[str, Any]] = COMPOSE["services"]
+
+
+def volumes_of(service: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize short and long volume syntaxes to dictionaries."""
+    result: list[dict[str, Any]] = []
+    for volume in service.get("volumes", []):
+        if isinstance(volume, str):
+            parts = volume.split(":")
+            options = parts[2].split(",") if len(parts) > 2 else []
+            result.append(
+                {
+                    "source": parts[0],
+                    "target": parts[1] if len(parts) > 1 else parts[0],
+                    "read_only": "ro" in options,
+                    "selinux": next((o for o in options if o in ("z", "Z")), None),
+                }
+            )
+        else:
+            result.append(
+                {
+                    "source": volume.get("source"),
+                    "target": volume.get("target"),
+                    "read_only": volume.get("read_only", False),
+                    "selinux": (volume.get("bind") or {}).get("selinux"),
+                }
+            )
+    return result
+
+
+def test_expected_services() -> None:
+    assert set(SERVICES) == {"app", "check", "dev"}
+
+
+@pytest.mark.parametrize("name", sorted(SERVICES))
+def test_service_hardening(name: str) -> None:
+    service = SERVICES[name]
+    assert not service.get("privileged", False)
+    assert service.get("cap_drop") == ["ALL"]
+    assert not service.get("cap_add")
+    assert not service.get("devices")
+    assert "no-new-privileges:true" in service.get("security_opt", [])
+    assert service.get("read_only") is True
+    assert 0 < int(service.get("pids_limit", 0)) <= 1024
+    for namespace in ("network_mode", "pid", "ipc", "userns_mode"):
+        assert service.get(namespace) != "host", namespace
+    user = str(service.get("user", ""))
+    assert user, "a non-root user must be set"
+    assert user.split(":")[0] not in ("0", "root")
+
+
+@pytest.mark.parametrize("name", sorted(SERVICES))
+def test_no_dangerous_mounts(name: str) -> None:
+    for volume in volumes_of(SERVICES[name]):
+        source = str(volume["source"]).rstrip("/") or "/"
+        assert source not in FORBIDDEN_SOURCES, source
+        assert "docker.sock" not in source
+        assert volume["selinux"] is None, "':z'/':Z' relabel host files (D-011)"
+
+
+def test_app_port_published_on_loopback_only() -> None:
+    ports = SERVICES["app"]["ports"]
+    assert ports
+    for port in ports:
+        assert isinstance(port, str)
+        assert port.startswith("127.0.0.1:"), port
+
+
+def test_audited_roots_are_read_only() -> None:
+    roots = [v for v in volumes_of(SERVICES["app"]) if str(v["target"]).startswith("/audit/")]
+    assert roots, "the app service must mount at least one audited root"
+    for volume in roots:
+        assert volume["read_only"] is True, volume
+        assert str(volume["target"]).startswith("/audit/roots/")
+
+
+def test_app_writable_mounts_are_only_the_data_dir() -> None:
+    writable = [v["target"] for v in volumes_of(SERVICES["app"]) if not v["read_only"]]
+    assert writable == ["/data"]
+
+
+@pytest.mark.parametrize("name", ["check", "dev"])
+def test_tool_services_have_no_network(name: str) -> None:
+    assert SERVICES[name].get("network_mode") == "none"
+
+
+def test_check_service_sees_no_host_files() -> None:
+    assert not SERVICES["check"].get("volumes")
+
+
+def test_selinux_override_only_disables_labels() -> None:
+    override = load("compose.selinux.yaml")
+    for name, service in override["services"].items():
+        assert set(service) == {"security_opt"}, name
+        assert "label=disable" in service["security_opt"]
+        assert "no-new-privileges:true" in service["security_opt"]
+
+
+def test_dockerfile_final_stage_is_not_root() -> None:
+    lines = (REPO / "docker" / "Dockerfile").read_text(encoding="utf-8").splitlines()
+    users = [line.split()[1] for line in lines if line.startswith("USER ")]
+    assert users, "the Dockerfile must set a USER"
+    assert users[-1].split(":")[0] not in ("0", "root")
+    assert any("chmod a-s" in line for line in lines), "setuid bits must be stripped"
+    assert not any(":z" in line or ":Z" in line for line in lines if "--mount" in line)
+
+
+def test_dockerignore_excludes_local_data() -> None:
+    entries = (REPO / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    for required in (".env", "data/", ".git"):
+        assert required in entries

@@ -1,0 +1,19 @@
+# TreeAudit configuration for native mode (without Docker).
+# Copy to ~/.config/treeaudit/config.toml or point TREEAUDIT_CONFIG to it.
+# Rules for acceptable roots: docs/DECISIONS.md D-009.
+
+# Index and reports. Must not overlap any root. Created with mode 700.
+data_dir = "/home/me/.local/share/treeaudit"
+
+# The server only accepts loopback addresses (docs/DECISIONS.md D-010).
+bind_host = "127.0.0.1"
+port = 8765
+
+[[roots]]
+id = "backup-2019"
+label = "Sauvegarde 2019"
+path = "/mnt/Data/Backup2019"
+# Allow a folder located on the volume of the running system (default: false).
+# allow_system_volume = false
+# Cross nested mount points (default: false).
+# cross_mounts = false

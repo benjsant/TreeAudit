@@ -1,0 +1,16 @@
+# Never send local data, secrets or caches to the Docker build context.
+.git
+.env
+data/
+reports/
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.venv
+venv
+*.sqlite3
+*.db
+docs/
+tests/

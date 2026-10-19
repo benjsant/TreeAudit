@@ -1,0 +1,67 @@
+# TreeAudit — Docker Compose.
+#
+# Use the Makefile (`make up`): it validates the audited folder on the host before
+# mounting it (docs/DECISIONS.md D-008). Security rules: docs/SECURITY.md.
+# Never add ':z' or ':Z' to a mount, nor privileged mode, nor the Docker socket.
+
+name: treeaudit
+
+x-hardening: &hardening
+  user: "${TREEAUDIT_UID:?run 'make env' first}:${TREEAUDIT_GID:?run 'make env' first}"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:size=256m,mode=1777"]
+  # Bounds a runaway or fork bomb; the app needs only a few threads.
+  pids_limit: 256
+
+services:
+  app:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: app
+    image: treeaudit-app:local
+    ports:
+      - "127.0.0.1:${TREEAUDIT_PORT:-8765}:8765"
+    volumes:
+      - type: bind
+        source: "${TREEAUDIT_ROOT_PATH:-/TREEAUDIT_ROOT_PATH_is_not_set}"
+        target: /audit/roots/main
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./data
+        target: /data
+        bind:
+          create_host_path: false
+    restart: "no"
+
+  # Validates a host path against the host mount table, received on stdin.
+  # No network, no volume: it never sees the host filesystem.
+  check:
+    <<: *hardening
+    image: treeaudit-app:local
+    profiles: [tools]
+    network_mode: none
+    entrypoint: ["treeaudit", "roots", "check", "--no-fs-checks", "--mountinfo", "-"]
+
+  # Tests and quality tools. The repository (not an audited folder) is mounted at /app.
+  dev:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dev
+    image: treeaudit-dev:local
+    profiles: [dev]
+    network_mode: none
+    environment:
+      HOME: /tmp
+    working_dir: /app
+    volumes:
+      - type: bind
+        source: .
+        target: /app

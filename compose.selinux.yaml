@@ -1,0 +1,14 @@
+# Override for hosts where SELinux is enforcing (docs/DECISIONS.md D-011).
+#
+#   make up COMPOSE_SELINUX=1
+#
+# SELinux denies reads of host files that are not labelled for containers. The
+# usual fix, ':z' / ':Z', relabels (writes to) the audited files and is forbidden.
+# Instead, SELinux confinement is disabled for these containers only; every other
+# protection (read-only mount, no capabilities, non-root user) stays in place.
+
+services:
+  app:
+    security_opt: ["no-new-privileges:true", "label=disable"]
+  dev:
+    security_opt: ["no-new-privileges:true", "label=disable"]
