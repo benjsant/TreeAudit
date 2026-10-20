@@ -50,3 +50,34 @@ Ce sont des filtres de recherche, pas des règles de suppression.
 - **Regex** : `fullmatch` par défaut pour le mode « nom exact », `search` pour le mode « contient ». Le mode est affiché à côté du motif dans les résultats et les rapports.
 - **Unicode** : aucune normalisation implicite (NFC/NFD). Un nom en UTF-8 invalide est filtré sur sa forme affichable ; ce cas est signalé.
 - **Limites** : longueur de motif maximale (1 000 caractères) ; évaluation annulable (voir [SECURITY.md](SECURITY.md)).
+
+## Implémentation (phase 5)
+Commande : `treeaudit search <id-scan> [critères]`, ou `make search ARGS="..."` sur le dernier scan. Tous les critères donnés doivent être vrais (ET).
+
+| Option | Critère |
+|---|---|
+| `--ext jpg,png` | extension, sans tenir compte de la casse (les extensions sont indexées en minuscules) |
+| `--name NOM` | nom exact |
+| `--glob '*.py'` | glob sur le nom |
+| `--path-glob 'src/**/*.py'` | glob sur le chemin relatif à la racine |
+| `--regex R`, `--path-regex R` | regex Python sur le nom ou le chemin ; correspondance partielle (`search`) par défaut, entière avec `--full-match` |
+| `-i` | casse ignorée (Unicode : `ÉTÉ` correspond à `été`) |
+| `--kind file,dir,symlink,other` | type d'entrée |
+| `--min-size 10M`, `--max-size 1G` | taille, en unités binaires ; ne concerne que les fichiers |
+| `--sort size\|path\|mtime`, `--limit N` | exemples affichés |
+| `--time-budget S` | durée maximale (30 s par défaut) ; au-delà, résultat marqué partiel |
+
+Précisions :
+- Les globs correspondent toujours au texte entier. `--ext` et les tailles limitent la recherche aux fichiers.
+- Sans normalisation Unicode : `café` en NFC et en NFD sont deux noms différents.
+- Un nom en UTF-8 invalide est comparé sous sa forme affichée (`\xNN`) ; ces résultats sont comptés et signalés.
+- La recherche lit l'index seulement, n'écrit rien, et garde en mémoire uniquement les exemples affichés.
+- **Aucune commande de suppression n'est générée à partir d'un filtre** (D-027).
+
+### Expressions régulières dangereuses (ReDoS)
+Le moteur `re` de Python ne peut pas être interrompu pendant une correspondance, et les sous-processus sont exclus (CLAUDE.md, règle 2). Trois protections :
+1. motif limité à 1 000 caractères ;
+2. **refus** des motifs dont le temps peut exploser : une répétition à l'intérieur d'une répétition (`(a+)+`, `(\w+\s?)+`, `(.*a){10}`) ou une alternative répétée (`(a|aa)*`). Le refus est volontairement prudent : `(jpg|png)+` est aussi refusé ; `.*\.(jpg|png)$` est accepté ;
+3. budget de temps vérifié toutes les 2 000 entrées.
+
+L'analyse du motif utilise le module interne `re._parser` (stable depuis Python 3.11) ; s'il disparaissait, seules les protections 1 et 3 resteraient.

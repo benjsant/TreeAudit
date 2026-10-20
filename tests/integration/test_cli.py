@@ -236,3 +236,18 @@ def test_dupes_run_list_show(tmp_path: Path, capsys: pytest.CaptureFixture[str])
     assert main([*base, "dupes", "show", "99"]) == EXIT_ERROR
     assert main([*base, "dupes", "run", "99"]) == EXIT_ERROR
     capsys.readouterr()
+
+
+def test_search_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    config = _scan_config(tmp_path)
+    assert main(["--config", str(config), "scan", "run", "r"]) == EXIT_OK
+    capsys.readouterr()
+    assert main(["--config", str(config), "search", "1", "--ext", "TXT", "-i"]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "1 résultat(s)" in out and "sub/a.txt" in out
+    assert "aucune commande de suppression" in out
+    assert main(["--config", str(config), "search", "1", "--regex", "(a+)+"]) == EXIT_ERROR
+    assert "refusée" in capsys.readouterr().err
+    assert main(["--config", str(config), "search", "1", "--kind", "folder"]) == EXIT_ERROR
+    assert main(["--config", str(config), "search", "1", "--min-size", "huge"]) == EXIT_ERROR
+    assert main(["--config", str(config), "search", "9"]) == EXIT_ERROR

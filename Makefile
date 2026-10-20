@@ -26,7 +26,7 @@ COMPOSE := docker compose $(COMPOSE_FILES)
 DEV := $(COMPOSE) run --rm dev
 HOST_IDS := --user "$$(id -u):$$(id -g)"
 
-.PHONY: help env data lock build check-root up scan parasites dupes micro dupes-show scans down test lint format typecheck check
+.PHONY: help env data lock build check-root up scan parasites dupes micro dupes-show search scans down test lint format typecheck check
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -86,6 +86,9 @@ micro: ## Micro-cleanup: identical files under 1 KiB and empty files of the last
 dupes-show: ## Show an analysis (RUN=id SELECT=G1,G3|all KEEP=n ACTION=trash|delete)
 	$(COMPOSE) run --rm app dupes show "$(or $(RUN),$(LAST_DUPES))" \
 	  $(if $(SELECT),--select "$(SELECT)" --action "$(or $(ACTION),trash)") $(if $(KEEP),--keep "$(KEEP)") $(ARGS)
+
+search: ## Search the last scan (SCAN=id ARGS="--ext jpg --min-size 10M", see treeaudit search -h)
+	$(COMPOSE) run --rm app search "$(or $(SCAN),$(LAST_SCAN))" $(ARGS)
 
 scans: ## List recorded scans
 	$(COMPOSE) run --rm app scan list

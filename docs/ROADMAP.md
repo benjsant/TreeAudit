@@ -80,12 +80,14 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Mesures (2026-10-20, arborescence synthétique de 152 970 entrées, Docker) : analyse principale 0,3 s (8,9 Mio lus) ; micro-nettoyage 0,16 s en natif après correction d'une requête SQL (2 s auparavant) ; affichage du micro-nettoyage 0,5 s et 32 Mio (159 Mio auparavant).
 - [ ] Rapport JSON et CSV : reporté à la phase 6 (interface et rapports).
 
-## Phase 5 — Filtres
-- [ ] Extension, glob de nom, glob de chemin, regex nom et chemin relatif.
-- [ ] Option de casse ; correspondance complète ou partielle.
-- [ ] Prévisualisation (nombre et exemples).
-- [ ] Limites anti-ReDoS.
-- [ ] Tests de casse, Unicode, fichiers cachés, regex invalides.
+## Phase 5 — Filtres (D-027)
+- [x] Extension, nom exact, glob de nom, glob de chemin, regex sur le nom et sur le chemin relatif, type, taille.
+- [x] Option de casse (Unicode) ; correspondance entière ou partielle pour les regex.
+- [x] Aperçu : nombre de résultats, taille totale (liens physiques comptés une fois), exemples triés par taille, chemin ou date.
+- [x] Protections ReDoS : longueur maximale, refus des motifs dangereux, budget de temps ; annulation.
+- [x] Tests : casse, Unicode NFC/NFD, fichiers cachés, regex invalides et dangereuses, aucun résultat, regex compilée une seule fois, aucune écriture.
+- [x] Mesures (Docker, 152 970 entrées) : 0,01 à 0,7 s selon le critère, 22 Mio.
+- Aucune commande de suppression à partir d'un filtre (recherche seule).
 
 ## Phase 6 — Interface web et rapports
 - [ ] Choix du sous-dossier à analyser dans la zone autorisée (D-021).

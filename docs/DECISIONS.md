@@ -169,3 +169,8 @@ Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers
 - Une copie à garder est suggérée pour chaque groupe, avec ses raisons (chemin sans « copie », « (1) », « backup », « old », « Downloads »… ; fichier le plus ancien ; chemin le plus court). Les copies protégées sont toujours gardées. L'utilisateur peut choisir une autre copie (`--keep`).
 - Les liens physiques ne sont pas des doublons : ils sont comptés à part.
 - Constat à l'origine de ces règles : sur l'arborescence synthétique, le micro-nettoyage proposait d'abord 149 880 fichiers vides d'une bibliothèque de type Steam et des fichiers internes à `node_modules` et `.venv`.
+
+## D-027 — Filtres : recherche seule, regex sûres (2026-10-20)
+- Les filtres cherchent dans l'index d'un scan et affichent un aperçu (nombre, taille, exemples). Ils ne génèrent **aucune** commande de suppression : une regex ou un glob trop large ne doit jamais pouvoir devenir un `rm -rf`. Les commandes restent réservées aux détections expliquées (dossiers parasites, doublons).
+- Les regex à quantificateurs imbriqués ou à alternative répétée sont refusées avant toute recherche, avec une explication ; un budget de temps borne le reste (voir `FILTERS_AND_REGEX.md`).
+- Sémantique des globs de chemin : `*` et `?` ne traversent pas `/`, `**` couvre zéro ou plusieurs dossiers, les fichiers cachés sont inclus.

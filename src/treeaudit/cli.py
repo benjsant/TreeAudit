@@ -26,6 +26,7 @@ from treeaudit.core.config import (
 )
 from treeaudit.core.datadir import prepare_data_dir
 from treeaudit.core.errors import TreeAuditError
+from treeaudit.filters.spec import FilterSpec
 from treeaudit.parasites.commands import Action
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
 from treeaudit.parasites.report import human_size
@@ -152,6 +153,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dupes_show.add_argument(
         "--action", choices=["trash", "delete"], default="trash", help="défaut : trash"
+    )
+
+    finder = commands.add_parser(
+        "search", help="chercher dans un scan (extension, glob, regex, taille, type)"
+    )
+    finder.add_argument("scan_id", type=int)
+    finder.add_argument("--ext", default=None, help="extensions : jpg,png,.mp4")
+    finder.add_argument("--name", default=None, help="nom exact")
+    finder.add_argument("--glob", default=None, help="glob sur le nom : '*.py', 'IMG_????.jpg'")
+    finder.add_argument(
+        "--path-glob", default=None, help="glob sur le chemin relatif : 'projets/**/*.py'"
+    )
+    finder.add_argument("--regex", default=None, help="regex Python sur le nom")
+    finder.add_argument("--path-regex", default=None, help="regex Python sur le chemin relatif")
+    finder.add_argument(
+        "--full-match", action="store_true", help="la regex doit couvrir tout le nom ou chemin"
+    )
+    finder.add_argument("-i", "--ignore-case", action="store_true", help="ignorer la casse")
+    finder.add_argument(
+        "--kind", default=None, help="types : file,dir,symlink,other (défaut : tous)"
+    )
+    finder.add_argument("--min-size", default=None, help="taille minimale : 500, 10k, 2.5M, 1G")
+    finder.add_argument("--max-size", default=None, help="taille maximale")
+    finder.add_argument("--limit", type=int, default=20, help="exemples affichés")
+    finder.add_argument("--sort", choices=["size", "path", "mtime"], default="size")
+    finder.add_argument(
+        "--time-budget", type=float, default=30.0, help="durée maximale en secondes"
     )
 
     commands.add_parser("serve", help="démarrer le serveur web local")
@@ -652,6 +680,79 @@ def _cmd_dupes_show(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _filter_spec(args: argparse.Namespace) -> FilterSpec:
+    from treeaudit.filters.spec import (
+        EntryKindFilter,
+        FilterError,
+        parse_extensions,
+        parse_size,
+    )
+
+    kinds: tuple[EntryKindFilter, ...] = ()
+    if args.kind:
+        try:
+            kinds = tuple(EntryKindFilter(k.strip()) for k in args.kind.split(",") if k.strip())
+        except ValueError as exc:
+            raise FilterError(f"type inconnu dans --kind : {args.kind!r}") from exc
+    return FilterSpec(
+        extensions=parse_extensions(args.ext) if args.ext else (),
+        name_exact=args.name,
+        name_glob=args.glob,
+        path_glob=args.path_glob,
+        name_regex=args.regex,
+        path_regex=args.path_regex,
+        full_match=args.full_match,
+        ignore_case=args.ignore_case,
+        kinds=kinds,
+        min_size=parse_size(args.min_size) if args.min_size else None,
+        max_size=parse_size(args.max_size) if args.max_size else None,
+    )
+
+
+def _cmd_search(args: argparse.Namespace) -> int:
+    from treeaudit.db import scans
+    from treeaudit.filters.report import render_search
+    from treeaudit.filters.search import Sort, search
+    from treeaudit.filters.spec import FilterError, compile_filter
+
+    try:
+        spec = _filter_spec(args)
+        compiled = compile_filter(spec)
+    except FilterError as exc:
+        print(f"erreur : {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    if args.time_budget <= 0:
+        print("erreur : --time-budget doit être positif", file=sys.stderr)
+        return EXIT_ERROR
+    conn = _open_index(args)
+    try:
+        row = scans.get_scan(conn, args.scan_id)
+        if row is None:
+            print(f"erreur : scan inconnu : {args.scan_id}", file=sys.stderr)
+            return EXIT_ERROR
+        sort = Sort(args.sort)
+        cancel = threading.Event()
+        try:
+            result = search(
+                conn,
+                args.scan_id,
+                compiled,
+                limit=args.limit,
+                sort=sort,
+                time_budget=args.time_budget,
+                cancel=cancel,
+            )
+        except KeyboardInterrupt:
+            print("recherche interrompue", file=sys.stderr)
+            return EXIT_CANCELLED
+        print(
+            render_search(result, spec, scan_id=args.scan_id, scan_status=row["status"], sort=sort)
+        )
+        return EXIT_INCOMPLETE if result.partial_reason else EXIT_OK
+    finally:
+        conn.close()
+
+
 def _cmd_gateway(args: argparse.Namespace) -> int:
     import asyncio
 
@@ -696,6 +797,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_dupes_list(args)
         if args.command == "dupes" and args.dupes_command == "show":
             return _cmd_dupes_show(args)
+        if args.command == "search":
+            return _cmd_search(args)
         if args.command == "gateway":
             return _cmd_gateway(args)
     except BrokenPipeError:
