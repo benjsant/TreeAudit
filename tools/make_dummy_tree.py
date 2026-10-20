@@ -179,10 +179,32 @@ def micro_duplicates(base: Path) -> None:
     touch(repo / "empty.log")
 
 
+def heavy_files(base: Path, rng: random.Random, megabytes: int) -> None:
+    """Real-size files to load the duplicate search: few distinct sizes, so many
+    files share a size without being identical; about half are true copies."""
+    sizes = [rng.randint(64, 4096) * 1024 for _ in range(24)]
+    originals: dict[int, bytes] = {}
+    written = 0
+    index = 0
+    while written < megabytes * 1024 * 1024:
+        size = rng.choice(sizes)
+        if size in originals and rng.random() < 0.5:
+            content = originals[size]  # a true duplicate
+        else:
+            content = rng.randbytes(size)  # same size, different content
+            originals.setdefault(size, content)
+        touch(base / "heavy" / f"set{index % 97:02d}" / f"file{index:05d}.bin", content)
+        written += size
+        index += 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("target", type=Path)
     parser.add_argument("--scale", type=float, default=1.0)
+    parser.add_argument(
+        "--heavy-mb", type=int, default=0, help="add real-size files for the duplicate search"
+    )
     args = parser.parse_args()
 
     target: Path = args.target
@@ -201,6 +223,8 @@ def main() -> int:
     duplicates(target)
     large_duplicates(target, rng)
     micro_duplicates(target)
+    if args.heavy_mb:
+        heavy_files(target, rng, args.heavy_mb)
     print(f"dummy tree written to {target}")
     return 0
 

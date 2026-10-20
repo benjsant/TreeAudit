@@ -100,6 +100,16 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Mesures (Docker, 152 970 entrées) : pages de 0,01 à 0,6 s (1,3 s pour les parasites) ; inventaire CSV complet 0,57 s (25 s avant regroupement des lignes envoyées).
 - [ ] Vérification visuelle et au clavier dans un navigateur : à faire par le mainteneur.
 
+## Phase 6 ter — Disques mécaniques et machines modestes (D-030)
+- [x] Outil de mesure sans nom de fichier (`make bench`), type de disque détecté.
+- [x] Arborescence synthétique d'un million d'éléments (`--scale 2.8 --heavy-mb 300`).
+- [x] Analyse : métadonnées lues dans l'ordre des inodes.
+- [x] Doublons : début / fin / complet, ordre physique (`FIEMAP`), `posix_fadvise`, un seul fil de lecture.
+- [x] Empreintes réutilisées entre analyses (début, fin, complète).
+- [x] Résumés du bilan mis en cache.
+- [x] Base allégée (−24 %), cache SQLite et lots plus grands.
+- [ ] Mesure sur un vrai disque 5 400 tours (à froid), avant / après.
+
 ## Phase 6 bis — Archivage vérifié (D-024)
 - [ ] Dossier de sortie dédié, déclaré et validé comme le dossier de données.
 - [ ] Archive `.tar.gz` / `.tar.xz` (bibliothèque standard) écrite sous un nom temporaire, renommée une fois terminée.

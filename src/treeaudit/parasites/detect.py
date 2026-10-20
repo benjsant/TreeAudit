@@ -84,9 +84,11 @@ def _exists(conn: sqlite3.Connection, sql: str, params: Sequence[object]) -> boo
 
 
 class _Evaluator:
-    def __init__(self, conn: sqlite3.Connection, scan_id: int) -> None:
+    def __init__(self, conn: sqlite3.Connection, scan_id: int, rules: Sequence[Rule]) -> None:
         self.conn = conn
         self.scan_id = scan_id
+        self.rules = rules
+        self._glob_cache: dict[str, list[sqlite3.Row]] = {}
 
     def candidates(self, rule: Rule) -> Iterable[sqlite3.Row]:
         kind = "dir" if rule.target is Target.DIR else "file"
@@ -101,14 +103,34 @@ class _Evaluator:
                 seen.add(row["entry_id"])
                 yield row
         for glob in rule.globs:
-            for row in self.conn.execute(
-                f"{base} AND name_valid_utf8 = 1 AND name_display GLOB ?",
-                (self.scan_id, kind, glob),
-            ):
+            for row in self._glob_rows(kind):
                 # SQLite GLOB and fnmatch agree on the restricted syntax; confirm anyway.
                 if row["entry_id"] not in seen and fnmatch.fnmatchcase(row["name_display"], glob):
                     seen.add(row["entry_id"])
                     yield row
+
+    def _glob_rows(self, kind: str) -> list[sqlite3.Row]:
+        """Entries matching any glob of any rule for this kind, in ONE pass over the scan.
+
+        Globs with a leading wildcard cannot use an index: one query per glob meant
+        about twenty full scans of the table (5 s on 1 000 000 entries).
+        """
+        if kind not in self._glob_cache:
+            globs = sorted({g for r in self.rules if self._kind(r) == kind for g in r.globs})
+            if not globs:
+                self._glob_cache[kind] = []
+            else:
+                any_glob = " OR ".join("name_display GLOB ?" for _ in globs)
+                self._glob_cache[kind] = self.conn.execute(
+                    f"SELECT {_ENTRY_COLUMNS} FROM entry WHERE scan_id = ? AND kind = ? "  # noqa: S608
+                    f"AND depth > 0 AND name_valid_utf8 = 1 AND ({any_glob})",
+                    (self.scan_id, kind, *globs),
+                ).fetchall()
+        return self._glob_cache[kind]
+
+    @staticmethod
+    def _kind(rule: Rule) -> str:
+        return "dir" if rule.target is Target.DIR else "file"
 
     def _child(self, parent_id: int, value: str, glob: bool, exclude: int | None = None) -> bool:
         column, operand = ("name_display", "GLOB ?") if glob else ("name", "= ?")
@@ -120,12 +142,25 @@ class _Evaluator:
             params.append(exclude)
         return _exists(self.conn, sql, params)
 
-    def _subtree(self, rel_path: bytes) -> tuple[str, list[object]]:
-        # Every descendant path starts with "<rel_path>/"; "0" is the byte after "/".
-        return (
-            "scan_id = ? AND kind = 'file' AND rel_path > ? AND rel_path < ?",
-            [self.scan_id, rel_path + b"/", rel_path + b"0"],
+    def _subtree_query(
+        self, entry_id: int, columns: str, column_params: list[object], condition: str
+    ) -> tuple[str, list[object]]:
+        """Files below an entry, found through the parent links (index entry_by_parent).
+
+        Only evaluated for the few candidates whose rule looks inside the folder,
+        so a path index (a fifth of the database) is not worth its cost. Parameters
+        are listed in the order of their "?" in the SQL text.
+        """
+        sql = (
+            "WITH RECURSIVE sub(id) AS ("  # noqa: S608 - constant fragments only, values bound
+            "SELECT entry_id FROM entry WHERE scan_id = ? AND parent_id = ? "
+            "UNION ALL SELECT e.entry_id FROM entry e JOIN sub "
+            "ON e.scan_id = ? AND e.parent_id = sub.id) "
+            f"SELECT {columns} FROM entry WHERE scan_id = ? AND kind = 'file' "
+            f"AND entry_id IN sub {condition}"
         )
+        params = [self.scan_id, entry_id, self.scan_id, *column_params, self.scan_id]
+        return sql, params
 
     def check(self, evidence: Evidence, row: sqlite3.Row) -> bool:
         kind = evidence.kind
@@ -135,23 +170,16 @@ class _Evaluator:
             return self._child(
                 row["parent_id"], evidence.value, kind.is_glob, exclude=row["entry_id"]
             )
-        where, params = self._subtree(row["rel_path"])
-        if kind is EvidenceKind.ANY_FILE_GLOB:
-            return _exists(
-                self.conn,
-                f"SELECT 1 FROM entry WHERE {where} AND name_display GLOB ?",  # noqa: S608
-                [*params, evidence.value],
+        if kind in (EvidenceKind.ANY_FILE_GLOB, EvidenceKind.ANY_FILE_NOT_GLOB):
+            negate = "NOT " if kind is EvidenceKind.ANY_FILE_NOT_GLOB else ""
+            sql, params = self._subtree_query(
+                row["entry_id"], "1", [], f"AND {negate}(name_display GLOB ?)"
             )
-        if kind is EvidenceKind.ANY_FILE_NOT_GLOB:
-            return _exists(
-                self.conn,
-                f"SELECT 1 FROM entry WHERE {where} AND NOT (name_display GLOB ?)",  # noqa: S608
-                [*params, evidence.value],
-            )
-        total, matching = self.conn.execute(
-            f"SELECT COUNT(*), COALESCE(SUM(name_display GLOB ?), 0) FROM entry WHERE {where}",  # noqa: S608
-            [evidence.value, *params],
-        ).fetchone()
+            return _exists(self.conn, sql, [*params, evidence.value])
+        sql, params = self._subtree_query(
+            row["entry_id"], "COUNT(*), COALESCE(SUM(name_display GLOB ?), 0)", [evidence.value], ""
+        )
+        total, matching = self.conn.execute(sql, params).fetchone()
         return bool(total) and total == matching
 
     def size(self, rule: Rule, row: sqlite3.Row) -> tuple[int | None, int | None]:
@@ -211,7 +239,7 @@ def find_parasites(
     Entries inside a green finding are not reported again (deleting the
     ancestor already covers them).
     """
-    evaluator = _Evaluator(conn, scan_id)
+    evaluator = _Evaluator(conn, scan_id, rules)
     best: dict[int, Finding] = {}
     for rule in rules:
         for row in evaluator.candidates(rule):

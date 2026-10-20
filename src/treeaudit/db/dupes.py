@@ -7,7 +7,7 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
-from treeaudit.db.connection import from_sqlite_int
+from treeaudit.db.connection import from_sqlite_int, to_sqlite_int
 from treeaudit.db.scans import now_iso
 from treeaudit.scanner.models import ScanStatus
 
@@ -30,6 +30,17 @@ class HashRow:
     entry_id: int
     size: int
     partial: bytes | None
+    """Head digest (first EDGE_SIZE bytes)."""
+    full: bytes | None
+    tail: bytes | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class KnownDigests:
+    """Digests of an unchanged file, from an earlier analysis."""
+
+    head: bytes | None
+    tail: bytes | None
     full: bytes | None
 
 
@@ -61,13 +72,14 @@ def finish_run(
     files_hashed: int,
     bytes_read: int,
     errors: int,
+    reused: int = 0,
     failure: str | None = None,
 ) -> None:
     if not status.is_final:
         raise ValueError(f"not a final status: {status}")
     conn.execute(
         "UPDATE dup_run SET status = ?, finished_at = ?, candidates = ?, files_hashed = ?, "
-        "bytes_read = ?, errors = ?, failure = ? WHERE id = ?",
+        "bytes_read = ?, errors = ?, reused = ?, failure = ? WHERE id = ?",
         (
             status.value,
             now_iso(),
@@ -75,10 +87,48 @@ def finish_run(
             files_hashed,
             bytes_read,
             errors,
+            reused,
             failure,
             run_id,
         ),
     )
+
+
+def known_digests(
+    conn: sqlite3.Connection, candidates: list[Candidate], *, edge_size: int
+) -> dict[int, KnownDigests]:
+    """Digests computed by earlier analyses for files that did not change.
+
+    A file is considered unchanged when an earlier scan recorded the same
+    device, inode, size and modification time (to the nanosecond), the same
+    test rsync uses. Only analyses that finished (complete or incomplete) count;
+    head and tail digests are reused only if computed with the same edge size.
+    """
+    known: dict[int, KnownDigests] = {}
+    for candidate in candidates:
+        row = conn.execute(
+            "SELECT h.partial, h.tail, h.full, "
+            "json_extract(r.options, '$.edge_size') AS edge FROM entry e "
+            "JOIN dup_run r ON r.scan_id = e.scan_id AND r.status IN ('complete', 'incomplete') "
+            "JOIN file_hash h ON h.run_id = r.id AND h.entry_id = e.entry_id "
+            "WHERE e.dev = ? AND e.ino = ? AND e.size = ? AND e.mtime_ns = ? "
+            "ORDER BY r.id DESC LIMIT 1",
+            (
+                to_sqlite_int(candidate.dev),
+                to_sqlite_int(candidate.ino),
+                candidate.size,
+                candidate.mtime_ns,
+            ),
+        ).fetchone()
+        if row is None:
+            continue
+        same_edges = row["edge"] == edge_size
+        known[candidate.entry_id] = KnownDigests(
+            head=row["partial"] if same_edges else None,
+            tail=row["tail"] if same_edges else None,
+            full=row["full"],
+        )
+    return known
 
 
 def save_results(
@@ -87,8 +137,9 @@ def save_results(
     conn.execute("BEGIN")
     try:
         conn.executemany(
-            "INSERT INTO file_hash (run_id, entry_id, size, partial, full) VALUES (?, ?, ?, ?, ?)",
-            [(run_id, h.entry_id, h.size, h.partial, h.full) for h in hashes],
+            "INSERT INTO file_hash (run_id, entry_id, size, partial, full, tail) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [(run_id, h.entry_id, h.size, h.partial, h.full, h.tail) for h in hashes],
         )
         conn.executemany(
             "INSERT INTO dup_error (run_id, entry_id, rel_path_display, operation, errno, "

@@ -38,6 +38,12 @@ _NOATIME = getattr(os, "O_NOATIME", 0)
 
 DEFAULT_MAX_DEPTH = 256
 
+# Entries of a directory are examined by batches sorted by inode number: on ext4
+# (inode tables) and NTFS (MFT) neighbouring inodes are stored close together, so
+# a rotating disk seeks far less than in directory order. Batches bound memory
+# for huge directories.
+STAT_BATCH = 50_000
+
 
 class SubpathError(ValueError):
     """The requested sub-folder is not a safe relative path."""
@@ -85,9 +91,12 @@ def _open_dir(name: str, dir_fd: int | None) -> int:
     return os.open(name, DIR_FLAGS, dir_fd=dir_fd)
 
 
-def _lstat_entry(entry: os.DirEntry[str]) -> os.stat_result:
-    """lstat of a listed entry. Separate function so tests can simulate races."""
-    return entry.stat(follow_symlinks=False)
+def _lstat_at(name: str, dir_fd: int) -> os.stat_result:
+    """lstat of a listed entry, relative to its directory.
+
+    Separate function so tests can simulate races.
+    """
+    return os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
 
 
 def _kind_of(mode: int) -> EntryKind:
@@ -183,17 +192,27 @@ class _Walk:
         """List one directory: emit its entries and remember its subdirectories."""
         try:
             with os.scandir(frame.fd) as listing:
+                batch: list[tuple[int, str]] = []
                 for entry in listing:
-                    yield from self._entry(frame, entry)
+                    batch.append((entry.inode(), entry.name))  # d_ino: no extra syscall
+                    if len(batch) >= STAT_BATCH:
+                        yield from self._stat_batch(frame, batch)
+                        batch = []
+                yield from self._stat_batch(frame, batch)
         except OSError as exc:
             frame.totals.errors += 1
             yield _error(frame.rel_path, ErrorOperation.LIST_DIR, exc)
 
-    def _entry(self, frame: _Frame, entry: os.DirEntry[str]) -> Iterator[WalkEvent]:
-        name = os.fsencode(entry.name)
+    def _stat_batch(self, frame: _Frame, batch: list[tuple[int, str]]) -> Iterator[WalkEvent]:
+        batch.sort()
+        for _, entry_name in batch:
+            yield from self._entry(frame, entry_name)
+
+    def _entry(self, frame: _Frame, entry_name: str) -> Iterator[WalkEvent]:
+        name = os.fsencode(entry_name)
         rel_path = _join(frame.rel_path, name)
         try:
-            st = _lstat_entry(entry)
+            st = _lstat_at(entry_name, frame.fd)
         except OSError as exc:
             frame.totals.errors += 1
             yield _error(rel_path, ErrorOperation.STAT_ENTRY, exc)
@@ -202,7 +221,7 @@ class _Walk:
         link_target: bytes | None = None
         if kind is EntryKind.SYMLINK:
             try:
-                link_target = os.fsencode(os.readlink(entry.name, dir_fd=frame.fd))
+                link_target = os.fsencode(os.readlink(entry_name, dir_fd=frame.fd))
             except OSError as exc:
                 frame.totals.errors += 1
                 yield _error(rel_path, ErrorOperation.READ_LINK, exc)
@@ -218,7 +237,7 @@ class _Walk:
             link_target=link_target,
         )
         if kind is EntryKind.DIR:
-            frame.subdirs.append((entry_id, entry.name, rel_path, st.st_dev, st.st_ino))
+            frame.subdirs.append((entry_id, entry_name, rel_path, st.st_dev, st.st_ino))
 
     def _open_start(self, subpath: tuple[str, ...]) -> Iterator[WalkEvent | int]:
         """Open the root, then the sub-folder component by component.

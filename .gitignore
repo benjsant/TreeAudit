@@ -238,3 +238,4 @@ compose.override.yaml
 
 # Synthetic test tree (tools/make_dummy_tree.py)
 /dummy_folder/
+/big_dummy_folder/

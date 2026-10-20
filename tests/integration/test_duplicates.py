@@ -140,9 +140,11 @@ def test_same_size_but_different_content_is_not_a_duplicate(root: Path, harness:
     touch(root / "middle" / "b", bytes(middle))
     outcome, report = harness.groups()
     assert report.groups == []
-    # Head and tail pairs are told apart by the partial digest; only the
-    # "middle" pair needs a full read to be told apart.
-    assert outcome.files_hashed == 6 + 2
+    # Every file: one 4 KiB head read. Same head: one 4 KiB tail read ("tail" and
+    # "middle" pairs). Same head and tail: full read ("middle" pair only).
+    assert outcome.files_hashed == 6
+    edge = hashing.EDGE_SIZE
+    assert outcome.bytes_read == 6 * edge + 4 * edge + 2 * 512 * KIB
 
 
 def test_small_files_use_one_read(root: Path, harness: Harness) -> None:
@@ -349,7 +351,7 @@ def test_internal_failure(root: Path, harness: Harness, monkeypatch: pytest.Monk
     def broken(fd: int, size: int) -> tuple[bytes, int]:
         raise RuntimeError("simulated bug")
 
-    monkeypatch.setattr(runner, "partial_digest", broken)
+    monkeypatch.setattr(runner, "head_digest", broken)
     outcome = harness.analyse()
     assert outcome.status is ScanStatus.FAILED
     assert "simulated bug" in (outcome.failure or "")
@@ -416,10 +418,9 @@ def test_digests(tmp_path: Path) -> None:
     path = touch(tmp_path / "big", big)
     fd = os.open(path, os.O_RDONLY)
     try:
-        partial, read = hashing.partial_digest(fd, len(big))
-        assert read == 2 * hashing.PART_SIZE
-        expected = hashlib.sha256(big[: hashing.PART_SIZE] + big[-hashing.PART_SIZE :]).digest()
-        assert partial == expected
+        edge = hashing.EDGE_SIZE
+        assert hashing.head_digest(fd, len(big)) == (hashlib.sha256(big[:edge]).digest(), edge)
+        assert hashing.tail_digest(fd, len(big)) == (hashlib.sha256(big[-edge:]).digest(), edge)
         seen: list[int] = []
         full = hashing.full_digest(fd, len(big), cancel=threading.Event(), on_read=seen.append)
         assert full == hashlib.sha256(big).digest()
@@ -428,6 +429,123 @@ def test_digests(tmp_path: Path) -> None:
             hashing.full_digest(fd, len(big) + 10, cancel=threading.Event(), on_read=seen.append)
     finally:
         os.close(fd)
+    small = touch(tmp_path / "small", b"s" * 5000)
+    fd = os.open(small, os.O_RDONLY)
+    try:  # small files are read entirely at the head stage
+        assert hashing.head_digest(fd, 5000) == (hashlib.sha256(b"s" * 5000).digest(), 5000)
+    finally:
+        os.close(fd)
+
+
+# --- disk order and reuse (D-030) ------------------------------------------------------------
+
+
+def test_reads_follow_the_physical_order(
+    root: Path, harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = os.urandom(20 * KIB)
+    names = ["a", "b", "c", "d"]
+    for name in names:
+        touch(root / name, content)
+    harness.scan()
+    # Pretend the disk stores them in the order d, b, a, c.
+    positions = {"d": 100, "b": 200, "a": 300, "c": 400}
+    real_open = runner.TreeReader.open_file
+    by_fd: dict[int, str] = {}
+    reads: list[str] = []
+
+    def tracking_open(self: runner.TreeReader, rel_path: bytes, expected: object) -> int:
+        fd = real_open(self, rel_path, expected)  # type: ignore[arg-type]
+        by_fd[fd] = rel_path.decode()
+        return fd
+
+    def fake_position(fd: int) -> int:
+        return positions[by_fd[fd]]
+
+    real_head = runner.head_digest
+
+    def recording_head(fd: int, size: int) -> tuple[bytes, int]:
+        reads.append(by_fd[fd])
+        return real_head(fd, size)
+
+    monkeypatch.setattr(runner.TreeReader, "open_file", tracking_open)
+    monkeypatch.setattr(runner, "physical_offset", fake_position)
+    monkeypatch.setattr(runner, "head_digest", recording_head)
+    harness.analyse()
+    assert reads == ["d", "b", "a", "c"]
+
+
+def test_digests_are_reused_when_nothing_changed(root: Path, harness: Harness) -> None:
+    content = os.urandom(200 * KIB)
+    for name in "abc":
+        touch(root / name, content)
+    first = harness.analyse()
+    assert (first.reused, first.files_hashed) == (0, 3)
+    second = harness.analyse()  # same scan: every digest is known
+    assert (second.reused, second.files_hashed, second.bytes_read) == (3, 0, 0)
+    _, report = harness.groups()
+    assert len(report.groups) == 1 and len(report.groups[0].copies) == 3
+
+
+def test_reuse_across_scans_and_after_a_change(root: Path, harness: Harness) -> None:
+    content = os.urandom(200 * KIB)
+    for name in "abc":
+        touch(root / name, content)
+    harness.analyse()
+    (root / "c").write_bytes(os.urandom(200 * KIB))  # new content, new mtime
+    harness.scan()  # a new scan of the same folder
+    outcome, report = harness.groups()
+    assert outcome.reused == 2  # a and b unchanged
+    assert outcome.files_hashed == 1  # only c is read again
+    assert sorted(c.rel_path_display for c in report.groups[0].copies) == ["a", "b"]
+
+
+def test_reuse_can_be_disabled(root: Path, harness: Harness) -> None:
+    for name in "ab":
+        touch(root / name, b"z" * 20 * KIB)
+    harness.analyse()
+    outcome = harness.analyse(DupOptions(reuse_digests=False))
+    assert (outcome.reused, outcome.files_hashed) == (0, 2)
+
+
+def test_new_copy_of_a_known_file_is_fully_read(root: Path, harness: Harness) -> None:
+    content = os.urandom(200 * KIB)
+    for name in "ab":
+        touch(root / name, content)
+    harness.analyse()
+    touch(root / "new-copy", content)
+    harness.scan()
+    outcome, report = harness.groups()
+    assert outcome.reused == 2 and outcome.files_hashed == 1
+    # The new file: head, tail and full read; the two known files: nothing read.
+    edge = hashing.EDGE_SIZE
+    assert outcome.bytes_read == 2 * edge + 200 * KIB
+    assert len(report.groups[0].copies) == 3
+
+
+def test_second_analysis_reads_nothing_even_for_distinct_files(
+    root: Path, harness: Harness
+) -> None:
+    for name in "abcd":
+        touch(root / name, os.urandom(300 * KIB))  # same size, all different
+    first = harness.analyse()
+    assert first.files_hashed == 4
+    second = harness.analyse()
+    assert (second.files_hashed, second.bytes_read, second.reused) == (0, 0, 4)
+
+
+def test_physical_offset_never_raises(tmp_path: Path) -> None:
+    from treeaudit.duplicates.placement import physical_offset, read_order_key
+
+    path = touch(tmp_path / "f", os.urandom(64 * KIB))
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        position = physical_offset(fd)  # None on tmpfs, an offset on ext4/btrfs/xfs
+        assert position is None or position > 0
+    finally:
+        os.close(fd)
+    keys = [read_order_key(None, 1, 5), read_order_key(4096, 1, 9), read_order_key(512, 1, 1)]
+    assert sorted(keys) == [(0, 1, 512), (0, 1, 4096), (1, 1, 5)]
 
 
 # --- groups, selection and commands ----------------------------------------------------------

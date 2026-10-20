@@ -190,3 +190,13 @@ Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers
 - Nettoyage : les éléments sûrs (vert) sont cochés d'avance (rien n'est jamais exécuté) ; les doublons ne sont jamais cochés d'avance (ce sont des fichiers de l'utilisateur).
 - Fin d'une analyse : redirection automatique vers son bilan.
 - Aucune règle de sécurité ne change (D-025, D-026, D-028).
+
+## D-030 — Optimisation pour disques mécaniques et machines modestes (2026-10-20)
+Objectif du mainteneur : fonctionner sans à-coups sur un disque externe 5 400 tours et un PC de 8 Go de RAM. Sur un disque mécanique, le facteur limitant est le nombre de déplacements de la tête (10 à 15 ms chacun), pas le processeur.
+- **Mesurer d'abord** : `treeaudit bench` / `make bench` affiche uniquement des chiffres (durée, processeur, mémoire maximale, octets réellement lus sur le disque, type de disque selon le noyau), jamais un nom de fichier.
+- **Analyse** : les éléments d'un dossier sont examinés par paquets triés par numéro d'inode (inodes voisins = blocs voisins sur ext4 et dans la MFT NTFS).
+- **Doublons** : étages successifs lisant le minimum (début 4 Kio, fin 4 Kio, puis lecture complète), dans l'**ordre physique** des fichiers sur le disque (ioctl `FIEMAP`, en lecture seule ; à défaut, ordre des inodes). Lecture complète signalée séquentielle au noyau, puis pages libérées du cache (`posix_fadvise`) pour ne pas chasser la mémoire des autres programmes. Un seul fil de lecture : en parallèle, un disque mécanique ralentit.
+- **Empreintes réutilisées** d'une analyse à l'autre pour un fichier inchangé (même périphérique, inode, taille et date de modification à la nanoseconde, le critère de rsync). Une deuxième recherche ne relit rien. Option `reuse_digests=False` pour tout relire. Limite : un fichier modifié sans changer de taille avec une date remise à l'identique ne serait pas relu.
+- **Résumés mis en cache** pour les analyses terminées (immuables), avec une clé incluant l'empreinte du catalogue de règles ; calculés dès la fin de l'analyse.
+- **Base plus légère** (schéma v4) : index des chemins et des extensions supprimés (−24 % de taille, analyse plus rapide) ; les indices « dans le dossier » suivent les liens parent-enfant. Cache SQLite de 32 Mio et lots de 10 000 écritures.
+- Mesures (SSD, cache chaud, 1 040 904 éléments) : analyse 20,3 → 15,7 s en natif, mémoire < 80 Mio ; base 420 → 325 Mo ; doublons 0,9 → 0,5 s ; seconde recherche 0 octet lu ; détection des parasites 4,9 → 1,8 s puis instantanée. **Le gain sur disque mécanique reste à mesurer sur un vrai disque.**

@@ -42,6 +42,8 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Son identité (périphérique, inode, taille, date de modification) doit correspondre au scan avant et après la lecture ; sinon il est exclu des groupes et signalé.
 - Quand le scan couvre toute la racine, la racine doit encore être le même dossier (même inode) qu'au moment du scan.
 - Mémoire bornée : lecture par blocs de 1 Mio ; au plus un descripteur par niveau de dossier.
+- Position physique des fichiers demandée avec l'ioctl `FIEMAP`, en lecture seule, sur un descripteur déjà ouvert sans suivre de lien ; aucune capacité Linux n'est nécessaire.
+- Empreintes réutilisées d'une analyse à l'autre seulement si périphérique, inode, taille et date de modification (nanosecondes) sont identiques (D-030). Ce critère suppose qu'aucun outil n'a modifié un fichier en lui remettant exactement la même date ; en cas de doute, une analyse sans réutilisation relit tout.
 
 ## Effets de bord de la lecture
 - Sur un montage `:ro`, la lecture ne modifie rien.

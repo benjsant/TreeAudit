@@ -146,4 +146,26 @@ _V3 = (
     "CREATE INDEX entry_by_inode ON entry (scan_id, dev, ino)",
 )
 
-MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1, _V2, _V3)
+# v4: reuse digests across analyses (same inode, size and mtime -> same content),
+# head/tail digests kept so that a second analysis reads almost nothing.
+_V4 = (
+    "CREATE INDEX entry_by_identity ON entry (dev, ino)",
+    # Measured on 1 000 000 entries: the path index was ~21 % of the database and
+    # slowed every insert; subtree lookups now follow the parent links instead.
+    # Extension statistics scan the whole scan anyway.
+    "DROP INDEX entry_by_path",
+    "DROP INDEX entry_by_extension",
+    "ALTER TABLE dup_run ADD COLUMN reused INTEGER NOT NULL DEFAULT 0",
+    # file_hash.partial now holds the head digest (first 4 KiB) and tail the last 4 KiB.
+    "ALTER TABLE file_hash ADD COLUMN tail BLOB",
+    # Summaries computed once for finished (immutable) scans and analyses.
+    """
+    CREATE TABLE summary_cache (
+        key         TEXT PRIMARY KEY,
+        payload     TEXT NOT NULL,
+        created_at  TEXT NOT NULL
+    )
+    """,
+)
+
+MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1, _V2, _V3, _V4)

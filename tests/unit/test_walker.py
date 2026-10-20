@@ -307,14 +307,14 @@ def test_directory_swapped_for_another_directory_is_detected(
 def test_entry_vanishing_before_stat(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "ghost").write_bytes(b"g")
     (tmp_path / "stays").write_bytes(b"s")
-    real_lstat = walker._lstat_entry
+    real_lstat = walker._lstat_at
 
-    def vanishing(entry: os.DirEntry[str]) -> os.stat_result:
-        if entry.name == "ghost":
+    def vanishing(name: str, dir_fd: int) -> os.stat_result:
+        if name == "ghost":
             raise FileNotFoundError(errno.ENOENT, "No such file or directory")
-        return real_lstat(entry)
+        return real_lstat(name, dir_fd)
 
-    monkeypatch.setattr(walker, "_lstat_entry", vanishing)
+    monkeypatch.setattr(walker, "_lstat_at", vanishing)
     events = run(tmp_path)
     [error] = errors(events)
     assert (error.rel_path, error.operation) == (b"ghost", ErrorOperation.STAT_ENTRY)
@@ -405,3 +405,29 @@ def test_deep_tree_uses_bounded_descriptors(tmp_path: Path) -> None:
     events = run(tmp_path)
     assert len(entries(events)) == 101
     assert errors(events) == []
+
+
+def test_entries_are_examined_in_inode_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for index in range(50):
+        (tmp_path / f"f{index:02d}").write_bytes(b"")
+    seen: list[int] = []
+    real_lstat = walker._lstat_at
+
+    def recording(name: str, dir_fd: int) -> os.stat_result:
+        st = real_lstat(name, dir_fd)
+        seen.append(st.st_ino)
+        return st
+
+    monkeypatch.setattr(walker, "_lstat_at", recording)
+    run(tmp_path)
+    assert seen == sorted(seen)
+
+
+def test_inode_batches_bound_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(walker, "STAT_BATCH", 7)
+    for index in range(30):
+        (tmp_path / f"f{index:02d}").write_bytes(b"")
+    events = run(tmp_path)
+    assert len(entries(events)) == 31  # nothing lost across batches

@@ -38,7 +38,7 @@ from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES
 from treeaudit.scanner.browse import list_folders
 from treeaudit.scanner.walker import SubpathError, parse_subpath
-from treeaudit.web import queries
+from treeaudit.web import queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, root_display
 from treeaudit.web.search_form import SearchForm, spec_from_form
 
@@ -211,21 +211,13 @@ def summary_page(request: Request, scan_id: int, conn: Db, config: Config) -> Re
     scan = _scan_or_404(conn, scan_id)
     start = queries.start_node(conn, scan_id)
     biggest = queries.children(conn, scan_id, start.entry_id, limit=5)[0] if start else []
-    findings = find_parasites(conn, scan_id, load_default_rules())
-    safe = [f for f in findings if f.band is Band.GREEN]
-    to_check = [f for f in findings if f.band is not Band.GREEN]
+    parasites = summaries.parasites_summary(conn, scan_id)
 
     def dupes_summary(micro: bool) -> dict[str, Any] | None:
         run = _latest_run(conn, scan_id, micro=micro)
         if run is None:
             return None
-        report = load_groups(conn, run["id"])
-        return {
-            "run": run,
-            "groups": len(report.groups),
-            "removable": sum(len(g.removable) for g in report.groups),
-            "recoverable": sum(g.recoverable for g in report.groups),
-        }
+        return {"run": run, **summaries.dupes_summary(conn, run["id"])}
 
     return render(
         request,
@@ -234,10 +226,10 @@ def summary_page(request: Request, scan_id: int, conn: Db, config: Config) -> Re
         title=analysis_title(config, scan),
         start=start,
         biggest=biggest,
-        safe_count=len(safe),
-        safe_size=sum(f.allocated_size or 0 for f in safe),
-        check_count=len(to_check),
-        check_size=sum(f.allocated_size or 0 for f in to_check),
+        safe_count=parasites["safe_count"],
+        safe_size=parasites["safe_size"],
+        check_count=parasites["check_count"],
+        check_size=parasites["check_size"],
         dupes=dupes_summary(micro=False),
         micro=dupes_summary(micro=True),
         extensions=scans_db.top_extensions(conn, scan_id, limit=15),

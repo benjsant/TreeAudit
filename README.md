@@ -64,6 +64,8 @@ Doublons exacts du dernier scan : `make dupes` (fichiers d'au moins 1 Kio) ou `m
 
 Recherche dans le dernier scan : `make search ARGS="--ext jpg,png --min-size 5M"`, `ARGS="--path-glob 'projets/**/*.py'"` ou `ARGS="--regex '^IMG_\d{4}' -i"`. Voir [FILTERS_AND_REGEX.md](docs/FILTERS_AND_REGEX.md).
 
+Mesurer les performances sur ton disque (seulement des chiffres, aucun nom de fichier) : `make bench ARGS="--dupes"`. Pour une mesure « à froid », vide d'abord le cache du noyau : `sync; echo 3 | sudo tee /proc/sys/vm/drop_caches`.
+
 Développement : `make test`, `make lint`, `make typecheck`, ou `make check` pour tout lancer. `make help` liste les commandes.
 
 ## Documentation

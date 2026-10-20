@@ -18,7 +18,7 @@ from treeaudit.scanner.models import (
     Totals,
 )
 
-DEFAULT_BATCH_SIZE = 2000
+DEFAULT_BATCH_SIZE = 10_000  # measured: larger transactions, -5 % scan time
 _ENTRY_COLUMNS = 21
 # Only constant '?' placeholders are interpolated: no data reaches the SQL text.
 _INSERT_ENTRY = f"INSERT INTO entry VALUES ({', '.join('?' * _ENTRY_COLUMNS)})"  # noqa: S608

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import string
 import tomllib
@@ -231,9 +232,18 @@ def parse_rules(raw: dict[str, Any]) -> tuple[Rule, ...]:
     return rules
 
 
+def _catalogue_text() -> str:
+    return resources.files("treeaudit.parasites").joinpath(RULES_RESOURCE).read_text("utf-8")
+
+
+def rules_fingerprint() -> str:
+    """Short digest of the shipped catalogue: changes whenever a rule changes."""
+    return hashlib.sha256(_catalogue_text().encode()).hexdigest()[:16]
+
+
 def load_default_rules() -> tuple[Rule, ...]:
     """Load the catalogue shipped with TreeAudit."""
-    text = resources.files("treeaudit.parasites").joinpath(RULES_RESOURCE).read_text("utf-8")
+    text = _catalogue_text()
     try:
         raw = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:

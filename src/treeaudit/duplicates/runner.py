@@ -1,6 +1,15 @@
-"""Running a duplicate analysis on a recorded scan (D-015).
+"""Running a duplicate analysis on a recorded scan (D-015, D-030).
 
-size (index only) -> partial digest -> full SHA-256 -> optional byte comparison.
+Stages, each reading as little as possible, in the physical order of the files
+on the disk (rotating disks pay 10-15 ms per seek):
+
+1. digests already known from earlier analyses (unchanged files) are reused;
+2. "repérage": the position of each file on the disk is asked (FIEMAP);
+3. head: the first 4 KiB (the whole file if it is small), one read each;
+4. tail: the last 4 KiB, only for files whose head still matches another;
+5. full SHA-256, read sequentially, only for the remaining candidates;
+6. optional byte-by-byte comparison.
+
 Every file is opened through TreeReader (no symlink is ever followed) and must
 still match the index before and after being read; otherwise it is reported and
 left out of the groups. The run ends complete, incomplete, cancelled or failed.
@@ -8,12 +17,13 @@ left out of the groups. The run ends complete, incomplete, cancelled or failed.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import sqlite3
 import threading
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from treeaudit.core.config import AppConfig, RootConfig
@@ -22,12 +32,15 @@ from treeaudit.core.errors import TreeAuditError
 from treeaudit.db import dupes, scans
 from treeaudit.db.connection import connect, from_sqlite_int
 from treeaudit.duplicates.hashing import (
+    EDGE_SIZE,
     CancelledError,
     full_digest,
+    head_digest,
     is_small,
-    partial_digest,
     same_content,
+    tail_digest,
 )
+from treeaudit.duplicates.placement import physical_offset, read_order_key
 from treeaudit.duplicates.reader import (
     Expected,
     FileChangedError,
@@ -54,6 +67,8 @@ class DupOptions:
     max_size: int | None = None
     verify_bytes: bool = False
     micro: bool = False
+    reuse_digests: bool = True
+    """Reuse digests of earlier analyses for files whose inode, size and mtime did not change."""
 
     @classmethod
     def for_micro(cls, verify_bytes: bool = False) -> DupOptions:
@@ -68,6 +83,8 @@ class DupProgress:
     stage: str = ""
     candidates: int = 0
     files_hashed: int = 0
+    """Distinct files read at least once (head, tail or full)."""
+    reused: int = 0
     bytes_read: int = 0
     errors: int = 0
 
@@ -81,18 +98,22 @@ class DupOutcome:
     bytes_read: int
     errors: int
     failure: str | None = None
+    reused: int = 0
 
 
 def _expected(candidate: dupes.Candidate) -> Expected:
     return Expected(candidate.dev, candidate.ino, candidate.size, candidate.mtime_ns)
 
 
-def _groups[K](items: Iterable[dupes.Candidate], key: dict[int, K]) -> list[list[dupes.Candidate]]:
-    """Group candidates by key (only those with a key), keep groups of 2 or more."""
-    buckets: dict[tuple[int, K], list[dupes.Candidate]] = defaultdict(list)
+def _groups(
+    items: Iterable[dupes.Candidate], key: Callable[[dupes.Candidate], object | None]
+) -> list[list[dupes.Candidate]]:
+    """Group candidates by (size, key) — skipping those without a key — keep groups of 2+."""
+    buckets: dict[tuple[int, object], list[dupes.Candidate]] = defaultdict(list)
     for item in items:
-        if item.entry_id in key:
-            buckets[(item.size, key[item.entry_id])].append(item)
+        value = key(item)
+        if value is not None:
+            buckets[(item.size, value)].append(item)
     return [group for group in buckets.values() if len(group) >= 2]
 
 
@@ -103,17 +124,26 @@ class _Analysis:
         options: DupOptions,
         cancel: threading.Event,
         progress: DupProgress,
+        known: dict[int, dupes.KnownDigests],
     ) -> None:
         self.reader = reader
         self.options = options
         self.cancel = cancel
         self.progress = progress
-        self.partial: dict[int, bytes] = {}
-        self.full: dict[int, bytes] = {}
+        self.head = {i: k.head for i, k in known.items() if k.head is not None}
+        self.tail = {i: k.tail for i, k in known.items() if k.tail is not None}
+        self.full = {i: k.full for i, k in known.items() if k.full is not None}
+        self.known = set(known)
+        self.read_ids: set[int] = set()
+        self.order: dict[int, tuple[int, int, int]] = {}
         self.errors: list[dupes.DupError] = []
 
     def _read(self, data: int) -> None:
         self.progress.bytes_read += data
+
+    def _check_cancel(self) -> None:
+        if self.cancel.is_set():
+            raise CancelledError
 
     def _error(self, candidate: dupes.Candidate, operation: str, exc: BaseException) -> None:
         errno = exc.errno if isinstance(exc, OSError) else None
@@ -125,47 +155,84 @@ class _Analysis:
         )
         self.progress.errors = len(self.errors)
         # Drop whatever was computed for a file that turned out to be unreliable.
-        self.partial.pop(candidate.entry_id, None)
-        self.full.pop(candidate.entry_id, None)
+        for table in (self.head, self.tail, self.full):
+            table.pop(candidate.entry_id, None)
 
-    def _hash(self, candidate: dupes.Candidate, *, full: bool) -> None:
+    def _with_file[R](
+        self, candidate: dupes.Candidate, operation: str, work: Callable[[int], R]
+    ) -> R | None:
+        """Open the file safely, run work(fd), check it did not change, close it."""
         expected = _expected(candidate)
         try:
             fd = self.reader.open_file(candidate.rel_path, expected)
         except FileChangedError as exc:
             self._error(candidate, "changed", exc)
-            return
+            return None
         except OSError as exc:
             self._error(candidate, "open", exc)
-            return
+            return None
         try:
-            if full:
-                digest = full_digest(fd, candidate.size, cancel=self.cancel, on_read=self._read)
-            else:
-                digest, read = partial_digest(fd, candidate.size)
-                self._read(read)
+            result = work(fd)
             check_unchanged(fd, expected)
         except FileChangedError as exc:
             self._error(candidate, "changed", exc)
-            return
+            return None
         except OSError as exc:
-            self._error(candidate, "read", exc)
-            return
+            self._error(candidate, operation, exc)
+            return None
         finally:
             os.close(fd)
-        if full:
-            self.full[candidate.entry_id] = digest
-        else:
-            self.partial[candidate.entry_id] = digest
-            if is_small(candidate.size):  # the partial digest covered everything
-                self.full[candidate.entry_id] = digest
-        self.progress.files_hashed += 1
+        return result
+
+    def _ordered(self, items: Iterable[dupes.Candidate]) -> list[dupes.Candidate]:
+        return sorted(
+            items, key=lambda c: self.order.get(c.entry_id, read_order_key(None, c.dev, c.ino))
+        )
+
+    def _locate(self, items: list[dupes.Candidate]) -> None:
+        """Ask the position of each file on the disk (in path order: directories are reused)."""
+        for candidate in sorted(items, key=lambda c: c.rel_path):
+            self._check_cancel()
+            errors_before = len(self.errors)
+            position = self._with_file(candidate, "locate", physical_offset)
+            if len(self.errors) > errors_before:
+                continue  # not readable: reported, and left out of every stage
+            self.order[candidate.entry_id] = read_order_key(position, candidate.dev, candidate.ino)
+
+    def _stage(
+        self,
+        name: str,
+        items: list[dupes.Candidate],
+        operation: str,
+        work: Callable[[dupes.Candidate, int], bytes],
+        store: dict[int, bytes],
+    ) -> None:
+        self.progress.stage = name
+        for candidate in self._ordered(items):
+            self._check_cancel()
+            digest = self._with_file(candidate, operation, functools.partial(work, candidate))
+            if digest is not None:
+                store[candidate.entry_id] = digest
+                self.read_ids.add(candidate.entry_id)
+                self.progress.files_hashed = len(self.read_ids)
+
+    def _head(self, candidate: dupes.Candidate, fd: int) -> bytes:
+        digest, read = head_digest(fd, candidate.size)
+        self._read(read)
+        return digest
+
+    def _tail(self, candidate: dupes.Candidate, fd: int) -> bytes:
+        digest, read = tail_digest(fd, candidate.size)
+        self._read(read)
+        return digest
+
+    def _full(self, candidate: dupes.Candidate, fd: int) -> bytes:
+        return full_digest(fd, candidate.size, cancel=self.cancel, on_read=self._read)
 
     def _verify(self, group: list[dupes.Candidate]) -> None:
         reference = group[0]
         for other in group[1:]:
-            if self.cancel.is_set():
-                raise CancelledError
+            self._check_cancel()
             try:
                 fd_a = self.reader.open_file(reference.rel_path, _expected(reference))
                 try:
@@ -192,37 +259,50 @@ class _Analysis:
                 )
 
     def run(self, candidates: list[dupes.Candidate]) -> None:
-        self.progress.stage = "empreintes partielles"
-        for group in _groups(candidates, {c.entry_id: None for c in candidates}):
-            for candidate in group:
-                if self.cancel.is_set():
-                    raise CancelledError
-                self._hash(candidate, full=False)
+        # Every stage skips digests already known from an earlier analysis.
+        need_head = [c for c in candidates if c.entry_id not in self.head]
+        self.progress.stage = "repérage sur le disque"
+        self._locate(need_head)
+        need_head = [c for c in need_head if c.entry_id in self.order]
+        self._stage("début des fichiers", need_head, "read", self._head, self.head)
+        for candidate in candidates:
+            if is_small(candidate.size) and candidate.entry_id in self.head:
+                self.full.setdefault(candidate.entry_id, self.head[candidate.entry_id])
 
-        self.progress.stage = "empreintes complètes"
-        for group in _groups(candidates, self.partial):
-            for candidate in group:
-                if candidate.entry_id in self.full:
-                    continue
-                if self.cancel.is_set():
-                    raise CancelledError
-                self._hash(candidate, full=True)
+        large = [c for c in candidates if not is_small(c.size)]
+        same_head = [c for g in _groups(large, lambda c: self.head.get(c.entry_id)) for c in g]
+        need_tail = [c for c in same_head if c.entry_id not in self.tail]
+        self._stage("fin des fichiers", need_tail, "read", self._tail, self.tail)
+
+        def head_and_tail(c: dupes.Candidate) -> object | None:
+            if c.entry_id not in self.head or c.entry_id not in self.tail:
+                return None
+            return (self.head[c.entry_id], self.tail[c.entry_id])
+
+        same_edges = [c for g in _groups(same_head, head_and_tail) for c in g]
+        need_full = [c for c in same_edges if c.entry_id not in self.full]
+        self._stage("lecture complète", need_full, "read", self._full, self.full)
 
         if self.options.verify_bytes:
             self.progress.stage = "comparaison octet par octet"
-            for group in _groups(candidates, self.full):
+            for group in _groups(candidates, lambda c: self.full.get(c.entry_id)):
                 self._verify(group)
+
+        self.progress.reused = sum(
+            1 for c in candidates if c.entry_id in self.known and c.entry_id not in self.read_ids
+        )
 
     def hash_rows(self, candidates: list[dupes.Candidate]) -> list[dupes.HashRow]:
         return [
             dupes.HashRow(
                 c.entry_id,
                 c.size,
-                self.partial.get(c.entry_id),
+                self.head.get(c.entry_id),
                 self.full.get(c.entry_id),
+                self.tail.get(c.entry_id),
             )
             for c in candidates
-            if c.entry_id in self.partial or c.entry_id in self.full
+            if c.entry_id in self.head or c.entry_id in self.full
         ]
 
 
@@ -270,17 +350,22 @@ def run_duplicates(
             "max_size": options.max_size,
             "verify_bytes": options.verify_bytes,
             "micro": options.micro,
+            "reuse_digests": options.reuse_digests,
+            "edge_size": EDGE_SIZE,
         },
     )
     progress.run_id = run_id
     progress.candidates = len(candidates)
+    known = (
+        dupes.known_digests(conn, candidates, edge_size=EDGE_SIZE) if options.reuse_digests else {}
+    )
 
     status = ScanStatus.COMPLETE
     failure: str | None = None
     analysis: _Analysis | None = None
     try:
         with TreeReader(root.path, expected_root) as reader:
-            analysis = _Analysis(reader, options, cancel, progress)
+            analysis = _Analysis(reader, options, cancel, progress, known)
             try:
                 analysis.run(candidates)
             except CancelledError:
@@ -302,6 +387,7 @@ def run_duplicates(
         files_hashed=progress.files_hashed,
         bytes_read=progress.bytes_read,
         errors=errors,
+        reused=progress.reused,
         failure=failure,
     )
     return DupOutcome(
@@ -312,6 +398,7 @@ def run_duplicates(
         progress.bytes_read,
         errors,
         failure,
+        progress.reused,
     )
 
 

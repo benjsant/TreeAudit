@@ -282,7 +282,7 @@ def test_execute_scan_end_to_end(
     assert database_path(config.data_dir).is_file()
 
 
-def test_migration_from_v1_adds_lookup_indexes(tmp_path: Path) -> None:
+def test_migration_from_v1_to_latest(tmp_path: Path) -> None:
     from treeaudit.db.connection import migrate
     from treeaudit.db.schema import MIGRATIONS
 
@@ -292,6 +292,7 @@ def test_migration_from_v1_adds_lookup_indexes(tmp_path: Path) -> None:
     raw.execute("PRAGMA user_version = 1")
     migrate(raw)
     indexes = {r[0] for r in raw.execute("SELECT name FROM sqlite_master WHERE type = 'index'")}
-    assert {"entry_by_name", "entry_by_path"} <= indexes
+    assert {"entry_by_name", "entry_by_identity"} <= indexes
+    assert "entry_by_path" not in indexes  # dropped in v4 (measured cost, see schema)
     assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     raw.close()

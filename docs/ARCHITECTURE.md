@@ -72,6 +72,7 @@ En Docker, `path` vaut `/audit/roots/<id>` et `data_dir` vaut `/data`.
 - `dup_run` (schéma v3) : analyse de doublons d'un scan, état (D-012), options, fichiers et octets lus, erreurs.
 - `file_hash` : empreintes partielle et complète d'un inode représentatif ; jamais de contenu.
 - `dup_error` : fichiers non lus ou exclus (modifiés, remplacés, illisibles), avec l'opération et `errno`.
+- Schéma v4 : `file_hash.tail` (empreinte de la fin), `dup_run.reused`, `summary_cache` (résumés des analyses terminées), index `entry_by_identity` (périphérique, inode) pour réutiliser les empreintes ; index des chemins et des extensions supprimés (D-030).
 
 Mode WAL, clés étrangères actives, version du schéma dans `PRAGMA user_version` ; une base plus récente que le code est refusée. Les totaux finaux d'un scan sont recalculés en SQL sur ce qui a réellement été enregistré, ce qui garantit qu'un scan annulé ou incomplet n'annonce jamais plus que ce qu'il a vu. Chaque scan est un instantané indépendant.
 

@@ -19,11 +19,13 @@ from typing import Any
 
 from treeaudit.core.config import AppConfig
 from treeaudit.core.errors import TreeAuditError
+from treeaudit.db.connection import connect
 from treeaudit.duplicates.runner import DupOptions, DupOutcome, DupProgress, execute_duplicates
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.validation import REASON_MESSAGES, RootRejectedError
 from treeaudit.scanner.runner import ScanOutcome, ScanProgress, ScanRequest, execute_scan
 from treeaudit.scanner.walker import parse_subpath
+from treeaudit.web import summaries
 
 logger = logging.getLogger(__name__)
 
@@ -136,26 +138,37 @@ class JobManager:
         progress = ScanProgress()
         job = Job(id=next(self._ids), kind=JobKind.SCAN, label=label, progress=progress)
         request = ScanRequest(root=root, subpath=normalized)
-        return self._start(
-            job,
-            lambda j: execute_scan(
+
+        def work(j: Job) -> ScanOutcome:
+            outcome = execute_scan(
                 self.config,
                 request,
                 mounts=self._mounts(),
                 home=self._home(),
                 cancel=j.cancel,
                 progress=progress,
-            ),
-        )
+            )
+            self._warm_summary(outcome.scan_id)
+            return outcome
+
+        return self._start(job, work)
+
+    def _warm_summary(self, scan_id: int) -> None:
+        """Compute the summary page data now, so the summary opens instantly."""
+        conn = connect(self.config.data_dir)
+        try:
+            summaries.parasites_summary(conn, scan_id)
+        finally:
+            conn.close()
 
     def start_dupes(self, scan_id: int, *, micro: bool) -> Job:
         options = DupOptions.for_micro() if micro else DupOptions()
         label = "Recherche des petits fichiers en double" if micro else "Recherche des doublons"
         progress = DupProgress()
         job = Job(id=next(self._ids), kind=JobKind.DUPES, label=label, progress=progress)
-        return self._start(
-            job,
-            lambda j: execute_duplicates(
+
+        def work(j: Job) -> DupOutcome:
+            outcome = execute_duplicates(
                 self.config,
                 scan_id,
                 options,
@@ -163,8 +176,15 @@ class JobManager:
                 home=self._home(),
                 cancel=j.cancel,
                 progress=progress,
-            ),
-        )
+            )
+            conn = connect(self.config.data_dir)
+            try:
+                summaries.dupes_summary(conn, outcome.run_id)
+            finally:
+                conn.close()
+            return outcome
+
+        return self._start(job, work)
 
     def cancel(self) -> bool:
         job = self.current
