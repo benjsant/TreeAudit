@@ -46,8 +46,8 @@ Ce sont des filtres de recherche, pas des règles de suppression.
   - `**` en segment complet correspond à zéro ou plusieurs dossiers (`src/**/*.py`) ;
   - le motif doit couvrir le chemin entier.
 - **Fichiers cachés** : contrairement au shell, `*` correspond aussi aux noms commençant par `.`. Un audit doit voir `.venv`, `.git`, `.cache`.
-- **Casse** : sensible par défaut, option insensible (`casefold`) pour tous les modes.
-- **Regex** : `fullmatch` par défaut pour le mode « nom exact », `search` pour le mode « contient ». Le mode est affiché à côté du motif dans les résultats et les rapports.
+- **Casse** : sensible par défaut ; option insensible pour tous les modes (`re.IGNORECASE` pour les globs et les regex, `casefold` pour le nom exact).
+- **Regex** : correspondance partielle (`search`, « contient ») par défaut, entière (`fullmatch`) avec `--full-match`. Le « nom exact » est un critère distinct (`--name`). Le mode est affiché à côté du motif dans les résultats.
 - **Unicode** : aucune normalisation implicite (NFC/NFD). Un nom en UTF-8 invalide est filtré sur sa forme affichable ; ce cas est signalé.
 - **Limites** : longueur de motif maximale (1 000 caractères) ; évaluation annulable (voir [SECURITY.md](SECURITY.md)).
 
