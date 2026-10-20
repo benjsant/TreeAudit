@@ -65,6 +65,13 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Les noms de fichiers sont des données non fiables : autoéchappement Jinja2, aucun `innerHTML`, `Content-Security-Policy: default-src 'self'`.
 - Les tâches longues s'exécutent dans un thread de travail annulable ; un seul scan actif à la fois en V1.
 
+## Interface web (D-028)
+- Noms de fichiers rendus uniquement par des gabarits à autoéchappement ; JavaScript limité à `textContent` ; CSP sans exception (`default-src 'self'`). Test : chaque page est analysée pour vérifier l'absence de script, de gestionnaire `on…` ou de style en ligne, y compris avec des fichiers nommés `<img src=x onerror=…>` ou `"><svg onload=…>`.
+- Actions en `POST` JSON avec en-tête dédié (CSRF) ; aucune action en `GET`.
+- Sélecteur de dossier : noms de dossiers seulement, chemin relatif validé, ouverture sans suivre de lien ; un dossier inaccessible ou un lien renvoie une erreur, jamais le contenu d'un autre endroit.
+- Exports CSV : formules neutralisées (apostrophe devant `=`, `+`, `-`, `@`, tabulation, retour chariot).
+- Une seule tâche longue à la fois ; annulation possible.
+
 ## Filtres et expressions régulières
 - Une regex ne sert jamais à décider si un chemin est autorisé.
 - Les motifs utilisateur ne sont jamais passés à un shell.

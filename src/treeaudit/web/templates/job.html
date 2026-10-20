@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Analyse en cours{% endblock %}
+{% block content %}
+<h1>Analyse en cours</h1>
+{% if job is none %}
+  <p>Aucune analyse lancée depuis le démarrage du serveur. <a href="/scan/new">Lancer un scan</a>.</p>
+{% else %}
+  <section data-job-monitor aria-live="polite">
+    <p><strong data-field="label">{{ job.label }}</strong></p>
+    <dl class="stats">
+      <dt>État</dt><dd data-field="state">{{ "en cours" if job.running else "terminé" }}</dd>
+      <dt>Durée</dt><dd><span data-field="elapsed">{{ job.elapsed }}</span> s</dd>
+      <dt>Progression</dt><dd data-field="progress">–</dd>
+      <dt>Dossier courant</dt><dd data-field="current" class="path">–</dd>
+    </dl>
+    <p class="error-text" data-field="error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" data-cancel-job {% if not job.running %}hidden{% endif %}>Annuler</button>
+      <a class="primary-link" data-field="result" href="/" hidden>Voir le résultat</a>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

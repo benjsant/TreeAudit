@@ -1,0 +1,14 @@
+<fieldset class="command-panel">
+  <legend>Commande pour la sélection</legend>
+  <label><input type="radio" name="action" value="trash" checked> Corbeille (réversible)</label>
+  <label><input type="radio" name="action" value="delete"> <span class="danger">Suppression définitive</span></label>
+  {% if allow_archive is not defined or allow_archive %}<label><input type="radio" name="action" value="archive"> Archive .tar.gz (l'original n'est pas touché)</label>{% endif %}
+  <div class="actions"><button type="button" class="primary" data-build-command>Générer la commande</button></div>
+  <p class="error-text" data-error role="alert" hidden></p>
+  <ul class="warnings" data-warnings></ul>
+  <div data-command-output hidden>
+    <p>TreeAudit n'exécute rien : relis la commande, puis copie-la dans un terminal.</p>
+    <pre class="cmd" data-command-text></pre>
+    <button type="button" data-copy>Copier</button> <span class="muted" data-copy-status></span>
+  </div>
+</fieldset>

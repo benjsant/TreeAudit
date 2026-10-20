@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
-from treeaudit.core.config import RootConfig
+from treeaudit.core.config import AppConfig, RootConfig
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import RejectReason
 from treeaudit.web.app import create_app
@@ -21,8 +23,9 @@ STATUSES = (
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return TestClient(create_app(STATUSES), base_url="http://127.0.0.1:8765")
+def client(tmp_path: Path) -> TestClient:
+    config = AppConfig(data_dir=str(tmp_path / "data"), roots=tuple(s.root for s in STATUSES))
+    return TestClient(create_app(config, STATUSES), base_url="http://127.0.0.1:8765")
 
 
 def test_health(client: TestClient) -> None:

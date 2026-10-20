@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Dossiers parasites · scan {{ scan.id }}{% endblock %}
+{% block content %}
+<h1>Dossiers parasites <span class="muted">· scan {{ scan.id }}</span></h1>
+{% if scan.status != "complete" %}<p class="banner warn" role="alert">Le scan n'est pas complet : des éléments peuvent manquer.</p>{% endif %}
+<form method="get" class="inline">
+  <label>Confiance minimale (%) <input type="number" name="min_confidence" min="0" max="100" value="{{ min_confidence }}"></label>
+  <button type="submit">Filtrer</button>
+  <a href="/export/scans/{{ scan.id }}/parasites.csv?min_confidence={{ min_confidence }}">CSV</a>
+  <a href="/export/scans/{{ scan.id }}/parasites.json?min_confidence={{ min_confidence }}">JSON</a>
+</form>
+<ul class="legend">
+{% for band in bands %}
+  <li><span class="badge band-{{ band.value }}">{{ band_labels[band] }}</span> {{ totals[band][0] }} élément(s), {{ totals[band][1] | size }} — {{ band_meaning[band] }}</li>
+{% endfor %}
+</ul>
+
+<section data-command-builder data-endpoint="/api/scans/{{ scan.id }}/parasites/command" data-min-confidence="{{ min_confidence }}">
+  <div class="actions">
+    <button type="button" data-select-band="green">Cocher tous les verts</button>
+    <button type="button" data-select-none>Tout décocher</button>
+  </div>
+  <table>
+    <thead><tr><th scope="col"><span class="sr-only">Choisir</span></th><th scope="col">N°</th><th scope="col">Confiance</th><th scope="col" class="num">Taille</th><th scope="col">Détection</th></tr></thead>
+    <tbody>
+    {% for row in rows %}{% set f = row.finding %}
+      <tr>
+        <td><input type="checkbox" data-pick="{{ f.number }}" data-band="{{ f.band.value }}" id="pick-{{ f.number }}" {% if not f.displayable %}disabled{% endif %}></td>
+        <td><label for="pick-{{ f.number }}">{{ f.number }}</label></td>
+        <td><span class="badge band-{{ f.band.value }}">{{ band_labels[f.band] }} {{ f.confidence }} %</span></td>
+        <td class="num">{{ f.allocated_size | size if f.allocated_size is not none else "?" }}</td>
+        <td>
+          <strong>{{ f.rule.label }}</strong> — <span class="path">{{ f.rel_path_display }}</span>
+          <div class="muted">Pourquoi : base {{ f.rule.base }} %{% for r in f.evidence if r.matched %} ; ✔ {{ r.evidence.label }} ({{ "%+d" | format(r.evidence.weight) }}){% endfor %}{% if f.rule.max_confidence < 100 %} ; plafonné à {{ f.rule.max_confidence }} %{% endif %}</div>
+          <details><summary>Détails</summary>
+            <p>{{ f.rule.explanation }}</p>
+            {% for r in f.evidence if not r.matched %}<p class="muted">✘ {{ r.evidence.label }} (absent, {{ "%+d" | format(r.evidence.weight) }})</p>{% endfor %}
+            {% if row.recreate %}<p>Recréer : <code class="cmd">{{ row.recreate }}</code></p>
+            {% elif f.rule.recreate_note %}<p>Recréer : {{ f.rule.recreate_note }}</p>{% endif %}
+          </details>
+          {% if not f.displayable %}<p class="error-text">Nom avec caractères de contrôle ou UTF-8 invalide : aucune commande proposée.</p>{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5">Aucun dossier parasite au-dessus de {{ min_confidence }} %.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% include "command_panel.html" %}
+</section>
+{% endblock %}

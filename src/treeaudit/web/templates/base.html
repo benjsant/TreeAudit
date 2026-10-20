@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TreeAudit{% endblock %} · TreeAudit</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Aller au contenu</a>
+  <header class="top">
+    <a class="brand" href="/">TreeAudit</a>
+    <nav aria-label="Navigation principale">
+      <a href="/">Accueil</a>
+      <a href="/scan/new">Nouveau scan</a>
+      <a href="/jobs/current">Analyse en cours</a>
+    </nav>
+  </header>
+  {% if running_job %}
+  <p class="banner info" role="status">
+    En cours : {{ running_job.label }} — <a href="/jobs/current">suivre la progression</a>
+  </p>
+  {% endif %}
+  <main id="main">
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    TreeAudit {{ version }} · lecture seule : rien n'est jamais supprimé ni modifié par
+    TreeAudit. Les commandes proposées sont à relire et à lancer toi-même.
+  </footer>
+</body>
+</html>

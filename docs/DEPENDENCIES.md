@@ -25,7 +25,7 @@ Commencer par le minimum, verrouiller les versions avec empreintes (`uv.lock`, D
 |---|---|---|---|
 | `fastapi` | API locale, validation des paramètres | 1 | Apporte `starlette` et `pydantic` |
 | `uvicorn` | Serveur ASGI | 1 | **Sans** l'extra `[standard]` (voir ci-dessous) |
-| `jinja2` | Templates HTML | 5 | Autoéchappement obligatoire |
+| `jinja2` | Templates HTML | 6 | Autoéchappement obligatoire, `StrictUndefined` |
 
 ## Dépendances de développement
 | Paquet | Usage |

@@ -255,7 +255,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             logger.warning("root %s rejected: %s", status.root.id, status.reason)
 
     uvicorn.run(
-        create_app(statuses),
+        create_app(config, statuses),
         host=config.bind_host,
         port=config.port,
         server_header=False,

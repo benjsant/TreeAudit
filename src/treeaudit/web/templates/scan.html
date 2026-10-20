@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Scan {{ scan.id }}{% endblock %}
+{% block content %}
+<h1>Scan {{ scan.id }} <span class="badge status-{{ scan.status }}">{{ scan.status | status }}</span></h1>
+{% if scan.status != "complete" %}
+  <p class="banner warn" role="alert">
+    Ce scan n'est pas complet ({{ scan.status | status }}) : les totaux ne couvrent pas tout le dossier.
+    {% if scan.failure %}Cause : {{ scan.failure }}{% endif %}
+    {% if scan.errors %}Voir les {{ scan.errors }} erreur(s) en bas de page.{% endif %}
+  </p>
+{% endif %}
+<dl class="stats">
+  <dt>Dossier</dt><dd>{{ scan.root_id }}{% if scan.subpath %} / {{ scan.subpath }}{% endif %}</dd>
+  <dt>Date</dt><dd>{{ scan.started_at | date }}</dd>
+  <dt>Entrées</dt><dd>{{ scan.entries }} ({{ scan.files }} fichiers, {{ scan.dirs }} dossiers)</dd>
+  <dt>Taille</dt><dd>{{ scan.logical_size | size }} (place occupée {{ scan.allocated_size | size }})</dd>
+  <dt>Erreurs / exclusions</dt><dd>{{ scan.errors }} / {{ scan.exclusions }}</dd>
+</dl>
+<p class="links">
+  <a href="/scans/{{ scan.id }}/parasites">Dossiers parasites</a>
+  <a href="/scans/{{ scan.id }}/search">Rechercher</a>
+  <a href="/export/scans/{{ scan.id }}.json">Exporter (JSON)</a>
+  <a href="/export/scans/{{ scan.id }}/entries.csv">Inventaire complet (CSV)</a>
+</p>
+
+<section aria-labelledby="space-title">
+  <h2 id="space-title">Répartition de l'espace</h2>
+  <nav class="crumbs" aria-label="Dossier exploré">
+    {% for crumb in crumbs %}{% if not loop.first %} / {% endif %}<a href="/scans/{{ scan.id }}?dir={{ crumb.entry_id }}">{{ crumb.name or "racine" }}</a>{% endfor %}
+  </nav>
+  <p class="muted">{{ node.size | size if node.size is not none else "taille inconnue (dossier pas entièrement parcouru)" }} dans ce dossier ; {{ total_children }} élément(s), {{ children | length }} affiché(s), les plus gros d'abord.</p>
+  <table class="space">
+    <thead><tr><th scope="col">Nom</th><th scope="col" class="num">Taille</th><th scope="col">Part</th><th scope="col" class="num">Fichiers</th></tr></thead>
+    <tbody>
+    {% for child in children %}
+      <tr>
+        <td class="path">
+          {% if child.kind == "dir" %}<a href="/scans/{{ scan.id }}?dir={{ child.entry_id }}">📁 {{ child.name }}</a>
+          {% elif child.kind == "symlink" %}🔗 {{ child.name }} <span class="muted">(lien, non suivi)</span>
+          {% else %}{{ child.name }}{% endif %}
+        </td>
+        <td class="num">{{ child.size | size if child.size is not none else "?" }}</td>
+        <td>{% if node.size and child.size is not none %}<meter min="0" max="{{ node.size }}" value="{{ child.size }}">{{ (100 * child.size / node.size) | round(1) }} %</meter>{% endif %}</td>
+        <td class="num">{{ child.files if child.files is not none else "" }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4">Dossier vide.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section aria-labelledby="dupes-title" id="doublons">
+  <h2 id="dupes-title">Doublons</h2>
+  <div class="actions">
+    <button type="button" data-start-dupes data-scan="{{ scan.id }}" data-micro="0">Chercher les doublons (≥ 1 Kio)</button>
+    <button type="button" data-start-dupes data-scan="{{ scan.id }}" data-micro="1">Micro-nettoyage (petits fichiers et fichiers vides)</button>
+    <p class="error-text" data-error role="alert" hidden></p>
+  </div>
+  {% if runs %}
+  <ul>
+    {% for run in runs %}<li><a href="/dupes/{{ run.id }}">Analyse {{ run.id }}</a> — {{ run.status | status }}, {{ run.files_hashed }} fichiers lus</li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section aria-labelledby="ext-title">
+  <h2 id="ext-title">Extensions (par taille)</h2>
+  <table>
+    <thead><tr><th scope="col">Extension</th><th scope="col" class="num">Fichiers</th><th scope="col" class="num">Taille</th></tr></thead>
+    <tbody>
+    {% for ext in extensions %}
+      <tr><td>{{ ("." ~ ext.extension) if ext.extension else "(sans extension)" }}</td><td class="num">{{ ext.files }}</td><td class="num">{{ ext.logical_size | size }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if errors %}
+<section aria-labelledby="errors-title">
+  <h2 id="errors-title">Erreurs ({{ scan.errors }})</h2>
+  <ul class="plain">{% for e in errors %}<li><code>{{ e.operation }}</code> <span class="path">{{ e.rel_path_display or "." }}</span> : {{ e.message }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% if exclusions %}
+<section aria-labelledby="excl-title">
+  <h2 id="excl-title">Exclusions</h2>
+  <ul class="plain">{% for x in exclusions %}<li><code>{{ x.reason }}</code> <span class="path">{{ x.rel_path_display }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endblock %}

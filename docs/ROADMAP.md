@@ -89,12 +89,16 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Mesures (Docker, 152 970 entrées) : 0,01 à 0,7 s selon le critère, 22 Mio.
 - Aucune commande de suppression à partir d'un filtre (recherche seule).
 
-## Phase 6 — Interface web et rapports
-- [ ] Choix du sous-dossier à analyser dans la zone autorisée (D-021).
-- [ ] Lancement, progression et annulation d'un scan.
-- [ ] Répartition de l'espace, erreurs, exclusions, dossiers parasites, doublons, filtres.
-- [ ] Export local.
-- [ ] Tests XSS (noms piégés), CSRF, accessibilité de base.
+## Phase 6 — Interface web et rapports (D-028)
+- [x] Choix du sous-dossier dans la zone autorisée (sélecteur en direct, D-021).
+- [x] Lancement, progression et annulation d'un scan ou d'une analyse de doublons.
+- [x] Répartition de l'espace (exploration dossier par dossier, barres proportionnelles), extensions, erreurs, exclusions.
+- [x] Dossiers parasites et doublons : sélection, copie à garder modifiable, commande générée à copier.
+- [x] Recherche (formulaire, aperçu, export).
+- [x] Exports JSON et CSV (scan, inventaire complet, parasites, doublons, recherche), formules neutralisées.
+- [x] Tests : XSS par noms piégés sur chaque page (analyse HTML), absence de code en ligne, CSRF, sélecteur (`../`, chemins absolus, liens), en-tête `Host`, CSV piégés.
+- [x] Mesures (Docker, 152 970 entrées) : pages de 0,01 à 0,6 s (1,3 s pour les parasites) ; inventaire CSV complet 0,57 s (25 s avant regroupement des lignes envoyées).
+- [ ] Vérification visuelle et au clavier dans un navigateur : à faire par le mainteneur.
 
 ## Phase 6 bis — Archivage vérifié (D-024)
 - [ ] Dossier de sortie dédié, déclaré et validé comme le dossier de données.

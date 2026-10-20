@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Recherche · scan {{ scan.id }}{% endblock %}
+{% block content %}
+<h1>Recherche <span class="muted">· scan <a href="/scans/{{ scan.id }}">{{ scan.id }}</a></span></h1>
+<form method="get" class="search">
+  <input type="hidden" name="go" value="1">
+  <label>Extensions <input name="ext" value="{{ form.ext }}" placeholder="jpg,png"></label>
+  <label>Nom exact <input name="name" value="{{ form.name }}"></label>
+  <label>Glob de nom <input name="glob" value="{{ form.glob }}" placeholder="*.py"></label>
+  <label>Glob de chemin <input name="path_glob" value="{{ form.path_glob }}" placeholder="projets/**/*.py"></label>
+  <label>Regex de nom <input name="regex" value="{{ form.regex }}" placeholder="^IMG_\d{4}"></label>
+  <label>Regex de chemin <input name="path_regex" value="{{ form.path_regex }}"></label>
+  <label>Taille min. <input name="min_size" value="{{ form.min_size }}" placeholder="10M"></label>
+  <label>Taille max. <input name="max_size" value="{{ form.max_size }}" placeholder="1G"></label>
+  <label>Type
+    <select name="kind">
+      {% for value, text in [("", "tous"), ("file", "fichiers"), ("dir", "dossiers"), ("symlink", "liens"), ("other", "spéciaux")] %}
+      <option value="{{ value }}" {% if form.kind == value %}selected{% endif %}>{{ text }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Tri
+    <select name="sort">
+      {% for value, text in [("size", "taille"), ("path", "chemin"), ("mtime", "date")] %}
+      <option value="{{ value }}" {% if form.sort == value %}selected{% endif %}>{{ text }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label><input type="checkbox" name="ignore_case" value="true" {% if form.ignore_case %}checked{% endif %}> Ignorer la casse</label>
+  <label><input type="checkbox" name="full_match" value="true" {% if form.full_match %}checked{% endif %}> Regex sur le nom entier</label>
+  <div class="actions"><button type="submit" class="primary">Chercher</button></div>
+</form>
+<p class="muted">Recherche seulement : aucune commande de suppression n'est proposée à partir d'un filtre.</p>
+
+{% if error %}<p class="banner error" role="alert">{{ error }}</p>{% endif %}
+{% if result is not none %}
+  <h2>{{ result.total }} résultat(s)</h2>
+  <p>{{ description }} — {{ result.files }} fichier(s) ({{ result.files_size | size }}), {{ result.dirs }} dossier(s), {{ result.others }} autre(s). <a href="/export/scans/{{ scan.id }}/search.csv?{{ query }}">Exporter (CSV)</a></p>
+  {% if result.partial_reason %}<p class="banner warn" role="alert">Résultat partiel : {{ result.partial_reason }}</p>{% endif %}
+  {% if result.not_displayable %}<p class="muted">{{ result.not_displayable }} chemin(s) affiché(s) sous forme échappée (\xNN).</p>{% endif %}
+  <table>
+    <thead><tr><th scope="col" class="num">Taille</th><th scope="col">Date</th><th scope="col">Chemin</th></tr></thead>
+    <tbody>
+    {% for m in result.examples %}
+      <tr><td class="num">{{ m.size | size if m.size is not none else "?" }}</td><td>{{ m.mtime_ns | date }}</td><td class="path">{{ m.rel_path_display }}{% if m.kind == "dir" %} 📁{% elif m.kind == "symlink" %} 🔗{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

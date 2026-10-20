@@ -1,0 +1,61 @@
+/* TreeAudit — no external resource, no inline style (CSP). */
+:root {
+  color-scheme: light dark;
+  --bg: #fbfbfa; --fg: #1d1f21; --muted: #5d636b; --line: #d8dbe0; --accent: #1f5fbf;
+  --ok: #1e7a3a; --warn: #9a5a00; --bad: #b3261e; --panel: #ffffff; --code: #f1f2f4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a; --fg: #e7e9ec; --muted: #a2a9b3; --line: #343941; --accent: #7fb0ff;
+    --ok: #6fd28f; --warn: #f0b25a; --bad: #ff8a80; --panel: #1d2024; --code: #262a30;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+a { color: var(--accent); }
+.skip { position: absolute; left: -999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--panel); padding: .5rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+header.top { display: flex; gap: 2rem; align-items: center; padding: .75rem 1.5rem; border-bottom: 1px solid var(--line); background: var(--panel); }
+header.top nav { display: flex; gap: 1.25rem; }
+.brand { font-weight: 700; text-decoration: none; color: var(--fg); }
+main { max-width: 72rem; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
+footer { max-width: 72rem; margin: 0 auto; padding: 1rem 1.5rem; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.2rem; margin-top: 2rem; }
+table { width: 100%; border-collapse: collapse; margin: .5rem 0 1rem; }
+th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.path { overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: .9em; }
+.muted { color: var(--muted); }
+.links a { margin-right: .9rem; }
+.badge { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; border: 1px solid currentColor; font-size: .85em; white-space: nowrap; }
+.badge.ok, .status-complete, .band-green { color: var(--ok); }
+.badge.bad, .status-failed, .band-red { color: var(--bad); }
+.status-incomplete, .status-cancelled, .band-orange { color: var(--warn); }
+.banner { padding: .6rem .9rem; border-left: 4px solid currentColor; background: var(--panel); }
+.banner.info { color: var(--accent); margin: 0; }
+.banner.warn { color: var(--warn); }
+.banner.error { color: var(--bad); }
+.error-text, .danger { color: var(--bad); }
+.actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin: .75rem 0; }
+button, .primary-link { font: inherit; padding: .4rem .9rem; border: 1px solid var(--line); border-radius: .4rem; background: var(--panel); color: var(--fg); cursor: pointer; }
+button.primary, .primary-link { background: var(--accent); color: var(--bg); border-color: var(--accent); text-decoration: none; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .6; cursor: default; }
+input, select { font: inherit; padding: .3rem .4rem; border: 1px solid var(--line); border-radius: .3rem; background: var(--panel); color: var(--fg); }
+form.search { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .6rem 1rem; align-items: end; }
+form.search label { display: flex; flex-direction: column; gap: .2rem; }
+form.inline { display: flex; gap: 1rem; align-items: end; flex-wrap: wrap; }
+dl.stats { display: grid; grid-template-columns: max-content 1fr; gap: .2rem 1rem; }
+dl.stats dt { color: var(--muted); }
+dl.stats dd { margin: 0; }
+meter { width: 10rem; }
+ul.folders { columns: 3 14rem; padding-left: 1rem; }
+ul.plain, ul.legend, ul.copies, ul.warnings { list-style: none; padding-left: 0; }
+.crumbs { margin: .5rem 0; overflow-wrap: anywhere; }
+.group { border: 1px solid var(--line); border-radius: .5rem; padding: .3rem 1rem; margin: 1rem 0; background: var(--panel); }
+.group h2 { font-size: 1rem; margin: .6rem 0; }
+.command-panel { border: 1px solid var(--line); border-radius: .5rem; margin-top: 1.5rem; background: var(--panel); }
+.command-panel label { display: block; margin: .2rem 0; }
+pre.cmd, code.cmd { background: var(--code); padding: .6rem; border-radius: .3rem; overflow-x: auto; white-space: pre; }
+code.cmd { padding: .1rem .3rem; white-space: pre-wrap; overflow-wrap: anywhere; }

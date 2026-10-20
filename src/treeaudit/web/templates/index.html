@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Accueil{% endblock %}
+{% block content %}
+<h1>TreeAudit</h1>
+<section aria-labelledby="roots-title">
+  <h2 id="roots-title">Zones autorisées</h2>
+  <table>
+    <thead><tr><th scope="col">Zone</th><th scope="col">État</th><th scope="col"></th></tr></thead>
+    <tbody>
+    {% for root in roots %}
+      <tr>
+        <td>{{ root.label }} <span class="muted">({{ root.id }})</span></td>
+        <td>
+          {% if root.accepted %}<span class="badge ok">utilisable</span>
+          {% else %}<span class="badge bad">refusée</span> {{ root.message }}{% endif %}
+        </td>
+        <td>{% if root.accepted %}<a href="/scan/new?root={{ root.id }}">Choisir un dossier à analyser</a>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="3">Aucune zone configurée.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section aria-labelledby="scans-title">
+  <h2 id="scans-title">Scans</h2>
+  <table>
+    <thead><tr>
+      <th scope="col">N°</th><th scope="col">Date</th><th scope="col">Dossier</th>
+      <th scope="col">Statut</th><th scope="col" class="num">Entrées</th>
+      <th scope="col" class="num">Taille</th><th scope="col">Voir</th>
+    </tr></thead>
+    <tbody>
+    {% for scan in scans %}
+      <tr>
+        <td>{{ scan.id }}</td>
+        <td>{{ scan.started_at | date }}</td>
+        <td>{{ scan.root_id }}{% if scan.subpath %} / {{ scan.subpath }}{% endif %}</td>
+        <td><span class="badge status-{{ scan.status }}">{{ scan.status | status }}</span></td>
+        <td class="num">{{ scan.entries }}</td>
+        <td class="num">{{ scan.allocated_size | size }}</td>
+        <td class="links">
+          <a href="/scans/{{ scan.id }}">espace</a>
+          <a href="/scans/{{ scan.id }}/parasites">parasites</a>
+          <a href="/scans/{{ scan.id }}#doublons">doublons</a>
+          <a href="/scans/{{ scan.id }}/search">recherche</a>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7">Aucun scan pour l'instant. <a href="/scan/new">Lancer un premier scan</a>.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if runs %}
+<section aria-labelledby="runs-title">
+  <h2 id="runs-title">Analyses de doublons</h2>
+  <table>
+    <thead><tr>
+      <th scope="col">N°</th><th scope="col">Scan</th><th scope="col">Type</th>
+      <th scope="col">Statut</th><th scope="col" class="num">Fichiers lus</th><th scope="col"></th>
+    </tr></thead>
+    <tbody>
+    {% for run in runs %}
+      <tr>
+        <td>{{ run.id }}</td><td>{{ run.scan_id }}</td>
+        <td>{{ "micro-nettoyage" if run.micro else "doublons ≥ 1 Kio" }}</td>
+        <td><span class="badge status-{{ run.status }}">{{ run.status | status }}</span></td>
+        <td class="num">{{ run.files_hashed }}</td>
+        <td><a href="/dupes/{{ run.id }}">voir les groupes</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

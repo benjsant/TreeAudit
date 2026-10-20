@@ -18,7 +18,8 @@ TreeAudit/
 │   ├── duplicates/  lecture sûre, empreintes, groupes, protections, copie à garder (D-015, D-026)
 │   ├── parasites/   catalogue rules.toml, détection sur l'index, commandes proposées (D-023, D-025)
 │   ├── reports/     JSON, CSV, puis HTML
-│   ├── web/         application FastAPI, routes, templates, fichiers statiques
+│   ├── web/         app.py (assemblage), api.py (JSON), pages.py + templates/ (HTML), exports.py,
+│   │                jobs.py (tâches longues), queries.py, search_form.py, static/ (CSS, un JS)
 │   ├── gateway.py   relais TCP entre le port publié et le conteneur app (D-020)
 │   └── cli.py       point d'entrée en ligne de commande (argparse)
 ├── tests/
@@ -74,8 +75,9 @@ En Docker, `path` vaut `/audit/roots/<id>` et `data_dir` vaut `/data`.
 
 Mode WAL, clés étrangères actives, version du schéma dans `PRAGMA user_version` ; une base plus récente que le code est refusée. Les totaux finaux d'un scan sont recalculés en SQL sur ce qui a réellement été enregistré, ce qui garantit qu'un scan annulé ou incomplet n'annonce jamais plus que ce qu'il a vu. Chaque scan est un instantané indépendant.
 
-## Interface web
-- Pages HTML rendues par Jinja2 ; JavaScript natif minimal (suivi de la progression par interrogation périodique, filtres).
+## Interface web (D-028)
+- Pages HTML rendues par Jinja2 ; un seul fichier JavaScript natif (lancement des tâches, suivi de la progression par interrogation périodique, sélections, génération et copie des commandes).
+- API JSON sous `/api/`, exports sous `/export/`, pages ailleurs. Une erreur s'affiche en JSON pour l'API et les exports, en page HTML sinon.
 - Pas de framework frontend, pas d'outil de build JavaScript.
 
 ## Choix techniques

@@ -174,3 +174,11 @@ Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers
 - Les filtres cherchent dans l'index d'un scan et affichent un aperçu (nombre, taille, exemples). Ils ne génèrent **aucune** commande de suppression : une regex ou un glob trop large ne doit jamais pouvoir devenir un `rm -rf`. Les commandes restent réservées aux détections expliquées (dossiers parasites, doublons).
 - Les regex à quantificateurs imbriqués ou à alternative répétée sont refusées avant toute recherche, avec une explication ; un budget de temps borne le reste (voir `FILTERS_AND_REGEX.md`).
 - Sémantique des globs de chemin : `*` et `?` ne traversent pas `/`, `**` couvre zéro ou plusieurs dossiers, les fichiers cachés sont inclus.
+
+## D-028 — Interface web (2026-10-20)
+- Pages rendues côté serveur (Jinja2, autoéchappement partout, `StrictUndefined`, jamais `|safe`) et **un seul** fichier JavaScript natif, qui n'utilise que `textContent`. La CSP `default-src 'self'` interdit tout script, gestionnaire d'événement ou style en ligne ; un test analyse chaque page avec `html.parser` pour le vérifier.
+- Toute action (lancer un scan, une analyse, générer une commande, annuler) est une requête `POST` JSON avec l'en-tête `X-TreeAudit-Request` ; la navigation et la recherche sont en `GET` et ne modifient rien.
+- Une seule tâche longue à la fois (scan ou analyse de doublons), dans un thread, avec progression et annulation ; le verrou du dossier de données empêche aussi qu'elle tourne en même temps qu'une commande en ligne.
+- Le sélecteur de dossier liste **en direct** les sous-dossiers de la zone autorisée : noms seulement, liens symboliques jamais proposés ni suivis, chemin relatif validé puis ouvert composant par composant (D-021).
+- Exports JSON et CSV locaux. Dans les CSV, une cellule qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est préfixée par une apostrophe, pour qu'un nom de fichier ne puisse pas s'exécuter comme une formule dans un tableur.
+- L'exploration de l'espace navigue par identifiant d'entrée de l'index (`?dir=<n>`), jamais par chemin.

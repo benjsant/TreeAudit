@@ -50,11 +50,15 @@ def connect(data_dir: str) -> sqlite3.Connection:
     path = database_path(data_dir)
     _create_private_file(path)
     conn = sqlite3.connect(path, isolation_level=None)  # explicit transactions
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA synchronous = NORMAL")
-    migrate(conn)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        migrate(conn)
+    except BaseException:
+        conn.close()
+        raise
     return conn
 
 

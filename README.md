@@ -4,7 +4,7 @@ Application locale d'audit, d'analyse et d'aide au rangement des fichiers et dos
 
 TreeAudit parcourt une arborescence explicitement autorisée, indexe ses métadonnées et aide à comprendre ce qu'elle contient : répartition de l'espace, doublons exacts, dossiers techniques (`.venv`, `node_modules`, `__pycache__`…), arborescences proches. L'outil **présente des preuves et des explications ; il ne modifie jamais les données auditées**.
 
-> **État : pré-alpha.** Implémenté en ligne de commande : validation des racines autorisées, conteneurs durcis, inventaire (parcours, tailles, extensions, erreurs, statut du scan) détection des dossiers parasites avec indice de confiance, doublons exacts et micro-nettoyage, avec commandes de nettoyage proposées, et recherche par extension, glob, regex, taille ou type. Pas encore d'interface web. Les autres fonctionnalités ci-dessous sont des objectifs.
+> **État : pré-alpha.** Interface web locale et ligne de commande : validation des racines autorisées, conteneurs durcis, inventaire (parcours, tailles, extensions, erreurs, statut du scan) détection des dossiers parasites avec indice de confiance, doublons exacts et micro-nettoyage, avec commandes de nettoyage proposées, recherche par extension, glob, regex, taille ou type, exports JSON et CSV. Les autres fonctionnalités ci-dessous sont des objectifs.
 
 ## Pourquoi un outil de plus ?
 
@@ -51,6 +51,8 @@ make env          # crée .env avec ton UID/GID
 # éditer .env : TREEAUDIT_ROOT_PATH=/chemin/absolu/du/dossier/à/auditer
 make up           # vérifie le dossier sur l'hôte, puis démarre sur http://127.0.0.1:8765
 ```
+
+Ouvre ensuite http://127.0.0.1:8765 dans ton navigateur : choix du dossier, scan, répartition de l'espace, dossiers parasites, doublons, recherche et exports. Ctrl+C (ou `make down`) arrête TreeAudit.
 
 Le dossier est monté **en lecture seule**. Sous SELinux en mode enforcing : `make up COMPOSE_SELINUX=1` (voir [D-011](docs/DECISIONS.md)).
 
