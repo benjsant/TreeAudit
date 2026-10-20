@@ -142,3 +142,29 @@ def test_container_mode_detection() -> None:
     assert is_container_mode({"TREEAUDIT_CONTAINER": "1"})
     assert not is_container_mode({"TREEAUDIT_CONTAINER": "yes"})
     assert not is_container_mode({})
+
+
+def test_display_path_from_config_and_environment(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'data_dir = "/srv/t"\n'
+        '[[roots]]\nid = "main"\npath = "/audit/roots/main"\n'
+        '[[roots]]\nid = "my-disk"\npath = "/mnt/x"\ndisplay_path = "/media/x"\n',
+        encoding="utf-8",
+    )
+    config = load_config(path, environ={"TREEAUDIT_DISPLAY_PATH_MAIN": "/mnt/Data/Backup"})
+    main_root, other = config.roots
+    assert main_root.shown_path == "/mnt/Data/Backup"
+    assert main_root.path == "/audit/roots/main"  # access path unchanged
+    assert other.shown_path == "/media/x"
+    overridden = load_config(path, environ={"TREEAUDIT_DISPLAY_PATH_MY_DISK": "/elsewhere"})
+    assert overridden.roots[1].shown_path == "/elsewhere"
+
+
+def test_display_path_must_be_absolute(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="absolute"):
+        parse_config(minimal(roots=[{"id": "a", "path": "/x", "display_path": "rel"}]))
+    path = tmp_path / "config.toml"
+    path.write_text('data_dir = "/srv/t"\n[[roots]]\nid = "main"\npath = "/x"\n', "utf-8")
+    with pytest.raises(ConfigError, match="absolute"):
+        load_config(path, environ={"TREEAUDIT_DISPLAY_PATH_MAIN": "relative"})

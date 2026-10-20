@@ -280,3 +280,18 @@ def test_execute_scan_end_to_end(
     assert outcome.status is ScanStatus.COMPLETE
     assert outcome.totals.files == 4
     assert database_path(config.data_dir).is_file()
+
+
+def test_migration_from_v1_adds_lookup_indexes(tmp_path: Path) -> None:
+    from treeaudit.db.connection import migrate
+    from treeaudit.db.schema import MIGRATIONS
+
+    raw = sqlite3.connect(tmp_path / "old.sqlite3", isolation_level=None)
+    for statement in MIGRATIONS[0]:
+        raw.execute(statement)
+    raw.execute("PRAGMA user_version = 1")
+    migrate(raw)
+    indexes = {r[0] for r in raw.execute("SELECT name FROM sqlite_master WHERE type = 'index'")}
+    assert {"entry_by_name", "entry_by_path"} <= indexes
+    assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
+    raw.close()

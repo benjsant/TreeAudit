@@ -95,4 +95,10 @@ _V1 = (
     "CREATE INDEX scan_exclusion_by_scan ON scan_exclusion (scan_id)",
 )
 
-MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1,)
+# v2: lookups by name (rule candidates) and by path prefix (subtree evidence).
+_V2 = (
+    "CREATE INDEX entry_by_name ON entry (scan_id, name)",
+    "CREATE INDEX entry_by_path ON entry (scan_id, rel_path)",
+)
+
+MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1, _V2)

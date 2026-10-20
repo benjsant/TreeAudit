@@ -164,3 +164,31 @@ def test_scan_run_subfolder_and_unknown_root(
     assert main(["--config", str(config), "scan", "run", "nope"]) == EXIT_ERROR
     assert main(["--config", str(config), "scan", "show", "99"]) == EXIT_ERROR
     capsys.readouterr()
+
+
+def test_scan_parasites_with_selection(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    root = tmp_path / "root"
+    (root / "app" / "node_modules" / "dep").mkdir(parents=True)
+    (root / "app" / "package.json").write_bytes(b"{}")
+    (root / "app" / "node_modules" / "dep" / "i.js").write_bytes(b"")
+    (root / "notes" / "venv").mkdir(parents=True)
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f'data_dir = "{tmp_path / "data"}"\n[[roots]]\nid = "r"\npath = "{root}"\n'
+        'display_path = "/home/me/My Disk"\nallow_system_volume = true\n',
+        encoding="utf-8",
+    )
+    assert main(["--config", str(config), "scan", "run", "r"]) == EXIT_OK
+    capsys.readouterr()
+    args = ["--config", str(config), "scan", "parasites", "1", "--select", "green"]
+    assert main(args) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "Dépendances Node.js" in out
+    assert "notes/venv" not in out  # below the default threshold
+    assert "gio trash -- \\\n  '/home/me/My Disk/app/node_modules'" in out
+    assert main([*args, "--action", "delete"]) == EXIT_OK
+    assert "rm -rf -- \\" in capsys.readouterr().out
+    assert main([*args[:-1], "99"]) == EXIT_ERROR
+    assert main(["--config", str(config), "scan", "parasites", "1", "--min-confidence", "101"]) == (
+        EXIT_ERROR
+    )

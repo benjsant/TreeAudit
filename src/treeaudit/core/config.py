@@ -6,6 +6,7 @@ is acceptable for auditing is decided by ``treeaudit.roots.validation``.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import re
 import tomllib
@@ -29,7 +30,12 @@ CONTAINER_BIND_HOST = "0.0.0.0"  # noqa: S104
 ROOT_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{0,62}")
 
 _TOP_LEVEL_KEYS = frozenset({"data_dir", "bind_host", "port", "roots"})
-_ROOT_KEYS = frozenset({"id", "path", "label", "allow_system_volume", "cross_mounts"})
+_ROOT_KEYS = frozenset(
+    {"id", "path", "label", "allow_system_volume", "cross_mounts", "display_path"}
+)
+# In Docker, the host path of a root is only known from the environment
+# (compose passes it); it is used for display only, never to access files.
+DISPLAY_PATH_ENV_PREFIX = "TREEAUDIT_DISPLAY_PATH_"
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +47,12 @@ class RootConfig:
     label: str
     allow_system_volume: bool = False
     cross_mounts: bool = False
+    display_path: str | None = None
+    """Path shown to the user (the host path in Docker). Display only."""
+
+    @property
+    def shown_path(self) -> str:
+        return self.display_path or self.path
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +90,26 @@ def default_config_path(environ: Mapping[str, str] | None = None) -> Path:
     return base / "treeaudit" / "config.toml"
 
 
-def load_config(path: Path, *, container_mode: bool = False) -> AppConfig:
+def display_path_env_var(root_id: str) -> str:
+    return DISPLAY_PATH_ENV_PREFIX + root_id.upper().replace("-", "_")
+
+
+def apply_display_paths(config: AppConfig, environ: Mapping[str, str]) -> AppConfig:
+    """Override display paths from the environment (set by compose in Docker)."""
+    roots = []
+    for root in config.roots:
+        value = environ.get(display_path_env_var(root.id))
+        if value:
+            root = dataclasses.replace(
+                root, display_path=_require_absolute(value, display_path_env_var(root.id))
+            )
+        roots.append(root)
+    return dataclasses.replace(config, roots=tuple(roots))
+
+
+def load_config(
+    path: Path, *, container_mode: bool = False, environ: Mapping[str, str] | None = None
+) -> AppConfig:
     """Read and validate the configuration file at ``path``."""
     try:
         with path.open("rb") as handle:
@@ -89,7 +120,8 @@ def load_config(path: Path, *, container_mode: bool = False) -> AppConfig:
         raise ConfigError(f"configuration file is not readable: {path}") from exc
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"invalid TOML in {path}: {exc}") from exc
-    return parse_config(raw, container_mode=container_mode)
+    config = parse_config(raw, container_mode=container_mode)
+    return apply_display_paths(config, os.environ if environ is None else environ)
 
 
 def parse_config(raw: Mapping[str, Any], *, container_mode: bool = False) -> AppConfig:
@@ -166,7 +198,11 @@ def _parse_root(item: Any, index: int) -> RootConfig:
             raise ConfigError(f"{where}.{key} must be true or false")
         flags[key] = value
 
-    return RootConfig(id=root_id, path=path, label=label, **flags)
+    display_path = item.get("display_path")
+    if display_path is not None:
+        display_path = _require_absolute(display_path, f"{where}.display_path")
+
+    return RootConfig(id=root_id, path=path, label=label, display_path=display_path, **flags)
 
 
 def _require_path_string(value: Any, name: str) -> str:
@@ -175,6 +211,13 @@ def _require_path_string(value: Any, name: str) -> str:
     if "\x00" in value:
         raise ConfigError(f"{name} must not contain a NUL character")
     return value
+
+
+def _require_absolute(value: Any, name: str) -> str:
+    text = _require_path_string(value, name)
+    if not text.startswith("/"):
+        raise ConfigError(f"{name} must be an absolute path")
+    return text
 
 
 def _reject_unknown_keys(table: Mapping[str, Any], allowed: frozenset[str], where: str) -> None:

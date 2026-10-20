@@ -4,7 +4,7 @@
 Construire TreeAudit, une application locale d'audit de fichiers et d'arborescences, Linux uniquement en V1. Le produit doit être fiable, explicable, testé et non destructif.
 
 ## Règles non négociables
-1. **MVP strictement en lecture seule.** Pas de suppression, déplacement, renommage, fusion, compression ou écriture dans une cible.
+1. **Jamais de suppression, déplacement, renommage, fusion ou modification d'une donnée auditée** (D-024). TreeAudit propose des commandes de nettoyage que l'utilisateur lance lui-même ; il ne les exécute jamais (D-025). Seule écriture future hors du dossier de données : des archives vérifiées, dans une phase dédiée après l'interface web ; d'ici là, aucune.
 2. Ne jamais utiliser `sudo`, `subprocess`, `os.system`, `rm`, `shutil.rmtree`, des commandes shell destructrices ou des commandes fournies par l'utilisateur ou un LLM.
 3. Ne jamais monter `/`, `/home` entier, `/dev`, `/proc`, `/sys`, le socket Docker ou un volume hôte général. Jamais d'option `:z`/`:Z` sur une cible (D-011).
 4. Les racines sont déclarées dans la configuration et validées (D-008, D-009). En Docker, chacune est montée en lecture seule sous `/audit/roots/<id>`.

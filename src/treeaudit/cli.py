@@ -23,6 +23,9 @@ from treeaudit.core.config import (
 )
 from treeaudit.core.datadir import prepare_data_dir
 from treeaudit.core.errors import TreeAuditError
+from treeaudit.parasites.commands import Action
+from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
+from treeaudit.parasites.report import human_size
 from treeaudit.roots.mountinfo import MountInfoError, parse_mountinfo, read_mountinfo
 from treeaudit.roots.registry import current_home, evaluate_roots
 from treeaudit.roots.validation import (
@@ -97,6 +100,26 @@ def build_parser() -> argparse.ArgumentParser:
     scan_commands.add_parser("list", help="lister les scans enregistrés")
     scan_show = scan_commands.add_parser("show", help="afficher le résultat d'un scan")
     scan_show.add_argument("scan_id", type=int)
+    parasites = scan_commands.add_parser(
+        "parasites",
+        help="repérer les dossiers et fichiers recréables ou inutiles (rien n'est supprimé)",
+    )
+    parasites.add_argument("scan_id", type=int)
+    parasites.add_argument(
+        "--min-confidence", type=int, default=DEFAULT_MIN_CONFIDENCE, help="seuil en pourcentage"
+    )
+    parasites.add_argument("--details", action="store_true", help="afficher les explications")
+    parasites.add_argument(
+        "--select",
+        default=None,
+        help="détections à regrouper dans une commande : numéros (1,3,5-7) et/ou 'green'",
+    )
+    parasites.add_argument(
+        "--action",
+        choices=[a.value for a in Action],
+        default=Action.TRASH.value,
+        help="commande à générer pour --select (défaut : trash, réversible)",
+    )
 
     commands.add_parser("serve", help="démarrer le serveur web local")
 
@@ -179,15 +202,6 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         log_level="info",
     )
     return EXIT_OK
-
-
-def human_size(size: int) -> str:
-    value = float(size)
-    for unit in ("o", "Kio", "Mio", "Gio", "Tio"):
-        if value < 1024 or unit == "Tio":
-            return f"{value:.0f} {unit}" if unit == "o" else f"{value:.1f} {unit}"
-        value /= 1024
-    raise AssertionError("unreachable")
 
 
 _STATUS_LABELS = {
@@ -382,6 +396,67 @@ def _cmd_scan_show(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _cmd_scan_parasites(args: argparse.Namespace) -> int:
+    from treeaudit.db import scans
+    from treeaudit.parasites.detect import find_parasites
+    from treeaudit.parasites.report import (
+        SelectionError,
+        parse_selection,
+        render_findings,
+        render_selection,
+    )
+    from treeaudit.parasites.rules import load_default_rules
+
+    if not 0 <= args.min_confidence <= 100:
+        print("erreur : --min-confidence doit être entre 0 et 100", file=sys.stderr)
+        return EXIT_ERROR
+    config = _load(args)
+    conn = _open_index(args)
+    try:
+        row = scans.get_scan(conn, args.scan_id)
+        if row is None:
+            print(f"erreur : scan inconnu : {args.scan_id}", file=sys.stderr)
+            return EXIT_ERROR
+        root = config.get_root(row["root_id"])
+        root_display = root.shown_path if root is not None else row["root_path"]
+        if config.container_mode and (root is None or root.display_path is None):
+            print(
+                "⚠ chemin hôte inconnu : les commandes utilisent le chemin vu par le conteneur",
+                file=sys.stderr,
+            )
+        if row["status"] != "complete":
+            print(
+                f"⚠ le scan {args.scan_id} n'est pas complet ({row['status']}) : "
+                "des éléments peuvent manquer."
+            )
+        findings = find_parasites(
+            conn, args.scan_id, load_default_rules(), min_confidence=args.min_confidence
+        )
+        print(
+            render_findings(
+                findings,
+                root_display=root_display,
+                min_confidence=args.min_confidence,
+                details=args.details,
+            )
+        )
+        if args.select is not None:
+            try:
+                selected = parse_selection(args.select, findings)
+            except SelectionError as exc:
+                print(f"erreur : {exc}", file=sys.stderr)
+                return EXIT_ERROR
+            print()
+            print(
+                render_selection(
+                    selected, Action(args.action), root_display=root_display, scan_id=args.scan_id
+                )
+            )
+    finally:
+        conn.close()
+    return EXIT_OK
+
+
 def _cmd_gateway(args: argparse.Namespace) -> int:
     import asyncio
 
@@ -418,6 +493,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_scan_list(args)
         if args.command == "scan" and args.scan_command == "show":
             return _cmd_scan_show(args)
+        if args.command == "scan" and args.scan_command == "parasites":
+            return _cmd_scan_parasites(args)
         if args.command == "gateway":
             return _cmd_gateway(args)
     except (TreeAuditError, MountInfoError, OSError) as exc:

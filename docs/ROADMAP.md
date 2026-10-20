@@ -60,12 +60,14 @@ Aucun parcours de fichiers dans cette phase.
   - base SQLite : environ 42 Mo, soit environ 270 octets par entrée.
   Le mainteneur mesure lui-même sur ses données réelles (aucune donnée personnelle n'est transmise).
 
-## Phase 3 — Dossiers parasites (D-023)
-- [ ] Catalogue de règles versionné dans le dépôt : `.venv`/`venv`, `__pycache__`, `node_modules`, `__MACOSX`, `.DS_Store`, `Thumbs.db`, caches d'outils (`.pytest_cache`, `.mypy_cache`…), `build`/`dist`, `bin`/`obj`, bibliothèques recopiées (`bootstrap`…).
-- [ ] Indices de confirmation (ex. `pyvenv.cfg`, `package.json` voisin, `.csproj` voisin) et contre-indices.
-- [ ] Indicateur de confiance (pourcentage) expliqué : règles et indices qui l'ont produit.
-- [ ] Commande de recréation et options de suppression **affichées, jamais exécutées**, avec chemins correctement échappés.
-- [ ] Tests de faux positifs (`venv` sans `pyvenv.cfg`, `bin` de scripts personnels…).
+## Phase 3 — Dossiers parasites (D-023, D-025)
+- [x] Catalogue de règles versionné (`src/treeaudit/parasites/rules.toml`, 41 règles) : Python, JavaScript, JVM, Rust, .NET, PHP, Dart, Elixir, Haskell, CMake, Terraform, restes macOS / Windows / Linux, verrous et sauvegardes d'éditeurs, fichiers auxiliaires LaTeX, bibliothèques recopiées.
+- [x] Indices et contre-indices (ex. `pyvenv.cfg`, `package.json` ou `.csproj` à côté, fichier étranger dans un `__pycache__`), analyse sur l'index uniquement.
+- [x] Indicateur de confiance en pourcentage (vert ≥ 80, orange ≥ 50, rouge en dessous ; seuil d'affichage 30 %) avec l'explication des indices.
+- [x] Commande de recréation affichée ; corbeille, suppression et archivage proposés, **jamais exécutés**.
+- [x] Sélection de plusieurs détections (numéros, intervalles, `green`) et commande unique sur plusieurs lignes (`\`), chemins échappés.
+- [x] Chemin hôte affiché en Docker (`TREEAUDIT_DISPLAY_PATH_<ID>`, affichage uniquement).
+- [x] Tests de faux positifs (`venv` sans `pyvenv.cfg`, `bin` de scripts personnels, lien symbolique nommé `node_modules`) et de noms hostiles dans les commandes.
 
 ## Phase 4 — Doublons exacts
 - [ ] Regroupement par taille, empreinte partielle, SHA-256 complet (D-015).
@@ -87,6 +89,14 @@ Aucun parcours de fichiers dans cette phase.
 - [ ] Répartition de l'espace, erreurs, exclusions, dossiers parasites, doublons, filtres.
 - [ ] Export local.
 - [ ] Tests XSS (noms piégés), CSRF, accessibilité de base.
+
+## Phase 6 bis — Archivage vérifié (D-024)
+- [ ] Dossier de sortie dédié, déclaré et validé comme le dossier de données.
+- [ ] Archive `.tar.gz` / `.tar.xz` (bibliothèque standard) écrite sous un nom temporaire, renommée une fois terminée.
+- [ ] Vérification après écriture (taille et empreinte de chaque fichier) avant tout « feu vert ».
+- [ ] Espace disque vérifié avant de commencer ; liens archivés comme liens ; fichiers spéciaux signalés.
+- [ ] Avertissement si l'archive est sur le même disque que l'original.
+- [ ] Revue de sécurité dédiée (première fonction qui écrit hors du dossier de données).
 
 ## Phase 7 — Similarité (fichiers et arborescences)
 - [ ] Définir les critères d'identité (mêmes chemins relatifs, mêmes empreintes).

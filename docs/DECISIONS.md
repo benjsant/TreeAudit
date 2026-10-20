@@ -137,3 +137,24 @@ Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers
 - TreeAudit **affiche** la commande de recréation et les options de suppression, mais **n'exécute jamais rien** : la V1 reste en lecture seule (D-002). Les chemins des commandes affichées sont échappés ; un nom qui ne peut pas être affiché sans risque (caractères de contrôle, octets invalides) n'a pas de commande proposée.
 - Les détections ambiguës sont le cas d'usage visé pour l'IA locale (phase 9), qui propose sans jamais agir.
 - Tests : arborescence synthétique `tools/make_dummy_tree.py`, jamais les données personnelles du mainteneur.
+
+## D-024 — TreeAudit ne supprime jamais rien ; seule écriture future : des archives vérifiées (2026-10-20)
+- TreeAudit ne supprime, ne déplace, ne renomme, ne fusionne et ne modifie **jamais** une donnée auditée, dans aucune version. Il **propose** des options de nettoyage sous forme de commandes que l'utilisateur lance lui-même (D-025).
+- La seule écriture autorisée en dehors du dossier de données sera, dans une phase dédiée placée après l'interface web, la **création d'archives** (`.tar.gz` ou `.tar.xz`, bibliothèque standard) d'un dossier, à titre de sauvegarde avant nettoyage. Garde-fous obligatoires :
+  1. archive écrite dans un dossier de sortie dédié, déclaré en configuration, qui ne chevauche aucune racine ; les racines restent en lecture seule ;
+  2. écriture sous un nom temporaire, renommé uniquement une fois l'archive terminée ;
+  3. vérification après écriture (relecture, comparaison de la taille et de l'empreinte de chaque fichier) avant tout « feu vert » ;
+  4. espace disponible vérifié avant de commencer ;
+  5. liens symboliques archivés comme des liens, jamais suivis ; fichiers spéciaux ignorés et signalés ;
+  6. avertissement si l'archive est sur le même disque que l'original (ce n'est pas une vraie sauvegarde).
+- En attendant, la commande d'archivage est seulement **affichée** (D-025).
+- Cette décision amende D-002 et la règle 1 de `CLAUDE.md` ; la phase d'archivage aura sa propre revue de sécurité.
+
+## D-025 — Commandes proposées, jamais exécutées (2026-10-20)
+- Pour chaque détection, TreeAudit affiche : la commande de recréation (si connue), la mise à la corbeille (`gio trash`, réversible, proposée en premier), la suppression définitive (`rm -rf`) et l'archivage (`tar`).
+- L'utilisateur peut sélectionner plusieurs détections (par numéro, ou toutes celles en vert) et obtenir **une seule commande**, écrite sur plusieurs lignes avec `\` en fin de ligne, prête à copier.
+- Règles de génération :
+  - chemins absolus de l'**hôte** (en Docker, le chemin hôte de la racine est transmis au conteneur uniquement pour l'affichage) ;
+  - chaque chemin est échappé avec `shlex.quote` ; `--` sépare les options des chemins ; avec `tar`, les chemins relatifs sont préfixés par `./` ;
+  - un chemin contenant des caractères de contrôle (retour à la ligne, tabulation…) ou de l'UTF-8 invalide ne reçoit **aucune commande**, avec une explication ;
+  - TreeAudit n'exécute jamais ces commandes : aucun appel au shell n'existe dans le code (test statique).

@@ -1,0 +1,475 @@
+# TreeAudit — catalogue of "parasite" entries (D-023).
+#
+# A rule names the folders or files it targets (exact `names` or simple `globs`),
+# a base confidence (0-100) and evidence that raises or lowers it. Evidence is
+# checked against the scan index only: the disk is never read again.
+#
+# Evidence kinds:
+#   child / child_glob          a direct child with this name / matching this glob
+#   sibling / sibling_glob      an entry next to the target (same parent)
+#   all_files_glob              every file below the target matches (at least one)
+#   any_file_glob               at least one file below the target matches
+#   any_file_not_glob           at least one file below the target does NOT match
+#
+# Recreate commands are templates run from the parent directory; the only
+# placeholder is {name} (the target's name, shell-quoted). They are displayed,
+# never executed (D-025). User-facing texts are in French (D-016).
+#
+# Globs: *, ? and [abc] only (no negated classes), matched case-sensitively.
+
+# --- Python -------------------------------------------------------------------------
+
+[[rule]]
+id = "python-pycache"
+label = "Cache de bytecode Python"
+target = "dir"
+names = ["__pycache__"]
+base = 85
+explanation = "Créé automatiquement par Python à l'import des modules ; recréé à la prochaine exécution."
+recreate_note = "Recréé automatiquement par Python."
+evidence = [
+  { kind = "all_files_glob", value = "*.py[co]", weight = 15, label = "ne contient que des fichiers .pyc" },
+  { kind = "any_file_not_glob", value = "*.py[co]", weight = -50, label = "contient d'autres fichiers que des .pyc" },
+]
+
+[[rule]]
+id = "python-venv"
+label = "Environnement virtuel Python"
+target = "dir"
+names = [".venv", "venv", "env", ".virtualenv", "virtualenv"]
+base = 15
+explanation = "Copie locale de l'interpréteur et des paquets installés ; se recrée si la liste des dépendances est connue (requirements.txt, pyproject.toml)."
+evidence = [
+  { kind = "child", value = "pyvenv.cfg", weight = 60, label = "fichier pyvenv.cfg présent" },
+  { kind = "child", value = "lib", weight = 5, label = "dossier lib présent" },
+  { kind = "child", value = "bin", weight = 5, label = "dossier bin présent" },
+  { kind = "sibling", value = "requirements.txt", weight = 5, label = "requirements.txt à côté" },
+  { kind = "sibling", value = "pyproject.toml", weight = 5, label = "pyproject.toml à côté" },
+]
+recreate = [
+  { when_sibling = "requirements.txt", command = "python3 -m venv {name} && {name}/bin/pip install -r requirements.txt" },
+  { when_sibling = "pyproject.toml", command = "python3 -m venv {name} && {name}/bin/pip install -e ." },
+  { command = "python3 -m venv {name}" },
+]
+
+[[rule]]
+id = "python-tool-caches"
+label = "Cache d'outil Python"
+target = "dir"
+names = [".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".pytype", ".pyre"]
+base = 95
+explanation = "Cache d'un outil de test ou d'analyse ; recréé à la prochaine exécution de l'outil."
+recreate_note = "Recréé automatiquement par l'outil."
+
+[[rule]]
+id = "python-tox"
+label = "Environnements tox / nox"
+target = "dir"
+names = [".tox", ".nox"]
+base = 85
+explanation = "Environnements de test créés par tox ou nox ; recréés à la prochaine exécution."
+recreate = [
+  { when_sibling = "tox.ini", command = "tox" },
+  { when_sibling = "noxfile.py", command = "nox" },
+]
+
+[[rule]]
+id = "jupyter-checkpoints"
+label = "Points de sauvegarde Jupyter"
+target = "dir"
+names = [".ipynb_checkpoints"]
+base = 80
+explanation = "Copies automatiques des notebooks ; utiles seulement pour revenir à une version antérieure non enregistrée."
+
+[[rule]]
+id = "python-egg-info"
+label = "Métadonnées de paquet Python"
+target = "dir"
+globs = ["*.egg-info"]
+names = [".eggs"]
+base = 85
+explanation = "Générées lors de l'installation ou de la construction d'un paquet."
+evidence = [
+  { kind = "sibling", value = "setup.py", weight = 10, label = "setup.py à côté" },
+  { kind = "sibling", value = "pyproject.toml", weight = 10, label = "pyproject.toml à côté" },
+]
+recreate = [{ command = "python3 -m pip install -e ." }]
+
+[[rule]]
+id = "python-coverage-html"
+label = "Rapport de couverture HTML"
+target = "dir"
+names = ["htmlcov"]
+base = 70
+explanation = "Rapport généré par coverage.py ; se régénère avec les tests."
+evidence = [
+  { kind = "sibling", value = ".coverage", weight = 20, label = "fichier .coverage à côté" },
+]
+recreate = [{ command = "coverage html" }]
+
+[[rule]]
+id = "python-coverage-data"
+label = "Données de couverture"
+target = "file"
+names = [".coverage"]
+base = 85
+explanation = "Données brutes de coverage.py ; recréées en relançant les tests."
+
+[[rule]]
+id = "python-dist"
+label = "Paquets Python construits"
+target = "dir"
+names = ["dist", "build"]
+base = 10
+explanation = "Sortie de construction d'un projet Python ; se reconstruit, sauf si des fichiers y ont été ajoutés à la main."
+evidence = [
+  { kind = "sibling", value = "pyproject.toml", weight = 55, label = "pyproject.toml à côté" },
+  { kind = "sibling", value = "setup.py", weight = 55, label = "setup.py à côté" },
+  { kind = "child_glob", value = "*.whl", weight = 15, label = "contient des .whl" },
+]
+recreate = [{ command = "python3 -m build" }]
+
+# --- JavaScript / web ---------------------------------------------------------------
+
+[[rule]]
+id = "node-modules"
+label = "Dépendances Node.js"
+target = "dir"
+names = ["node_modules"]
+base = 50
+explanation = "Paquets installés par npm, yarn ou pnpm ; se réinstallent depuis package.json."
+evidence = [
+  { kind = "sibling", value = "package.json", weight = 40, label = "package.json à côté" },
+  { kind = "child", value = ".package-lock.json", weight = 5, label = "index npm .package-lock.json présent" },
+]
+recreate = [
+  { when_sibling = "package-lock.json", command = "npm ci" },
+  { when_sibling = "yarn.lock", command = "yarn install --frozen-lockfile" },
+  { when_sibling = "pnpm-lock.yaml", command = "pnpm install --frozen-lockfile" },
+  { when_sibling = "package.json", command = "npm install" },
+]
+
+[[rule]]
+id = "bower-components"
+label = "Dépendances Bower"
+target = "dir"
+names = ["bower_components"]
+base = 50
+explanation = "Paquets installés par Bower (outil ancien) ; se réinstallent depuis bower.json."
+evidence = [
+  { kind = "sibling", value = "bower.json", weight = 40, label = "bower.json à côté" },
+]
+recreate = [{ when_sibling = "bower.json", command = "bower install" }]
+
+[[rule]]
+id = "js-framework-caches"
+label = "Cache de framework web"
+target = "dir"
+names = [".next", ".nuxt", ".svelte-kit", ".parcel-cache", ".turbo", ".angular", ".sass-cache", ".docusaurus", ".vercel", ".expo"]
+base = 70
+explanation = "Cache ou sortie de construction d'un framework web ; recréé au prochain lancement ou à la prochaine construction."
+evidence = [
+  { kind = "sibling", value = "package.json", weight = 25, label = "package.json à côté" },
+]
+
+[[rule]]
+id = "js-dist"
+label = "Sortie de construction JavaScript"
+target = "dir"
+names = ["dist", "build", "out", "storybook-static"]
+base = 10
+explanation = "Fichiers produits par la construction ; se reconstruisent, sauf si le dossier est versionné ou modifié à la main."
+evidence = [
+  { kind = "sibling", value = "package.json", weight = 55, label = "package.json à côté" },
+]
+recreate = [{ when_sibling = "package.json", command = "npm run build" }]
+
+# --- JVM, Rust, .NET, C/C++, others -------------------------------------------------
+
+[[rule]]
+id = "rust-target"
+label = "Sortie de compilation Rust"
+target = "dir"
+names = ["target"]
+base = 10
+explanation = "Artefacts de compilation de Cargo ; se recompilent."
+evidence = [
+  { kind = "sibling", value = "Cargo.toml", weight = 75, label = "Cargo.toml à côté" },
+  { kind = "child", value = "CACHEDIR.TAG", weight = 10, label = "marqueur CACHEDIR.TAG présent" },
+]
+recreate = [{ command = "cargo build" }]
+
+[[rule]]
+id = "maven-target"
+label = "Sortie de compilation Maven"
+target = "dir"
+names = ["target"]
+base = 10
+explanation = "Artefacts de compilation de Maven ; se recompilent."
+evidence = [
+  { kind = "sibling", value = "pom.xml", weight = 70, label = "pom.xml à côté" },
+]
+recreate = [{ command = "mvn package" }]
+
+[[rule]]
+id = "gradle-cache"
+label = "Cache Gradle du projet"
+target = "dir"
+names = [".gradle"]
+base = 60
+explanation = "Cache de Gradle propre au projet ; recréé à la prochaine construction."
+evidence = [
+  { kind = "sibling", value = "build.gradle", weight = 30, label = "build.gradle à côté" },
+  { kind = "sibling", value = "build.gradle.kts", weight = 30, label = "build.gradle.kts à côté" },
+  { kind = "sibling", value = "settings.gradle", weight = 30, label = "settings.gradle à côté" },
+]
+
+[[rule]]
+id = "gradle-build"
+label = "Sortie de construction Gradle"
+target = "dir"
+names = ["build"]
+base = 10
+explanation = "Artefacts de construction Gradle ; se reconstruisent."
+evidence = [
+  { kind = "sibling", value = "build.gradle", weight = 65, label = "build.gradle à côté" },
+  { kind = "sibling", value = "build.gradle.kts", weight = 65, label = "build.gradle.kts à côté" },
+]
+recreate = [{ command = "./gradlew build" }]
+
+[[rule]]
+id = "dotnet-bin-obj"
+label = "Sortie de compilation .NET"
+target = "dir"
+names = ["bin", "obj"]
+base = 10
+explanation = "Fichiers produits par la compilation .NET ; se recompilent. Un dossier bin sans projet .NET à côté contient souvent des scripts personnels."
+evidence = [
+  { kind = "sibling_glob", value = "*.csproj", weight = 65, label = "projet .csproj à côté" },
+  { kind = "sibling_glob", value = "*.fsproj", weight = 65, label = "projet .fsproj à côté" },
+  { kind = "sibling_glob", value = "*.vbproj", weight = 65, label = "projet .vbproj à côté" },
+  { kind = "sibling_glob", value = "*.sln", weight = 50, label = "solution .sln à côté" },
+  { kind = "child", value = "project.assets.json", weight = 15, label = "project.assets.json présent" },
+]
+recreate = [{ command = "dotnet build" }]
+
+[[rule]]
+id = "visual-studio-cache"
+label = "Cache Visual Studio"
+target = "dir"
+names = [".vs"]
+base = 85
+explanation = "Cache et état de l'éditeur Visual Studio ; recréé à l'ouverture de la solution."
+
+[[rule]]
+id = "php-vendor"
+label = "Dépendances PHP (Composer)"
+target = "dir"
+names = ["vendor"]
+base = 10
+explanation = "Paquets installés par Composer ; se réinstallent depuis composer.json. Un dossier vendor sans composer.json peut contenir du code recopié à la main."
+evidence = [
+  { kind = "sibling", value = "composer.json", weight = 50, label = "composer.json à côté" },
+  { kind = "sibling", value = "composer.lock", weight = 20, label = "composer.lock à côté" },
+  { kind = "child", value = "autoload.php", weight = 10, label = "autoload.php présent" },
+]
+recreate = [{ when_sibling = "composer.json", command = "composer install" }]
+
+[[rule]]
+id = "dart-tool"
+label = "Cache Dart / Flutter"
+target = "dir"
+names = [".dart_tool"]
+base = 90
+explanation = "Cache des outils Dart et Flutter ; recréé par pub get."
+recreate = [{ when_sibling = "pubspec.yaml", command = "dart pub get" }]
+
+[[rule]]
+id = "elixir-build"
+label = "Sortie de compilation Elixir"
+target = "dir"
+names = ["_build", "deps"]
+base = 10
+explanation = "Compilation et dépendances Mix ; se recréent."
+evidence = [
+  { kind = "sibling", value = "mix.exs", weight = 70, label = "mix.exs à côté" },
+]
+recreate = [{ when_sibling = "mix.exs", command = "mix deps.get && mix compile" }]
+
+[[rule]]
+id = "haskell-build"
+label = "Sortie de compilation Haskell"
+target = "dir"
+names = [".stack-work", "dist-newstyle"]
+base = 85
+explanation = "Artefacts de stack ou cabal ; se recompilent."
+
+[[rule]]
+id = "cmake-files"
+label = "Fichiers intermédiaires CMake"
+target = "dir"
+names = ["CMakeFiles"]
+base = 85
+explanation = "Fichiers générés par CMake ; recréés à la configuration."
+
+[[rule]]
+id = "cmake-build-dirs"
+label = "Dossier de construction CMake"
+target = "dir"
+names = ["cmake-build-debug", "cmake-build-release"]
+base = 70
+explanation = "Dossier de construction créé par l'IDE CLion ; se reconstruit."
+evidence = [
+  { kind = "sibling", value = "CMakeLists.txt", weight = 20, label = "CMakeLists.txt à côté" },
+]
+
+[[rule]]
+id = "terraform"
+label = "Fournisseurs et modules Terraform"
+target = "dir"
+names = [".terraform"]
+base = 60
+explanation = "Fournisseurs et modules téléchargés par terraform init. L'état (terraform.tfstate) n'est pas dans ce dossier."
+evidence = [
+  { kind = "sibling_glob", value = "*.tf", weight = 25, label = "fichiers .tf à côté" },
+]
+recreate = [{ command = "terraform init" }]
+
+[[rule]]
+id = "serverless"
+label = "Sortie Serverless Framework"
+target = "dir"
+names = [".serverless"]
+base = 75
+explanation = "Paquets de déploiement générés par Serverless ; recréés au prochain déploiement."
+
+# --- Operating system leftovers -----------------------------------------------------
+
+[[rule]]
+id = "macos-archive-leftovers"
+label = "Restes d'archive macOS"
+target = "dir"
+names = ["__MACOSX"]
+base = 90
+explanation = "Métadonnées macOS ajoutées dans les archives ZIP ; inutiles en dehors de macOS."
+evidence = [
+  { kind = "all_files_glob", value = "._*", weight = 10, label = "ne contient que des fichiers ._*" },
+]
+
+[[rule]]
+id = "macos-volume-metadata"
+label = "Métadonnées de disque macOS"
+target = "dir"
+names = [".Spotlight-V100", ".fseventsd", ".Trashes", ".TemporaryItems", ".DocumentRevisions-V100"]
+base = 85
+explanation = "Créés par macOS sur les disques externes (index, journal, corbeille) ; inutiles sous Linux. .Trashes contient des fichiers supprimés."
+
+[[rule]]
+id = "macos-ds-store"
+label = "Réglages d'affichage macOS"
+target = "file"
+names = [".DS_Store"]
+base = 95
+explanation = "Créé par le Finder de macOS pour mémoriser l'affichage d'un dossier."
+
+[[rule]]
+id = "macos-appledouble"
+label = "Fichier AppleDouble macOS"
+target = "file"
+globs = ["._*"]
+base = 80
+explanation = "Métadonnées macOS associées au fichier du même nom sans le préfixe ._ ; inutiles sous Linux."
+
+[[rule]]
+id = "windows-thumbnails"
+label = "Cache de miniatures Windows"
+target = "file"
+names = ["Thumbs.db", "ehthumbs.db", "ehthumbs_vista.db"]
+base = 95
+explanation = "Cache de miniatures créé par l'Explorateur Windows."
+
+[[rule]]
+id = "windows-desktop-ini"
+label = "Réglages de dossier Windows"
+target = "file"
+names = ["desktop.ini"]
+base = 90
+explanation = "Personnalisation d'affichage d'un dossier sous Windows (icône, nom affiché)."
+
+[[rule]]
+id = "windows-recycle-bin"
+label = "Corbeille Windows d'un disque"
+target = "dir"
+names = ["$RECYCLE.BIN", "RECYCLER"]
+base = 60
+explanation = "Corbeille Windows d'un disque externe : contient des fichiers supprimés. À vider seulement si tu n'en as plus besoin."
+
+[[rule]]
+id = "linux-trash"
+label = "Corbeille Linux d'un disque"
+target = "dir"
+globs = [".Trash-*"]
+base = 60
+explanation = "Corbeille d'un disque externe sous Linux : contient des fichiers supprimés. À vider seulement si tu n'en as plus besoin."
+
+[[rule]]
+id = "kde-directory"
+label = "Réglages de dossier KDE"
+target = "file"
+names = [".directory"]
+base = 85
+explanation = "Réglages d'affichage d'un dossier dans Dolphin (KDE)."
+
+# --- Editors and office suites --------------------------------------------------------
+
+[[rule]]
+id = "office-lock-files"
+label = "Fichier de verrou de suite bureautique"
+target = "file"
+globs = ["~$*", ".~lock.*#"]
+base = 80
+explanation = "Verrou laissé par Microsoft Office ou LibreOffice quand un document est ouvert ; orphelin si le logiciel n'est plus ouvert."
+
+[[rule]]
+id = "vim-swap"
+label = "Fichier d'échange Vim"
+target = "file"
+globs = ["*.swp", "*.swo"]
+base = 55
+explanation = "Fichier d'échange de Vim. Il peut contenir des modifications non enregistrées après un plantage : vérifier avant de supprimer."
+
+[[rule]]
+id = "editor-backups"
+label = "Copie de sauvegarde d'éditeur"
+target = "file"
+globs = ["*~"]
+base = 55
+explanation = "Copie automatique d'un fichier avant modification (Emacs, gedit…). Vérifier que l'original existe."
+
+# --- LaTeX ---------------------------------------------------------------------------
+
+[[rule]]
+id = "latex-auxiliary"
+label = "Fichier auxiliaire LaTeX"
+target = "file"
+globs = ["*.aux", "*.toc", "*.lof", "*.lot", "*.bbl", "*.blg", "*.fls", "*.fdb_latexmk", "*.synctex.gz", "*.nav", "*.snm", "*.out"]
+base = 20
+explanation = "Généré par la compilation d'un document LaTeX ; recréé à la prochaine compilation."
+evidence = [
+  { kind = "sibling_glob", value = "*.tex", weight = 65, label = "fichier .tex à côté" },
+]
+recreate_note = "Recréé à la prochaine compilation du document."
+
+# --- Copied libraries (ambiguous: candidates for the local AI, phase 9) ----------------
+
+[[rule]]
+id = "vendored-web-library"
+label = "Bibliothèque web recopiée"
+target = "dir"
+names = ["bootstrap", "jquery", "font-awesome", "fontawesome"]
+base = 20
+max_confidence = 45
+explanation = "Bibliothèque recopiée dans le projet. Elle peut être réinstallée par un gestionnaire de paquets, mais elle a pu être modifiée à la main : à vérifier."
+evidence = [
+  { kind = "any_file_glob", value = "*.min.*", weight = 20, label = "contient des fichiers minifiés" },
+]

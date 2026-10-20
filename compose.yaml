@@ -26,6 +26,9 @@ services:
     # Sees the audited data: internal network only, no outbound access and no
     # published port (D-020). It is reached through the gateway.
     networks: [internal]
+    environment:
+      # Host path of the root, used only to display copy-pasteable commands (D-025).
+      TREEAUDIT_DISPLAY_PATH_MAIN: "${TREEAUDIT_ROOT_PATH:-}"
     volumes:
       - type: bind
         source: "${TREEAUDIT_ROOT_PATH:-/TREEAUDIT_ROOT_PATH_is_not_set}"

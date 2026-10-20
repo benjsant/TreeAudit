@@ -76,7 +76,14 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Ne jamais exécuter une sortie du modèle.
 - L'application reste entièrement utile sans LLM.
 
-## Toute future fonction destructive est interdite dans le MVP
+## Commandes de nettoyage proposées (D-025)
+- TreeAudit **affiche** des commandes (`gio trash`, `rm -rf`, `tar`, commandes de recréation) ; il ne les exécute jamais. Le code ne contient aucun appel au shell (test statique).
+- Les noms de fichiers sont des données non fiables : chaque chemin est échappé avec `shlex.quote`, précédé de `--` (ou de `./` pour `tar`). Les tests vérifient, avec `shlex.split`, que des noms comme `$(touch pwned)`, `` `id` ``, `-rf` ou `a;b && c` arrivent tels quels dans la commande.
+- Un chemin contenant des caractères de contrôle ou de l'UTF-8 invalide ne reçoit aucune commande : il ne pourrait pas être affiché sans ambiguïté.
+- La corbeille (réversible) est proposée avant la suppression définitive ; une sélection hors du vert est signalée.
+- Les modèles de commandes de recréation viennent uniquement du catalogue versionné ; leur seul paramètre (`{name}`) est échappé.
+
+## Toute future fonction destructive est interdite
 Elle exigera une spécification et une revue de sécurité séparées, un aperçu avant action, une confirmation explicite, une journalisation, une stratégie de restauration ou de quarantaine et des tests d'interruption et d'échec.
 
 ## Tests de sécurité

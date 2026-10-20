@@ -16,7 +16,7 @@ TreeAudit/
 │   ├── db/          schéma SQLite, migrations simples, écritures par lots
 │   ├── filters/     extension, glob, regex
 │   ├── duplicates/  regroupement par taille, empreintes, groupes de doublons
-│   ├── techdirs/    règles déclaratives des dossiers techniques (phase 6)
+│   ├── parasites/   catalogue rules.toml, détection sur l'index, commandes proposées (D-023, D-025)
 │   ├── reports/     JSON, CSV, puis HTML
 │   ├── web/         application FastAPI, routes, templates, fichiers statiques
 │   ├── gateway.py   relais TCP entre le port publié et le conteneur app (D-020)

@@ -4,14 +4,19 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
+# Precedence: command line (make up TREEAUDIT_ROOT_PATH=...), then the shell
+# environment, then .env. Assignments in an included file would otherwise hide
+# the environment, so remember it before reading .env.
+SETTINGS := TREEAUDIT_ROOT_PATH TREEAUDIT_ALLOW_SYSTEM_VOLUME TREEAUDIT_PORT
+$(foreach v,$(SETTINGS),$(eval _FROM_ENV_$(v) := $(if $(filter environment command line,$(origin $(v))),$(value $(v)))))
 -include .env
+$(foreach v,$(SETTINGS),$(if $(_FROM_ENV_$(v)),$(eval override $(v) := $(_FROM_ENV_$(v)))))
 # A trailing "/" typed by the user is harmless: strip it before validation, so
 # that what is validated and what is mounted are the same normalized path.
 override TREEAUDIT_ROOT_PATH := $(patsubst %/,%,$(TREEAUDIT_ROOT_PATH))
-# Hand compose exactly the values make validated. Without this, a variable set in
-# the user's shell would take precedence for compose while make validated the
-# .env value: check-root and the actual mount could disagree.
-export TREEAUDIT_UID TREEAUDIT_GID TREEAUDIT_ROOT_PATH TREEAUDIT_ALLOW_SYSTEM_VOLUME TREEAUDIT_PORT
+# Hand compose exactly the values make validated, so check-root and the actual
+# mount can never disagree.
+export TREEAUDIT_UID TREEAUDIT_GID $(SETTINGS)
 
 COMPOSE_FILES := -f compose.yaml
 ifeq ($(COMPOSE_SELINUX),1)
@@ -21,7 +26,7 @@ COMPOSE := docker compose $(COMPOSE_FILES)
 DEV := $(COMPOSE) run --rm dev
 HOST_IDS := --user "$$(id -u):$$(id -g)"
 
-.PHONY: help env data lock build check-root up scan scans down test lint format typecheck check
+.PHONY: help env data lock build check-root up scan parasites scans down test lint format typecheck check
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -62,6 +67,10 @@ up: check-root ## Validate the audited folder, then start TreeAudit on http://12
 scan: check-root ## Scan the audited folder (SUBPATH=sub/folder to scan only part of it)
 	$(COMPOSE) run --rm app scan run main $(if $(SUBPATH),--path "$(SUBPATH)")
 	$(COMPOSE) run --rm app scan show "$$($(COMPOSE) run --rm -T app scan list | head -1 | cut -f1)"
+
+parasites: ## Rebuildable/useless folders of the last scan (SCAN=id SELECT=green ACTION=trash|delete|archive)
+	$(COMPOSE) run --rm app scan parasites "$(or $(SCAN),$$($(COMPOSE) run --rm -T app scan list | head -1 | cut -f1))" \
+	  $(if $(SELECT),--select "$(SELECT)" --action "$(or $(ACTION),trash)") $(ARGS)
 
 scans: ## List recorded scans
 	$(COMPOSE) run --rm app scan list
