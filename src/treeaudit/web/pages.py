@@ -1,4 +1,8 @@
-"""HTML pages (server-rendered, French UI).
+"""HTML pages (server-rendered, French UI, plain words).
+
+The interface is a guided path: choose a folder, analyse it, read a short
+summary, then clean up. Technical vocabulary (rules, digests, exclusions,
+errors) stays in folded "details" sections.
 
 File names come from audited disks and are untrusted: templates are rendered
 with autoescaping on and StrictUndefined, never with ``|safe``; the JavaScript
@@ -8,6 +12,7 @@ only uses ``textContent`` (see static/app.js) and the CSP forbids inline code.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,7 +24,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from treeaudit import __version__
-from treeaudit.core.config import ROOT_ID_PATTERN
+from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
@@ -27,7 +32,7 @@ from treeaudit.filters.search import Sort, search
 from treeaudit.filters.spec import FilterError, compile_filter, describe
 from treeaudit.parasites.commands import recreate_command
 from treeaudit.parasites.detect import Band, find_parasites
-from treeaudit.parasites.report import BAND_LABELS, BAND_MEANING, human_size
+from treeaudit.parasites.report import human_size
 from treeaudit.parasites.rules import load_default_rules
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES
@@ -40,21 +45,46 @@ from treeaudit.web.search_form import SearchForm, spec_from_form
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 STATUS_LABELS = {
-    "complete": "complet",
-    "incomplete": "incomplet",
-    "cancelled": "annulé",
-    "failed": "échec",
+    "complete": "terminée",
+    "incomplete": "incomplète",
+    "cancelled": "annulée",
+    "failed": "échouée",
     "running": "en cours",
     "pending": "en attente",
 }
+_MONTHS = (
+    "janv.",
+    "févr.",
+    "mars",
+    "avr.",
+    "mai",
+    "juin",
+    "juil.",
+    "août",
+    "sept.",
+    "oct.",
+    "nov.",
+    "déc.",
+)
 
 
-def _date(ns_or_iso: int | str | None) -> str:
-    if ns_or_iso is None:
+def _date(value: int | str | None) -> str:
+    """'20 oct. 2026' from a scan timestamp (ISO text) or an mtime in nanoseconds."""
+    if value is None:
         return "-"
-    if isinstance(ns_or_iso, str):
-        return ns_or_iso.replace("T", " ").replace("+00:00", " UTC")
-    return datetime.fromtimestamp(ns_or_iso / 1e9, UTC).strftime("%Y-%m-%d")
+    if isinstance(value, str):
+        moment = datetime.fromisoformat(value)
+    else:
+        moment = datetime.fromtimestamp(value / 1e9, UTC)
+    return f"{moment.day} {_MONTHS[moment.month - 1]} {moment.year}"
+
+
+_THIN_SPACE = chr(0x202F)  # French thousands separator
+
+
+def _number(value: int) -> str:
+    """150355 -> '150 355' (French thousands separator)."""
+    return f"{value:,}".replace(",", _THIN_SPACE)
 
 
 def _environment() -> jinja2.Environment:
@@ -67,6 +97,7 @@ def _environment() -> jinja2.Environment:
     )
     env.filters["size"] = human_size
     env.filters["date"] = _date
+    env.filters["number"] = _number
     env.filters["status"] = lambda value: STATUS_LABELS.get(value, value)
     env.globals["version"] = __version__
     return env
@@ -90,32 +121,43 @@ def error_page(request: Request, status_code: int, message: str) -> Response:
 def _scan_or_404(conn: sqlite3.Connection, scan_id: int) -> sqlite3.Row:
     scan = scans_db.get_scan(conn, scan_id)
     if scan is None:
-        raise HTTPException(404, "Scan inconnu.")
+        raise HTTPException(404, "Cette analyse n'existe pas.")
     return scan
 
 
+def analysis_title(config: AppConfig, scan: sqlite3.Row) -> str:
+    """Short name of what was analysed: the folder name, as the user knows it."""
+    shown = root_display(config, scan).rstrip("/")
+    if scan["subpath"]:
+        shown = f"{shown}/{scan['subpath']}"
+    return os.path.basename(shown) or shown or str(scan["root_id"])
+
+
+def _latest_run(conn: sqlite3.Connection, scan_id: int, *, micro: bool) -> sqlite3.Row | None:
+    for run in dupes_db.list_runs(conn, limit=500):
+        if run["scan_id"] == scan_id and bool(json.loads(run["options"]).get("micro")) == micro:
+            return run
+    return None
+
+
 @router.get("/")
-def index(request: Request, conn: Db) -> Response:
+def index(request: Request, conn: Db, config: Config) -> Response:
     statuses: dict[str, RootStatus] = request.app.state.statuses
-    roots = [
-        {
-            "id": s.root.id,
-            "label": s.root.label,
-            "accepted": s.accepted,
-            "message": None if s.reason is None else REASON_MESSAGES[s.reason],
-        }
+    refused = [
+        {"label": s.root.label, "message": REASON_MESSAGES[s.reason]}
         for s in statuses.values()
+        if s.reason is not None
     ]
-    runs = []
-    for run in dupes_db.list_runs(conn, limit=20):
-        options = json.loads(run["options"])
-        runs.append({**dict(run), "micro": bool(options.get("micro"))})
+    analyses = [
+        {"scan": scan, "title": analysis_title(config, scan)}
+        for scan in scans_db.list_scans(conn, limit=30)
+    ]
     return render(
         request,
         "index.html",
-        roots=roots,
-        scans=scans_db.list_scans(conn, limit=30),
-        runs=runs,
+        analyses=analyses,
+        refused=refused,
+        can_analyse=any(s.accepted for s in statuses.values()),
     )
 
 
@@ -134,7 +176,7 @@ def new_scan(
             return render(request, "scan_new.html", roots=accepted, root=None)
     status = statuses.get(root)
     if status is None or not status.accepted:
-        raise HTTPException(404, "Racine inconnue ou refusée.")
+        raise HTTPException(404, "Ce dossier n'est pas autorisé.")
     try:
         parts = parse_subpath(path)
         listing = list_folders(status.root.path, path)
@@ -143,13 +185,16 @@ def new_scan(
     except OSError as exc:
         raise HTTPException(404, f"Dossier inaccessible : {exc.strerror or 'erreur'}.") from exc
     crumbs = [("/".join(parts[: i + 1]), part) for i, part in enumerate(parts)]
+    root_name = os.path.basename(status.root.shown_path.rstrip("/")) or status.root.label
     return render(
         request,
         "scan_new.html",
         roots=accepted,
         root=status.root,
+        root_name=root_name,
         listing=listing,
         crumbs=crumbs,
+        current_name=parts[-1] if parts else root_name,
         parent="/".join(parts[:-1]) if parts else None,
     )
 
@@ -161,33 +206,71 @@ def job_page(request: Request, jobs: Jobs) -> Response:
 
 
 @router.get("/scans/{scan_id}")
-def scan_page(
-    request: Request,
-    scan_id: int,
-    conn: Db,
-    dir: Annotated[int | None, Query(ge=1)] = None,
-) -> Response:
+def summary_page(request: Request, scan_id: int, conn: Db, config: Config) -> Response:
+    """The summary: what to clean, duplicates, where the space goes."""
     scan = _scan_or_404(conn, scan_id)
-    node = (
-        queries.get_node(conn, scan_id, dir)
-        if dir is not None
-        else queries.start_node(conn, scan_id)
-    )
-    if node is None or node.kind != "dir":
-        raise HTTPException(404, "Dossier inconnu dans ce scan.")
-    kids, total_kids = queries.children(conn, scan_id, node.entry_id)
+    start = queries.start_node(conn, scan_id)
+    biggest = queries.children(conn, scan_id, start.entry_id, limit=5)[0] if start else []
+    findings = find_parasites(conn, scan_id, load_default_rules())
+    safe = [f for f in findings if f.band is Band.GREEN]
+    to_check = [f for f in findings if f.band is not Band.GREEN]
+
+    def dupes_summary(micro: bool) -> dict[str, Any] | None:
+        run = _latest_run(conn, scan_id, micro=micro)
+        if run is None:
+            return None
+        report = load_groups(conn, run["id"])
+        return {
+            "run": run,
+            "groups": len(report.groups),
+            "removable": sum(len(g.removable) for g in report.groups),
+            "recoverable": sum(g.recoverable for g in report.groups),
+        }
+
     return render(
         request,
         "scan.html",
         scan=scan,
+        title=analysis_title(config, scan),
+        start=start,
+        biggest=biggest,
+        safe_count=len(safe),
+        safe_size=sum(f.allocated_size or 0 for f in safe),
+        check_count=len(to_check),
+        check_size=sum(f.allocated_size or 0 for f in to_check),
+        dupes=dupes_summary(micro=False),
+        micro=dupes_summary(micro=True),
+        extensions=scans_db.top_extensions(conn, scan_id, limit=15),
+        errors=scans_db.list_errors(conn, scan_id, limit=50),
+        exclusions=scans_db.list_exclusions(conn, scan_id, limit=50),
+    )
+
+
+@router.get("/scans/{scan_id}/space")
+def space_page(
+    request: Request,
+    scan_id: int,
+    conn: Db,
+    config: Config,
+    dir: Annotated[int | None, Query(ge=1)] = None,
+) -> Response:
+    scan = _scan_or_404(conn, scan_id)
+    if dir is None:
+        node = queries.start_node(conn, scan_id)
+    else:
+        node = queries.get_node(conn, scan_id, dir)
+    if node is None or node.kind != "dir":
+        raise HTTPException(404, "Ce dossier n'existe pas dans cette analyse.")
+    kids, total_kids = queries.children(conn, scan_id, node.entry_id)
+    return render(
+        request,
+        "space.html",
+        scan=scan,
+        title=analysis_title(config, scan),
         node=node,
         crumbs=queries.breadcrumb(conn, scan_id, node),
         children=kids,
         total_children=total_kids,
-        extensions=scans_db.top_extensions(conn, scan_id, limit=15),
-        errors=scans_db.list_errors(conn, scan_id, limit=50),
-        exclusions=scans_db.list_exclusions(conn, scan_id, limit=50),
-        runs=[r for r in dupes_db.list_runs(conn, limit=200) if r["scan_id"] == scan_id],
     )
 
 
@@ -202,23 +285,17 @@ def parasites_page(
     scan = _scan_or_404(conn, scan_id)
     display = root_display(config, scan)
     findings = find_parasites(conn, scan_id, load_default_rules(), min_confidence=min_confidence)
-    rows = [{"finding": f, "recreate": recreate_command(f, display)} for f in findings]
-    totals = {
-        band: (
-            sum(1 for f in findings if f.band is band),
-            sum(f.allocated_size or 0 for f in findings if f.band is band),
-        )
-        for band in Band
-    }
+    rows: list[dict[str, Any]] = [
+        {"finding": f, "recreate": recreate_command(f, display)} for f in findings
+    ]
     return render(
         request,
         "parasites.html",
         scan=scan,
-        rows=rows,
-        totals=totals,
-        bands=list(Band),
-        band_labels=BAND_LABELS,
-        band_meaning=BAND_MEANING,
+        title=analysis_title(config, scan),
+        safe=[r for r in rows if r["finding"].band is Band.GREEN],
+        check=[r for r in rows if r["finding"].band is Band.ORANGE],
+        doubt=[r for r in rows if r["finding"].band is Band.RED],
         min_confidence=min_confidence,
     )
 
@@ -228,17 +305,21 @@ def dupes_page(
     request: Request,
     run_id: int,
     conn: Db,
+    config: Config,
     limit: Annotated[int, Query(ge=1, le=10_000)] = 50,
     copies: Annotated[int, Query(ge=1, le=10_000)] = 10,
 ) -> Response:
     run = dupes_db.get_run(conn, run_id)
     if run is None:
-        raise HTTPException(404, "Analyse inconnue.")
+        raise HTTPException(404, "Cette recherche de doublons n'existe pas.")
+    scan = _scan_or_404(conn, run["scan_id"])
     report = load_groups(conn, run_id)
     return render(
         request,
         "dupes.html",
         run=run,
+        scan=scan,
+        title=analysis_title(config, scan),
         report=report,
         groups=report.groups[:limit],
         limit=limit,
@@ -251,7 +332,11 @@ def dupes_page(
 
 @router.get("/scans/{scan_id}/search")
 def search_page(
-    request: Request, scan_id: int, conn: Db, form: Annotated[SearchForm, Query()]
+    request: Request,
+    scan_id: int,
+    conn: Db,
+    config: Config,
+    form: Annotated[SearchForm, Query()],
 ) -> Response:
     scan = _scan_or_404(conn, scan_id)
     result = None
@@ -271,7 +356,9 @@ def search_page(
         request,
         "search.html",
         scan=scan,
+        title=analysis_title(config, scan),
         form=form,
+        advanced_open=form.has_advanced,
         result=result,
         error=error,
         description=description,

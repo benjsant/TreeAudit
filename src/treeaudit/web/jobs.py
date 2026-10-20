@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -130,7 +131,8 @@ class JobManager:
         if root is None:
             raise JobError("racine inconnue")
         normalized = "/".join(parse_subpath(subpath))  # SubpathError if unsafe
-        label = f"scan de {root.label}" + (f" / {normalized}" if normalized else "")
+        shown = root.shown_path.rstrip("/") + (f"/{normalized}" if normalized else "")
+        label = f"Analyse de « {os.path.basename(shown) or root.label} »"
         progress = ScanProgress()
         job = Job(id=next(self._ids), kind=JobKind.SCAN, label=label, progress=progress)
         request = ScanRequest(root=root, subpath=normalized)
@@ -148,7 +150,7 @@ class JobManager:
 
     def start_dupes(self, scan_id: int, *, micro: bool) -> Job:
         options = DupOptions.for_micro() if micro else DupOptions()
-        label = f"{'micro-nettoyage' if micro else 'doublons'} du scan {scan_id}"
+        label = "Recherche des petits fichiers en double" if micro else "Recherche des doublons"
         progress = DupProgress()
         job = Job(id=next(self._ids), kind=JobKind.DUPES, label=label, progress=progress)
         return self._start(

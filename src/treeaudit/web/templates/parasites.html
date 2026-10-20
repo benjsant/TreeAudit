@@ -1,51 +1,72 @@
 {% extends "base.html" %}
-{% block title %}Dossiers parasites · scan {{ scan.id }}{% endblock %}
-{% block content %}
-<h1>Dossiers parasites <span class="muted">· scan {{ scan.id }}</span></h1>
-{% if scan.status != "complete" %}<p class="banner warn" role="alert">Le scan n'est pas complet : des éléments peuvent manquer.</p>{% endif %}
-<form method="get" class="inline">
-  <label>Confiance minimale (%) <input type="number" name="min_confidence" min="0" max="100" value="{{ min_confidence }}"></label>
-  <button type="submit">Filtrer</button>
-  <a href="/export/scans/{{ scan.id }}/parasites.csv?min_confidence={{ min_confidence }}">CSV</a>
-  <a href="/export/scans/{{ scan.id }}/parasites.json?min_confidence={{ min_confidence }}">JSON</a>
-</form>
-<ul class="legend">
-{% for band in bands %}
-  <li><span class="badge band-{{ band.value }}">{{ band_labels[band] }}</span> {{ totals[band][0] }} élément(s), {{ totals[band][1] | size }} — {{ band_meaning[band] }}</li>
+{% block title %}Nettoyage · {{ title }}{% endblock %}
+{% macro rows_list(rows, preselect) %}
+<ul class="items">
+{% for row in rows %}{% set f = row.finding %}
+  <li class="item">
+    <label class="item-main">
+      <input type="checkbox" data-pick="{{ f.number }}" data-band="{{ f.band.value }}" {% if preselect and f.displayable %}checked{% endif %} {% if not f.displayable %}disabled{% endif %}>
+      <span class="item-text">
+        <strong>{{ f.rule.label }}</strong> <span class="size">{{ f.allocated_size | size if f.allocated_size is not none else "" }}</span><br>
+        <span class="path">{{ f.rel_path_display }}</span>
+      </span>
+    </label>
+    <details class="why">
+      <summary>Pourquoi ? <span class="badge band-{{ f.band.value }}">{{ f.confidence }} % sûr</span></summary>
+      <p>{{ f.rule.explanation }}</p>
+      <ul class="plain small">
+        <li>Point de départ : {{ f.rule.base }} %</li>
+        {% for r in f.evidence %}<li>{{ "✔" if r.matched else "✘" }} {{ r.evidence.label }} ({{ "%+d" | format(r.evidence.weight) }}{{ "" if r.matched else ", absent" }})</li>{% endfor %}
+        {% if f.rule.max_confidence < 100 %}<li>Plafonné à {{ f.rule.max_confidence }} %</li>{% endif %}
+      </ul>
+      {% if row.recreate %}<p>Pour le recréer plus tard : <code class="cmd">{{ row.recreate }}</code></p>
+      {% elif f.rule.recreate_note %}<p>{{ f.rule.recreate_note }}</p>{% endif %}
+    </details>
+    {% if not f.displayable %}<p class="error-text small">Nom illisible : pas de commande possible pour celui-ci.</p>{% endif %}
+  </li>
 {% endfor %}
 </ul>
+{% endmacro %}
+{% block content %}
+<p class="back"><a href="/scans/{{ scan.id }}">← Bilan de {{ title }}</a></p>
+<h1>🧹 À nettoyer</h1>
+<p class="lead">Caches, dépendances et restes de logiciels qui se recréent tout seuls ou avec une commande. Rien n'est supprimé sans toi.</p>
+{% if scan.status != "complete" %}<p class="notice warn" role="alert">L'analyse n'a pas pu tout voir : la liste peut être incomplète.</p>{% endif %}
 
-<section data-command-builder data-endpoint="/api/scans/{{ scan.id }}/parasites/command" data-min-confidence="{{ min_confidence }}">
-  <div class="actions">
-    <button type="button" data-select-band="green">Cocher tous les verts</button>
-    <button type="button" data-select-none>Tout décocher</button>
-  </div>
-  <table>
-    <thead><tr><th scope="col"><span class="sr-only">Choisir</span></th><th scope="col">N°</th><th scope="col">Confiance</th><th scope="col" class="num">Taille</th><th scope="col">Détection</th></tr></thead>
-    <tbody>
-    {% for row in rows %}{% set f = row.finding %}
-      <tr>
-        <td><input type="checkbox" data-pick="{{ f.number }}" data-band="{{ f.band.value }}" id="pick-{{ f.number }}" {% if not f.displayable %}disabled{% endif %}></td>
-        <td><label for="pick-{{ f.number }}">{{ f.number }}</label></td>
-        <td><span class="badge band-{{ f.band.value }}">{{ band_labels[f.band] }} {{ f.confidence }} %</span></td>
-        <td class="num">{{ f.allocated_size | size if f.allocated_size is not none else "?" }}</td>
-        <td>
-          <strong>{{ f.rule.label }}</strong> — <span class="path">{{ f.rel_path_display }}</span>
-          <div class="muted">Pourquoi : base {{ f.rule.base }} %{% for r in f.evidence if r.matched %} ; ✔ {{ r.evidence.label }} ({{ "%+d" | format(r.evidence.weight) }}){% endfor %}{% if f.rule.max_confidence < 100 %} ; plafonné à {{ f.rule.max_confidence }} %{% endif %}</div>
-          <details><summary>Détails</summary>
-            <p>{{ f.rule.explanation }}</p>
-            {% for r in f.evidence if not r.matched %}<p class="muted">✘ {{ r.evidence.label }} (absent, {{ "%+d" | format(r.evidence.weight) }})</p>{% endfor %}
-            {% if row.recreate %}<p>Recréer : <code class="cmd">{{ row.recreate }}</code></p>
-            {% elif f.rule.recreate_note %}<p>Recréer : {{ f.rule.recreate_note }}</p>{% endif %}
-          </details>
-          {% if not f.displayable %}<p class="error-text">Nom avec caractères de contrôle ou UTF-8 invalide : aucune commande proposée.</p>{% endif %}
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="5">Aucun dossier parasite au-dessus de {{ min_confidence }} %.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% include "command_panel.html" %}
-</section>
+<div data-command-builder data-endpoint="/api/scans/{{ scan.id }}/parasites/command" data-min-confidence="{{ min_confidence }}">
+  {% if not (safe or check or doubt) %}
+    <p class="notice info">Rien à nettoyer ici 🎉</p>
+  {% endif %}
+  {% if safe %}
+  <section class="group-band">
+    <h2><span class="badge band-green">🟢 Sans risque</span> déjà cochés</h2>
+    {{ rows_list(safe, True) }}
+  </section>
+  {% endif %}
+  {% if check %}
+  <section class="group-band">
+    <h2><span class="badge band-orange">🟠 À vérifier</span> probablement inutiles, jette un œil avant</h2>
+    {{ rows_list(check, False) }}
+  </section>
+  {% endif %}
+  {% if doubt %}
+  <details class="group-band">
+    <summary><span class="badge band-red">🔴 Douteux</span> {{ doubt | length }} élément(s) : ne coche que si tu es sûr</summary>
+    {{ rows_list(doubt, False) }}
+  </details>
+  {% endif %}
+  {% if safe or check or doubt %}
+    <div class="actions"><button type="button" class="button small" data-select-none>Tout décocher</button></div>
+    {% include "command_panel.html" %}
+  {% endif %}
+</div>
+
+<details class="tech">
+  <summary>Options</summary>
+  <form method="get" class="inline">
+    <label>Afficher à partir de <input type="number" name="min_confidence" min="0" max="100" value="{{ min_confidence }}"> % de confiance</label>
+    <button type="submit" class="button small">Appliquer</button>
+  </form>
+  <p class="links"><a href="/export/scans/{{ scan.id }}/parasites.csv?min_confidence={{ min_confidence }}">Exporter (CSV)</a> <a href="/export/scans/{{ scan.id }}/parasites.json?min_confidence={{ min_confidence }}">Exporter (JSON)</a></p>
+</details>
 {% endblock %}

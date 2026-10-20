@@ -10,24 +10,20 @@
 <body>
   <a class="skip" href="#main">Aller au contenu</a>
   <header class="top">
-    <a class="brand" href="/">TreeAudit</a>
-    <nav aria-label="Navigation principale">
-      <a href="/">Accueil</a>
-      <a href="/scan/new">Nouveau scan</a>
-      <a href="/jobs/current">Analyse en cours</a>
-    </nav>
+    <a class="brand" href="/">🌳 TreeAudit</a>
+    <a class="button small" href="/scan/new">+ Nouvelle analyse</a>
   </header>
   {% if running_job %}
-  <p class="banner info" role="status">
-    En cours : {{ running_job.label }} — <a href="/jobs/current">suivre la progression</a>
+  <p class="notice info" role="status">
+    ⏳ Analyse en cours : {{ running_job.label }} — <a href="/jobs/current">voir l'avancement</a>
   </p>
   {% endif %}
   <main id="main">
     {% block content %}{% endblock %}
   </main>
   <footer>
-    TreeAudit {{ version }} · lecture seule : rien n'est jamais supprimé ni modifié par
-    TreeAudit. Les commandes proposées sont à relire et à lancer toi-même.
+    TreeAudit ne supprime jamais rien de lui-même : il te propose des commandes, c'est toi
+    qui décides de les lancer.
   </footer>
 </body>
 </html>

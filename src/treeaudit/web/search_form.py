@@ -21,6 +21,8 @@ class SearchForm(BaseModel):
     """Every field is optional; empty fields are ignored."""
 
     go: str = Field(default="", max_length=10)
+    q: str = _TEXT
+    """Simple search: part of the name, any case."""
     ext: str = _TEXT
     name: str = _TEXT
     glob: str = _TEXT
@@ -37,7 +39,15 @@ class SearchForm(BaseModel):
 
     @property
     def submitted(self) -> bool:
-        return bool(self.go)
+        return bool(self.go) or bool(self.q.strip())
+
+    @property
+    def has_advanced(self) -> bool:
+        """True when an advanced criterion is filled (the section opens itself)."""
+        texts = (self.ext, self.name, self.glob, self.path_glob, self.regex, self.path_regex)
+        return any(t.strip() for t in texts) or bool(
+            self.kind or self.min_size.strip() or self.max_size.strip()
+        )
 
 
 def spec_from_form(form: SearchForm) -> FilterSpec:
@@ -52,6 +62,7 @@ def spec_from_form(form: SearchForm) -> FilterSpec:
         raise FilterError("type inconnu") from exc
     return FilterSpec(
         extensions=parse_extensions(form.ext) if form.ext.strip() else (),
+        name_contains=text(form.q),
         name_exact=text(form.name),
         name_glob=text(form.glob),
         path_glob=text(form.path_glob),

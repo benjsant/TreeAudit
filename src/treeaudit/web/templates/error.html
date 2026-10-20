@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Erreur {{ code }}{% endblock %}
+{% block title %}Oups{% endblock %}
 {% block content %}
-<h1>Erreur {{ code }}</h1>
-<p class="banner error" role="alert">{{ message }}</p>
-<p><a href="/">Retour à l'accueil</a></p>
+<h1>Oups…</h1>
+<p class="notice error" role="alert">{{ message }}</p>
+<p class="muted">Code {{ code }}</p>
+<p><a class="button" href="/">Retour à l'accueil</a></p>
 {% endblock %}

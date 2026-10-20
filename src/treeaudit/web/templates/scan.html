@@ -1,91 +1,95 @@
 {% extends "base.html" %}
-{% block title %}Scan {{ scan.id }}{% endblock %}
+{% block title %}Bilan · {{ title }}{% endblock %}
 {% block content %}
-<h1>Scan {{ scan.id }} <span class="badge status-{{ scan.status }}">{{ scan.status | status }}</span></h1>
+<p class="steps">1. Choisir le dossier › 2. Analyse › <strong>3. Bilan</strong></p>
+<h1>📁 {{ title }}</h1>
+<p class="lead">{{ scan.allocated_size | size }} · {{ scan.files | number }} fichiers · {{ scan.dirs | number }} dossiers · analysé le {{ scan.started_at | date }}</p>
 {% if scan.status != "complete" %}
-  <p class="banner warn" role="alert">
-    Ce scan n'est pas complet ({{ scan.status | status }}) : les totaux ne couvrent pas tout le dossier.
-    {% if scan.failure %}Cause : {{ scan.failure }}{% endif %}
-    {% if scan.errors %}Voir les {{ scan.errors }} erreur(s) en bas de page.{% endif %}
+  <p class="notice warn" role="alert">
+    L'analyse n'a pas pu tout voir ({{ scan.status | status }}){% if scan.errors %} : {{ scan.errors }} élément(s) inaccessible(s){% endif %}. Les chiffres ci-dessous peuvent être incomplets. Détails en bas de page.
   </p>
 {% endif %}
-<dl class="stats">
-  <dt>Dossier</dt><dd>{{ scan.root_id }}{% if scan.subpath %} / {{ scan.subpath }}{% endif %}</dd>
-  <dt>Date</dt><dd>{{ scan.started_at | date }}</dd>
-  <dt>Entrées</dt><dd>{{ scan.entries }} ({{ scan.files }} fichiers, {{ scan.dirs }} dossiers)</dd>
-  <dt>Taille</dt><dd>{{ scan.logical_size | size }} (place occupée {{ scan.allocated_size | size }})</dd>
-  <dt>Erreurs / exclusions</dt><dd>{{ scan.errors }} / {{ scan.exclusions }}</dd>
-</dl>
-<p class="links">
-  <a href="/scans/{{ scan.id }}/parasites">Dossiers parasites</a>
-  <a href="/scans/{{ scan.id }}/search">Rechercher</a>
-  <a href="/export/scans/{{ scan.id }}.json">Exporter (JSON)</a>
-  <a href="/export/scans/{{ scan.id }}/entries.csv">Inventaire complet (CSV)</a>
-</p>
 
-<section aria-labelledby="space-title">
-  <h2 id="space-title">Répartition de l'espace</h2>
-  <nav class="crumbs" aria-label="Dossier exploré">
-    {% for crumb in crumbs %}{% if not loop.first %} / {% endif %}<a href="/scans/{{ scan.id }}?dir={{ crumb.entry_id }}">{{ crumb.name or "racine" }}</a>{% endfor %}
-  </nav>
-  <p class="muted">{{ node.size | size if node.size is not none else "taille inconnue (dossier pas entièrement parcouru)" }} dans ce dossier ; {{ total_children }} élément(s), {{ children | length }} affiché(s), les plus gros d'abord.</p>
-  <table class="space">
-    <thead><tr><th scope="col">Nom</th><th scope="col" class="num">Taille</th><th scope="col">Part</th><th scope="col" class="num">Fichiers</th></tr></thead>
-    <tbody>
-    {% for child in children %}
-      <tr>
-        <td class="path">
-          {% if child.kind == "dir" %}<a href="/scans/{{ scan.id }}?dir={{ child.entry_id }}">📁 {{ child.name }}</a>
-          {% elif child.kind == "symlink" %}🔗 {{ child.name }} <span class="muted">(lien, non suivi)</span>
-          {% else %}{{ child.name }}{% endif %}
-        </td>
-        <td class="num">{{ child.size | size if child.size is not none else "?" }}</td>
-        <td>{% if node.size and child.size is not none %}<meter min="0" max="{{ node.size }}" value="{{ child.size }}">{{ (100 * child.size / node.size) | round(1) }} %</meter>{% endif %}</td>
-        <td class="num">{{ child.files if child.files is not none else "" }}</td>
-      </tr>
+<div class="tiles">
+  <section class="tile">
+    <h2>🧹 À nettoyer</h2>
+    {% if safe_count %}
+      <p class="big-number">{{ safe_size | size }}</p>
+      <p>récupérables <strong>sans risque</strong> ({{ safe_count }} élément{{ "s" if safe_count > 1 else "" }} : caches, dépendances…)</p>
     {% else %}
-      <tr><td colspan="4">Dossier vide.</td></tr>
+      <p class="big-number">Rien</p><p>de recréable sans risque n'a été trouvé.</p>
+    {% endif %}
+    {% if check_count %}<p class="muted">+ {{ check_count }} élément(s) à vérifier ({{ check_size | size }})</p>{% endif %}
+    <a class="button primary" href="/scans/{{ scan.id }}/parasites">Voir et nettoyer</a>
+  </section>
+
+  <section class="tile">
+    <h2>📑 Doublons</h2>
+    {% if dupes %}
+      <p class="big-number">{{ dupes.recoverable | size }}</p>
+      <p>en double ({{ dupes.removable }} copie(s) en trop)</p>
+      <a class="button primary" href="/dupes/{{ dupes.run.id }}">Voir les doublons</a>
+    {% else %}
+      <p>Pas encore cherchés : TreeAudit lit les fichiers de même taille pour les comparer.</p>
+      <div class="actions">
+        <button type="button" class="button primary" data-start-dupes data-scan="{{ scan.id }}" data-micro="0">Chercher les doublons</button>
+        <p class="error-text" data-error role="alert" hidden></p>
+      </div>
+    {% endif %}
+    {% if micro %}
+      <p class="muted"><a href="/dupes/{{ micro.run.id }}">Petits fichiers en double : {{ micro.removable }}</a></p>
+    {% else %}
+      <div class="actions"><button type="button" class="button small" data-start-dupes data-scan="{{ scan.id }}" data-micro="1">Petits fichiers en double</button><p class="error-text" data-error role="alert" hidden></p></div>
+    {% endif %}
+  </section>
+
+  <section class="tile">
+    <h2>📊 Où va la place ?</h2>
+    <ul class="bars">
+    {% for child in biggest %}
+      <li>
+        <span class="bar-label">{{ "📁 " if child.kind == "dir" else "" }}{{ child.name }}</span>
+        <span class="bar-size">{{ child.size | size if child.size is not none else "?" }}</span>
+        {% if start and start.size and child.size is not none %}<meter min="0" max="{{ start.size }}" value="{{ child.size }}"></meter>{% endif %}
+      </li>
     {% endfor %}
-    </tbody>
-  </table>
-</section>
+    </ul>
+    <a class="button primary" href="/scans/{{ scan.id }}/space">Explorer</a>
+  </section>
+</div>
 
-<section aria-labelledby="dupes-title" id="doublons">
-  <h2 id="dupes-title">Doublons</h2>
-  <div class="actions">
-    <button type="button" data-start-dupes data-scan="{{ scan.id }}" data-micro="0">Chercher les doublons (≥ 1 Kio)</button>
-    <button type="button" data-start-dupes data-scan="{{ scan.id }}" data-micro="1">Micro-nettoyage (petits fichiers et fichiers vides)</button>
-    <p class="error-text" data-error role="alert" hidden></p>
-  </div>
-  {% if runs %}
-  <ul>
-    {% for run in runs %}<li><a href="/dupes/{{ run.id }}">Analyse {{ run.id }}</a> — {{ run.status | status }}, {{ run.files_hashed }} fichiers lus</li>{% endfor %}
-  </ul>
-  {% endif %}
-</section>
+<form class="search-simple" method="get" action="/scans/{{ scan.id }}/search" role="search">
+  <label for="q">🔎 Chercher un fichier</label>
+  <input id="q" name="q" type="search" placeholder="une partie du nom, par exemple : facture">
+  <button type="submit" class="button">Chercher</button>
+</form>
 
-<section aria-labelledby="ext-title">
-  <h2 id="ext-title">Extensions (par taille)</h2>
+<details class="tech">
+  <summary>Détails techniques</summary>
+  <p class="links">
+    <a href="/export/scans/{{ scan.id }}.json">Exporter le bilan (JSON)</a>
+    <a href="/export/scans/{{ scan.id }}/entries.csv">Liste complète des fichiers (CSV)</a>
+  </p>
+  <dl class="stats">
+    <dt>Analyse n°</dt><dd>{{ scan.id }} ({{ scan.status | status }})</dd>
+    <dt>Taille des fichiers</dt><dd>{{ scan.logical_size | size }} (place occupée sur le disque : {{ scan.allocated_size | size }})</dd>
+    <dt>Éléments</dt><dd>{{ scan.entries | number }}, dont {{ scan.symlinks }} lien(s) et {{ scan.others }} fichier(s) spéciaux</dd>
+  </dl>
+  <h3>Types de fichiers (par taille)</h3>
   <table>
-    <thead><tr><th scope="col">Extension</th><th scope="col" class="num">Fichiers</th><th scope="col" class="num">Taille</th></tr></thead>
     <tbody>
     {% for ext in extensions %}
-      <tr><td>{{ ("." ~ ext.extension) if ext.extension else "(sans extension)" }}</td><td class="num">{{ ext.files }}</td><td class="num">{{ ext.logical_size | size }}</td></tr>
+      <tr><td>{{ ("." ~ ext.extension) if ext.extension else "(sans extension)" }}</td><td class="num">{{ ext.files | number }} fichiers</td><td class="num">{{ ext.logical_size | size }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
-</section>
-
-{% if errors %}
-<section aria-labelledby="errors-title">
-  <h2 id="errors-title">Erreurs ({{ scan.errors }})</h2>
-  <ul class="plain">{% for e in errors %}<li><code>{{ e.operation }}</code> <span class="path">{{ e.rel_path_display or "." }}</span> : {{ e.message }}</li>{% endfor %}</ul>
-</section>
-{% endif %}
-{% if exclusions %}
-<section aria-labelledby="excl-title">
-  <h2 id="excl-title">Exclusions</h2>
-  <ul class="plain">{% for x in exclusions %}<li><code>{{ x.reason }}</code> <span class="path">{{ x.rel_path_display }}</span></li>{% endfor %}</ul>
-</section>
-{% endif %}
+  {% if errors %}
+    <h3>Éléments inaccessibles ({{ scan.errors }})</h3>
+    <ul class="plain">{% for e in errors %}<li><span class="path">{{ e.rel_path_display or "." }}</span> — {{ e.message }} <code>{{ e.operation }}</code></li>{% endfor %}</ul>
+  {% endif %}
+  {% if exclusions %}
+    <h3>Non parcourus volontairement</h3>
+    <ul class="plain">{% for x in exclusions %}<li><span class="path">{{ x.rel_path_display }}</span> — autre disque monté ici <code>{{ x.reason }}</code></li>{% endfor %}</ul>
+  {% endif %}
+</details>
 {% endblock %}

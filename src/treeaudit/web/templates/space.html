@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Place · {{ title }}{% endblock %}
+{% block content %}
+<p class="back"><a href="/scans/{{ scan.id }}">← Bilan de {{ title }}</a></p>
+<h1>📊 Où va la place ?</h1>
+<nav class="crumbs" aria-label="Dossier affiché">
+  {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/space?dir={{ crumb.entry_id }}">{{ crumb.name or title }}</a>{% endfor %}
+</nav>
+<p class="lead">{{ node.size | size if node.size is not none else "Taille inconnue (dossier pas entièrement lu)" }} dans ce dossier. Clique sur un dossier pour y entrer.</p>
+<ul class="bars wide">
+{% for child in children %}
+  <li>
+    <span class="bar-label">
+      {% if child.kind == "dir" %}<a href="/scans/{{ scan.id }}/space?dir={{ child.entry_id }}">📁 {{ child.name }}</a>
+      {% elif child.kind == "symlink" %}🔗 {{ child.name }} <span class="muted">(raccourci, non suivi)</span>
+      {% else %}📄 {{ child.name }}{% endif %}
+    </span>
+    <span class="bar-size">{{ child.size | size if child.size is not none else "?" }}{% if child.files %} · {{ child.files | number }} fichiers{% endif %}</span>
+    {% if node.size and child.size is not none %}<meter min="0" max="{{ node.size }}" value="{{ child.size }}"></meter>{% endif %}
+  </li>
+{% else %}
+  <li class="muted">Dossier vide.</li>
+{% endfor %}
+</ul>
+{% if total_children > children | length %}<p class="muted">Les {{ children | length }} plus gros éléments sur {{ total_children | number }} sont affichés.</p>{% endif %}
+{% endblock %}

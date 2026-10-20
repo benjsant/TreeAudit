@@ -182,3 +182,11 @@ Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers
 - Le sélecteur de dossier liste **en direct** les sous-dossiers de la zone autorisée : noms seulement, liens symboliques jamais proposés ni suivis, chemin relatif validé puis ouvert composant par composant (D-021).
 - Exports JSON et CSV locaux. Dans les CSV, une cellule qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est préfixée par une apostrophe, pour qu'un nom de fichier ne puisse pas s'exécuter comme une formule dans un tableur.
 - L'exploration de l'espace navigue par identifiant d'entrée de l'index (`?dir=<n>`), jamais par chemin.
+
+## D-029 — Interface simple, en langage courant (2026-10-20)
+- Retour du mainteneur : la première interface était trop technique. Elle devient un parcours guidé en trois étapes (choisir un dossier, analyse, bilan), avec de gros boutons et peu de choix par écran.
+- Vocabulaire : « analyse » (et non scan), « à nettoyer » (et non parasites), « éléments », « place occupée ». Le vocabulaire technique (règles, empreintes, exclusions, erreurs, exports) reste disponible dans des sections repliées « Pourquoi ? » et « Détails techniques ».
+- Le bilan d'une analyse tient en trois tuiles : ce qui peut être nettoyé sans risque, les doublons, où va la place ; plus une recherche simple « nom contient » (les critères avancés sont repliés).
+- Nettoyage : les éléments sûrs (vert) sont cochés d'avance (rien n'est jamais exécuté) ; les doublons ne sont jamais cochés d'avance (ce sont des fichiers de l'utilisateur).
+- Fin d'une analyse : redirection automatique vers son bilan.
+- Aucune règle de sécurité ne change (D-025, D-026, D-028).

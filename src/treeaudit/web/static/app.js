@@ -91,6 +91,8 @@ function setupJobMonitor() {
     }
   });
 
+  let wasRunning = false;
+
   async function refresh() {
     let data;
     try {
@@ -106,33 +108,38 @@ function setupJobMonitor() {
     field("elapsed").textContent = String(job.elapsed);
     const p = job.progress;
     if (job.kind === "scan") {
-      field("progress").textContent =
-        `${p.entries} entrées, ${p.errors} erreurs, ${p.exclusions} exclusions`;
+      field("progress").textContent = `${p.entries.toLocaleString("fr-FR")} éléments vus`;
       field("current").textContent = p.current_dir || "–";
     } else {
       field("progress").textContent =
-        `${p.stage || "préparation"} : ${p.files_hashed}/${p.candidates} fichiers, ` +
-        `${humanSize(p.bytes_read)} lus, ${p.errors} erreurs`;
+        `${p.files_hashed.toLocaleString("fr-FR")} / ${p.candidates.toLocaleString("fr-FR")} ` +
+        `fichiers comparés (${humanSize(p.bytes_read)} lus)`;
       field("current").textContent = "–";
     }
     if (job.running) {
+      wasRunning = true;
       field("state").textContent = job.cancel_requested ? "annulation en cours…" : "en cours";
       setTimeout(refresh, 1000);
       return;
     }
-    field("state").textContent = job.error ? "échec" : `terminé (${job.status || "?"})`;
+    field("state").textContent = job.error ? "échec" : "terminé";
     if (cancel) cancel.hidden = true;
     if (job.error) {
       field("error").textContent = job.error;
       field("error").hidden = false;
     }
     const link = field("result");
+    let target = null;
     if (job.kind === "scan" && job.scan_id) {
-      link.href = `/scans/${encodeURIComponent(job.scan_id)}`;
-      link.hidden = false;
+      target = `/scans/${encodeURIComponent(job.scan_id)}`;
     } else if (job.kind === "dupes" && job.run_id) {
-      link.href = `/dupes/${encodeURIComponent(job.run_id)}`;
+      target = `/dupes/${encodeURIComponent(job.run_id)}`;
+    }
+    if (target) {
+      link.href = target;
       link.hidden = false;
+      // A finished job goes straight to its result; an error stays on screen.
+      if (!job.error && wasRunning) window.location.assign(target);
     }
   }
   refresh();

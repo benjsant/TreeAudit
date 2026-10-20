@@ -208,3 +208,11 @@ def test_describe() -> None:
         text == "extension .jpg ET regex de nom '^IMG' (partiel) ET taille ≥ 10 Mio ; casse ignorée"
     )
     assert describe(FilterSpec()) == "aucun critère (tout le scan)"
+
+
+def test_name_contains_ignores_case() -> None:
+    compiled = compile_filter(FilterSpec(name_contains="Facture"))
+    assert compiled.matches("facture-2024.pdf", "docs/facture-2024.pdf")
+    assert compiled.matches("MA FACTURE.PDF", "MA FACTURE.PDF")
+    assert not compiled.matches("devis.pdf", "factures/devis.pdf")  # the name, not the path
+    assert describe(FilterSpec(name_contains="facture")) == "nom contenant 'facture'"

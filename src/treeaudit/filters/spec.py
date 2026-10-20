@@ -39,6 +39,8 @@ class FilterSpec:
     """What the user asked for. Every criterion is optional; all must match."""
 
     extensions: tuple[str, ...] = ()
+    name_contains: str | None = None
+    """Simple search: the name contains this text, whatever the case."""
     name_exact: str | None = None
     name_glob: str | None = None
     path_glob: str | None = None
@@ -72,9 +74,12 @@ class CompiledFilter:
     name_matchers: tuple[Matcher, ...] = ()
     path_matchers: tuple[Matcher, ...] = ()
     name_exact: str | None = None
+    name_contains: str | None = None
 
     def matches(self, name: str, rel_path: str) -> bool:
         """Text criteria only; extension, kind and size are applied in SQL."""
+        if self.name_contains is not None and self.name_contains not in name.casefold():
+            return False
         if self.name_exact is not None:
             candidate = name.casefold() if self.spec.ignore_case else name
             if candidate != self.name_exact:
@@ -85,7 +90,12 @@ class CompiledFilter:
 
     @property
     def needs_text(self) -> bool:
-        return bool(self.name_matchers or self.path_matchers or self.name_exact is not None)
+        return bool(
+            self.name_matchers
+            or self.path_matchers
+            or self.name_exact is not None
+            or self.name_contains is not None
+        )
 
 
 def parse_size(text: str) -> int:
@@ -275,6 +285,10 @@ def compile_filter(spec: FilterSpec) -> CompiledFilter:
     if spec.path_regex is not None:
         regex = compile_regex(spec.path_regex, ignore_case=spec.ignore_case, what="regex de chemin")
         paths.append(Matcher(regex, whole=spec.full_match))
+    name_contains = None
+    if spec.name_contains is not None:
+        _check_length(spec.name_contains, "texte recherché")
+        name_contains = spec.name_contains.casefold()
     name_exact = None
     if spec.name_exact is not None:
         _check_length(spec.name_exact, "nom exact")
@@ -291,6 +305,7 @@ def compile_filter(spec: FilterSpec) -> CompiledFilter:
         name_matchers=tuple(names),
         path_matchers=tuple(paths),
         name_exact=name_exact,
+        name_contains=name_contains,
     )
 
 
@@ -306,6 +321,8 @@ def describe(spec: FilterSpec) -> str:
     parts: list[str] = []
     if spec.extensions:
         parts.append("extension " + ", ".join(f".{e}" for e in spec.extensions))
+    if spec.name_contains is not None:
+        parts.append(f"nom contenant {spec.name_contains!r}")
     if spec.name_exact is not None:
         parts.append(f"nom exact {spec.name_exact!r}")
     if spec.name_glob is not None:

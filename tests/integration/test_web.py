@@ -126,7 +126,7 @@ def assert_safe_html(text: str) -> None:
 def test_index_and_security_headers(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "Disque &lt;test&gt;" in response.text
+    assert "Analyser un dossier" in response.text
     assert "script-src" not in response.headers["content-security-policy"]  # default-src 'self'
     assert response.headers["content-security-policy"].startswith("default-src 'self'")
     assert_safe_html(response.text)
@@ -217,14 +217,17 @@ def test_scan_page_and_explorer(client: TestClient, scanned: int) -> None:
     assert page.status_code == 200
     assert "photos" in page.text
     assert_safe_html(page.text)
-    match = re.search(rf'href="/scans/{scanned}\?dir=(\d+)">📁 photos', page.text)
+    assert "Où va la place" in page.text and "À nettoyer" in page.text
+    space = client.get(f"/scans/{scanned}/space")
+    assert_safe_html(space.text)
+    match = re.search(rf'href="/scans/{scanned}/space\?dir=(\d+)">📁 photos', space.text)
     assert match is not None
-    inside = client.get(f"/scans/{scanned}?dir={match.group(1)}")
+    inside = client.get(f"/scans/{scanned}/space?dir={match.group(1)}")
     assert inside.status_code == 200 and "a.jpg" in inside.text
     assert_safe_html(inside.text)
-    assert client.get(f"/scans/{scanned}?dir=999999").status_code == 404
+    assert client.get(f"/scans/{scanned}/space?dir=999999").status_code == 404
     assert client.get("/scans/999").status_code == 404
-    assert "<h1>Erreur 404</h1>" in client.get("/scans/999").text
+    assert "Oups" in client.get("/scans/999").text
 
 
 def test_job_page(client: TestClient, scanned: int) -> None:
@@ -267,7 +270,7 @@ def test_duplicates_page_and_command(client: TestClient, scanned: int) -> None:
     run_id = snapshot["run_id"]
     page = client.get(f"/dupes/{run_id}")
     assert page.status_code == 200
-    assert "G1" in page.text
+    assert "exemplaires" in page.text
     assert_safe_html(page.text)
 
     url = f"/api/dupes/{run_id}/command"
@@ -288,7 +291,11 @@ def test_duplicates_page_and_command(client: TestClient, scanned: int) -> None:
 def test_search_page(client: TestClient, scanned: int) -> None:
     page = client.get(f"/scans/{scanned}/search", params={"go": "1", "ext": "jpg"})
     assert page.status_code == 200
-    assert "3 résultat(s)" in page.text
+    assert "3 résultats" in page.text
+    simple = client.get(f"/scans/{scanned}/search", params={"q": "nothing-like-this"})
+    assert simple.status_code == 200 and "0 résultat" in simple.text
+    simple = client.get(f"/scans/{scanned}/search", params={"q": "A.JPG"})
+    assert "1 résultat" in simple.text  # any case
     assert_safe_html(page.text)
     reflected = client.get(f"/scans/{scanned}/search", params={"go": "1", "glob": XSS})
     assert_safe_html(reflected.text)

@@ -1,58 +1,64 @@
 {% extends "base.html" %}
-{% block title %}Doublons · analyse {{ run.id }}{% endblock %}
+{% block title %}Doublons · {{ title }}{% endblock %}
 {% block content %}
-<h1>{{ "Micro-nettoyage" if report.micro else "Doublons exacts" }} <span class="muted">· analyse {{ run.id }}, scan <a href="/scans/{{ run.scan_id }}">{{ run.scan_id }}</a></span></h1>
-{% if run.status != "complete" %}<p class="banner warn" role="alert">L'analyse n'est pas complète ({{ run.status | status }}) : des doublons peuvent manquer.{% if run.failure %} Cause : {{ run.failure }}{% endif %}</p>{% endif %}
-<dl class="stats">
-  <dt>Groupes</dt><dd>{{ report.groups | length }}</dd>
-  <dt>Copies supprimables</dt><dd>{{ removable }} ({{ recoverable | size }} récupérables)</dd>
-  <dt>Copies protégées 🔒</dt><dd>{{ report.protected_copies }} (fichiers-marqueurs, dépôts git, logiciels et dépendances installés : jamais proposées)</dd>
-  <dt>Liens physiques</dt><dd>{{ report.hardlinked_inodes }} fichier(s) à plusieurs noms (une seule place sur le disque, pas des doublons)</dd>
-</dl>
-<p class="links"><a href="/export/dupes/{{ run.id }}.csv">CSV</a> <a href="/export/dupes/{{ run.id }}.json">JSON</a></p>
-{% if report.groups | selectattr("is_empty_files") | list %}
-<p class="banner warn">Fichiers vides : les supprimer ne libère aucune place, et certains programmes en ont besoin (marqueurs, verrous, jeux). Ils ne sont jamais cochés par « tout cocher » : choisis chaque zone toi-même.</p>
-{% endif %}
+<p class="back"><a href="/scans/{{ scan.id }}">← Bilan de {{ title }}</a></p>
+<h1>📑 {{ "Petits fichiers en double" if report.micro else "Doublons" }}</h1>
+<p class="lead">
+  {% if report.groups %}{{ removable }} copie(s) en trop, {{ recoverable | size }} à récupérer. Pour chaque fichier, on garde un exemplaire (★) et tu choisis quels groupes nettoyer.
+  {% else %}Aucun doublon à proposer 🎉{% endif %}
+</p>
+{% if run.status != "complete" %}<p class="notice warn" role="alert">La recherche n'a pas pu tout lire : il peut manquer des doublons.</p>{% endif %}
+{% if report.protected_copies %}<p class="muted">🔒 {{ report.protected_copies | number }} copie(s) dans des logiciels, jeux ou projets ne sont jamais proposées : elles sont nécessaires là où elles sont.</p>{% endif %}
+{% if report.groups | selectattr("is_empty_files") | list %}<p class="notice warn">Fichiers vides : ils ne prennent pas de place et certains programmes en ont besoin. Ne les coche que si tu sais à quoi ils servent.</p>{% endif %}
 
-<section data-command-builder data-endpoint="/api/dupes/{{ run.id }}/command" data-kind="dupes">
+{% if report.groups %}
+<div data-command-builder data-endpoint="/api/dupes/{{ run.id }}/command" data-kind="dupes">
   <div class="actions">
-    <button type="button" data-select-all-groups>Cocher tous les groupes (sauf fichiers vides)</button>
-    <button type="button" data-select-none>Tout décocher</button>
+    <button type="button" class="button small" data-select-all-groups>Tout cocher (sauf fichiers vides)</button>
+    <button type="button" class="button small" data-select-none>Tout décocher</button>
   </div>
+  <ul class="items">
   {% for group in groups %}
-  <article class="group">
-    <h2>
-      <input type="checkbox" data-pick="{{ group.number }}" data-empty="{{ 1 if group.is_empty_files else 0 }}" id="group-{{ group.number }}">
-      <label for="group-{{ group.number }}">G{{ group.number }}</label>
-      — {{ group.copies | length }} copies de {{ group.size | size }} → {{ group.recoverable | size }} récupérables, {{ group.removable | length }} élément(s) en moins
-      <span class="muted">({{ ("fichiers vides dans " ~ group.zone) if group.is_empty_files else "contenu identique, SHA-256" }})</span>
-    </h2>
     {% set kept = group.keep | map(attribute="entry_id") | list %}
-    <ul class="copies">
-    {% for copy in group.copies %}{% if loop.index <= copies or copy.entry_id in kept %}
-      <li>
-        {% if copy.protection %}🔒 <span class="path">{{ copy.rel_path_display }}</span> <span class="muted">— {{ copy.protection }}</span>
-        {% else %}
-        <label><input type="radio" name="keep-{{ group.number }}" value="{{ loop.index }}" {% if copy.entry_id in kept %}checked data-default{% endif %} {% if group.is_empty_files %}disabled{% endif %}>
-          {% if copy.entry_id in kept %}★ {% endif %}<span class="path">{{ copy.rel_path_display }}</span></label>
-          <span class="muted">({{ copy.mtime_ns | date }})</span>
-        {% endif %}
-      </li>
-    {% endif %}{% endfor %}
-    </ul>
-    {% if group.copies | length > copies %}<p class="muted">… {{ group.copies | length - copies }} autre(s) copie(s) — <a href="/dupes/{{ run.id }}?limit={{ limit }}&amp;copies={{ group.copies | length }}">tout afficher</a></p>{% endif %}
-    <p class="muted">À garder : {{ group.keep_reasons | join(" ; ") }}</p>
-  </article>
-  {% else %}
-  <p>Aucun doublon proposable.</p>
+    <li class="item">
+      <label class="item-main">
+        <input type="checkbox" data-pick="{{ group.number }}" data-empty="{{ 1 if group.is_empty_files else 0 }}">
+        <span class="item-text">
+          {% if group.is_empty_files %}
+            <strong>{{ group.copies | length | number }} fichiers vides</strong> dans <span class="path">{{ group.zone }}</span>
+          {% else %}
+            <strong>{{ group.copies | length }} exemplaires</strong> de {{ group.size | size }} <span class="size">→ {{ group.recoverable | size }} à récupérer</span><br>
+            On garde : {% for copy in group.copies if copy.entry_id in kept and not copy.protection %}★ <span class="path">{{ copy.rel_path_display }}</span>{% endfor %}
+          {% endif %}
+        </span>
+      </label>
+      <details class="why">
+        <summary>{{ "Voir les fichiers" if group.is_empty_files else "Voir les copies / changer celle à garder" }}</summary>
+        <ul class="plain small">
+        {% for copy in group.copies %}{% if loop.index <= copies or copy.entry_id in kept %}
+          <li>
+            {% if copy.protection %}🔒 <span class="path">{{ copy.rel_path_display }}</span> <span class="muted">({{ copy.protection }})</span>
+            {% elif group.is_empty_files %}<span class="path">{{ copy.rel_path_display }}</span>
+            {% else %}<label><input type="radio" name="keep-{{ group.number }}" value="{{ loop.index }}" {% if copy.entry_id in kept %}checked data-default{% endif %}> garder <span class="path">{{ copy.rel_path_display }}</span></label> <span class="muted">({{ copy.mtime_ns | date }})</span>{% endif %}
+          </li>
+        {% endif %}{% endfor %}
+        </ul>
+        {% if group.copies | length > copies %}<p class="muted">… et {{ (group.copies | length) - copies }} autre(s). <a href="/dupes/{{ run.id }}?limit={{ limit }}&amp;copies={{ group.copies | length }}">Tout afficher</a></p>{% endif %}
+        {% if not group.is_empty_files %}<p class="muted small">Exemplaire gardé choisi car : {{ group.keep_reasons | join(" ; ") }}</p>{% endif %}
+      </details>
+    </li>
   {% endfor %}
+  </ul>
   {% if report.groups | length > limit %}<p><a href="/dupes/{{ run.id }}?limit={{ report.groups | length }}">Afficher les {{ report.groups | length }} groupes</a></p>{% endif %}
   {% set allow_archive = false %}
   {% include "command_panel.html" %}
-</section>
-
-{% if errors %}
-<section><h2>Fichiers non lus ou exclus</h2>
-<ul class="plain">{% for e in errors %}<li><code>{{ e.operation }}</code> <span class="path">{{ e.rel_path_display }}</span> : {{ e.message }}</li>{% endfor %}</ul></section>
+</div>
 {% endif %}
+
+<details class="tech">
+  <summary>Détails techniques</summary>
+  <p>Recherche n° {{ run.id }} ({{ run.status | status }}) : {{ run.files_hashed | number }} fichier(s) lus et comparés par empreinte SHA-256. {{ report.hardlinked_inodes }} fichier(s) ont plusieurs noms sur le disque (liens physiques) : ce ne sont pas des doublons.</p>
+  <p class="links"><a href="/export/dupes/{{ run.id }}.csv">Exporter (CSV)</a> <a href="/export/dupes/{{ run.id }}.json">Exporter (JSON)</a></p>
+  {% if errors %}<ul class="plain">{% for e in errors %}<li><span class="path">{{ e.rel_path_display }}</span> — {{ e.message }} <code>{{ e.operation }}</code></li>{% endfor %}</ul>{% endif %}
+</details>
 {% endblock %}

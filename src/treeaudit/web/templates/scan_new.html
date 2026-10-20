@@ -1,43 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Nouveau scan{% endblock %}
+{% block title %}Choisir un dossier{% endblock %}
 {% block content %}
-<h1>Nouveau scan</h1>
+<p class="steps"><strong>1. Choisir le dossier</strong> › 2. Analyse › 3. Bilan</p>
 {% if root is none %}
-  <p>Choisis la zone dans laquelle chercher le dossier à analyser :</p>
-  <ul>
+  <h1>Quel disque ou dossier ?</h1>
+  <ul class="cards">
   {% for status in roots %}
-    <li><a href="/scan/new?root={{ status.root.id }}">{{ status.root.label }}</a></li>
+    <li><a class="card link" href="/scan/new?root={{ status.root.id }}"><span class="card-title">💽 {{ status.root.label }}</span></a></li>
   {% else %}
-    <li>Aucune zone utilisable : vérifie la configuration.</li>
+    <li class="muted">Aucun dossier autorisé.</li>
   {% endfor %}
   </ul>
 {% else %}
-  <nav class="crumbs" aria-label="Dossier courant">
-    <a href="/scan/new?root={{ root.id }}">{{ root.label }}</a>
-    {% for path, name in crumbs %} / <a href="/scan/new?root={{ root.id }}&amp;path={{ path | urlencode }}">{{ name }}</a>{% endfor %}
+  <h1>Quel dossier veux-tu analyser ?</h1>
+  <nav class="crumbs" aria-label="Où tu es">
+    <a href="/scan/new?root={{ root.id }}">💽 {{ root_name }}</a>
+    {% for path, name in crumbs %} › <a href="/scan/new?root={{ root.id }}&amp;path={{ path | urlencode }}">{{ name }}</a>{% endfor %}
   </nav>
 
-  <div class="actions">
-    <button type="button" class="primary" data-start-scan data-root="{{ root.id }}" data-path="{{ listing.path }}">
-      Analyser {% if listing.path %}« {{ listing.path }} »{% else %}toute la zone{% endif %}
+  <div class="choice">
+    <button type="button" class="button big primary" data-start-scan data-root="{{ root.id }}" data-path="{{ listing.path }}">
+      Analyser « {{ current_name }} »
     </button>
     <p class="error-text" data-error role="alert" hidden></p>
   </div>
 
-  <h2>Sous-dossiers</h2>
-  {% if parent is not none %}
-    <p><a href="/scan/new?root={{ root.id }}&amp;path={{ parent | urlencode }}">⬑ dossier parent</a></p>
-  {% endif %}
+  <h2>…ou ouvrir un sous-dossier</h2>
   <ul class="folders">
+  {% if parent is not none %}
+    <li><a href="/scan/new?root={{ root.id }}&amp;path={{ parent | urlencode }}">⬆ Remonter</a></li>
+  {% endif %}
   {% for name in listing.folders %}
     {% set child = (listing.path ~ "/" ~ name) if listing.path else name %}
     <li><a href="/scan/new?root={{ root.id }}&amp;path={{ child | urlencode }}">📁 {{ name }}</a></li>
   {% else %}
-    <li class="muted">Aucun sous-dossier.</li>
+    <li class="muted">Pas de sous-dossier ici.</li>
   {% endfor %}
   </ul>
-  {% if listing.truncated %}<p class="muted">Liste tronquée aux {{ listing.folders | length }} premiers dossiers.</p>{% endif %}
-  {% if listing.hidden %}<p class="muted">{{ listing.hidden }} dossier(s) au nom non affichable (caractères de contrôle ou UTF-8 invalide) non listé(s) ; ils seront tout de même analysés avec leur dossier parent.</p>{% endif %}
-  <p class="muted">Les liens symboliques ne sont jamais suivis ni proposés.</p>
+  {% if listing.truncated %}<p class="muted">Seuls les {{ listing.folders | length }} premiers dossiers sont affichés.</p>{% endif %}
+  {% if listing.hidden %}<p class="muted">{{ listing.hidden }} dossier(s) au nom illisible ne sont pas affichés, mais ils seront bien analysés.</p>{% endif %}
 {% endif %}
 {% endblock %}

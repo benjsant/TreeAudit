@@ -1,14 +1,22 @@
-<fieldset class="command-panel">
-  <legend>Commande pour la sélection</legend>
-  <label><input type="radio" name="action" value="trash" checked> Corbeille (réversible)</label>
-  <label><input type="radio" name="action" value="delete"> <span class="danger">Suppression définitive</span></label>
-  {% if allow_archive is not defined or allow_archive %}<label><input type="radio" name="action" value="archive"> Archive .tar.gz (l'original n'est pas touché)</label>{% endif %}
-  <div class="actions"><button type="button" class="primary" data-build-command>Générer la commande</button></div>
+<section class="panel final-step" aria-labelledby="final-step-title">
+  <h2 id="final-step-title">Dernière étape</h2>
+  <p>Que faire de la sélection ?</p>
+  <div class="options">
+    <label class="option"><input type="radio" name="action" value="trash" checked> <span><strong>Mettre à la corbeille</strong> <span class="muted">— recommandé, tu peux récupérer les fichiers</span></span></label>
+    <label class="option"><input type="radio" name="action" value="delete"> <span><strong class="danger">Supprimer définitivement</strong> <span class="muted">— impossible à annuler</span></span></label>
+    {% if allow_archive is not defined or allow_archive %}
+    <label class="option"><input type="radio" name="action" value="archive"> <span><strong>Faire une archive de sauvegarde</strong> <span class="muted">— une copie compressée, rien n'est supprimé</span></span></label>
+    {% endif %}
+  </div>
+  <div class="actions"><button type="button" class="button primary big" data-build-command>Préparer la commande</button></div>
   <p class="error-text" data-error role="alert" hidden></p>
   <ul class="warnings" data-warnings></ul>
   <div data-command-output hidden>
-    <p>TreeAudit n'exécute rien : relis la commande, puis copie-la dans un terminal.</p>
-    <pre class="cmd" data-command-text></pre>
-    <button type="button" data-copy>Copier</button> <span class="muted" data-copy-status></span>
+    <ol class="howto">
+      <li>Clique sur « Copier ».</li>
+      <li>Ouvre un terminal, colle (Ctrl+Maj+V), relis, puis appuie sur Entrée.</li>
+    </ol>
+    <div class="actions"><button type="button" class="button primary" data-copy>📋 Copier</button> <span class="muted" data-copy-status></span></div>
+    <details><summary>Voir la commande</summary><pre class="cmd" data-command-text></pre></details>
   </div>
-</fieldset>
+</section>
