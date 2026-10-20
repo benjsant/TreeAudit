@@ -108,7 +108,12 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Empreintes réutilisées entre analyses (début, fin, complète).
 - [x] Résumés du bilan mis en cache.
 - [x] Base allégée (−24 %), cache SQLite et lots plus grands.
-- [ ] Mesure sur un vrai disque 5 400 tours (à froid), avant / après.
+- [x] Mesure sur un vrai disque 5 400 tours, à froid (2026-10-20) : disque USB 2,5 pouces ST1000LM025, ext4, dossier factice de 153 316 éléments et 527 Mo, cache du noyau vidé avant chaque mesure, une mesure par cas :
+  - analyse : 8,0 s → **4,3 s (−46 %)** ;
+  - doublons : 9,3 s → **7,0 s (−25 %)**, 338 → 307 Mio lus ;
+  - deuxième recherche de doublons : **0,1 s, 0 octet lu** ;
+  - mémoire maximale : 31 → 75 Mio (cache SQLite plus grand).
+  Le dossier factice étant écrit d'un seul tenant, ses fichiers sont contigus : sur un disque de sauvegarde fragmenté, l'ordre physique devrait apporter davantage.
 
 ## Phase 6 bis — Archivage vérifié (D-024)
 - [ ] Dossier de sortie dédié, déclaré et validé comme le dossier de données.
