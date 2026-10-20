@@ -35,6 +35,14 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - En cas d'incertitude, refuser l'accès ou marquer le scan `incomplete`.
 - **Limite** : le nombre de descripteurs ouverts croît avec la profondeur de l'arborescence. Une profondeur maximale configurable est appliquée ; la dépasser est une erreur signalée (scan `incomplete`).
 
+## Lecture du contenu (doublons, D-015)
+- Le contenu des fichiers n'est lu que pour calculer des empreintes SHA-256 ; il n'est jamais stocké ni journalisé (test : un contenu reconnaissable n'apparaît dans aucun fichier du dossier de données).
+- Chaque fichier est ouvert en redescendant depuis le descripteur de la racine, dossier par dossier, avec `O_NOFOLLOW` ; un lien substitué depuis le scan provoque une erreur, jamais une lecture hors de la racine.
+- Le fichier est ouvert avec `O_NONBLOCK` : une fifo substituée ne peut pas bloquer l'analyse ; il doit être un fichier régulier.
+- Son identité (périphérique, inode, taille, date de modification) doit correspondre au scan avant et après la lecture ; sinon il est exclu des groupes et signalé.
+- Quand le scan couvre toute la racine, la racine doit encore être le même dossier (même inode) qu'au moment du scan.
+- Mémoire bornée : lecture par blocs de 1 Mio ; au plus un descripteur par niveau de dossier.
+
 ## Effets de bord de la lecture
 - Sur un montage `:ro`, la lecture ne modifie rien.
 - En natif, lire un fichier peut mettre à jour sa date de dernier accès (atime), selon les options de montage (`relatime` par défaut). L'application tente `O_NOATIME`, qui n'est autorisé que pour les fichiers dont l'utilisateur est propriétaire ; sinon l'atime peut changer. Cette limite est documentée pour l'utilisateur.

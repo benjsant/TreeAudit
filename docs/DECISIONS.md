@@ -158,3 +158,14 @@ Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers
   - chaque chemin est échappé avec `shlex.quote` ; `--` sépare les options des chemins ; avec `tar`, les chemins relatifs sont préfixés par `./` ;
   - un chemin contenant des caractères de contrôle (retour à la ligne, tabulation…) ou de l'UTF-8 invalide ne reçoit **aucune commande**, avec une explication ;
   - TreeAudit n'exécute jamais ces commandes : aucun appel au shell n'existe dans le code (test statique).
+
+## D-026 — Doublons : micro-nettoyage et copies protégées (2026-10-20)
+- Analyse principale : fichiers d'au moins 1 Kio (`--min-size`). **Micro-nettoyage** (`--micro`) : fichiers de moins de 1 Kio et fichiers vides, triés par nombre d'éléments supprimables ; le but est de réduire aussi le nombre d'éléments.
+- Une copie **protégée** n'est jamais proposée à la suppression ; elle reste affichée (🔒) avec sa raison :
+  - fichier-marqueur (`__init__.py`, `.gitkeep`, `.keep`, `py.typed`, `.gitignore`, `.nojekyll`…) ;
+  - fichier situé dans un dépôt git ;
+  - fichier situé dans un logiciel ou des dépendances installés (`steamapps`, `compatdata`, `Program Files`, `drive_c`, `.wine`, `site-packages`, `node_modules`, `.venv`, `vendor`, `flatpak`, `snap`, dossiers `*.app`…) : les doublons y sont voulus (une copie par jeu, par environnement) et en retirer une casse le logiciel. Les dossiers de dépendances recréables se traitent en bloc avec `scan parasites`.
+- **Fichiers vides** : ils ne libèrent aucune place et des programmes peuvent en avoir besoin. Ils sont regroupés par zone (les deux premiers niveaux de dossier) et ne sont **jamais** inclus dans `--select all` : chaque zone doit être désignée explicitement.
+- Une copie à garder est suggérée pour chaque groupe, avec ses raisons (chemin sans « copie », « (1) », « backup », « old », « Downloads »… ; fichier le plus ancien ; chemin le plus court). Les copies protégées sont toujours gardées. L'utilisateur peut choisir une autre copie (`--keep`).
+- Les liens physiques ne sont pas des doublons : ils sont comptés à part.
+- Constat à l'origine de ces règles : sur l'arborescence synthétique, le micro-nettoyage proposait d'abord 149 880 fichiers vides d'une bibliothèque de type Steam et des fichiers internes à `node_modules` et `.venv`.

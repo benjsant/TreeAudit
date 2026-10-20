@@ -101,4 +101,49 @@ _V2 = (
     "CREATE INDEX entry_by_path ON entry (scan_id, rel_path)",
 )
 
-MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1, _V2)
+# v3: duplicate analyses (D-015). Only digests are stored, never file contents.
+_V3 = (
+    """
+    CREATE TABLE dup_run (
+        id              INTEGER PRIMARY KEY,
+        scan_id         INTEGER NOT NULL REFERENCES scan(id) ON DELETE CASCADE,
+        status          TEXT    NOT NULL CHECK (status IN (
+                            'pending', 'running', 'complete', 'incomplete', 'cancelled', 'failed'
+                        )),
+        started_at      TEXT    NOT NULL,
+        finished_at     TEXT,
+        options         TEXT    NOT NULL,
+        candidates      INTEGER NOT NULL DEFAULT 0,
+        files_hashed    INTEGER NOT NULL DEFAULT 0,
+        bytes_read      INTEGER NOT NULL DEFAULT 0,
+        errors          INTEGER NOT NULL DEFAULT 0,
+        failure         TEXT
+    )
+    """,
+    """
+    CREATE TABLE file_hash (
+        run_id          INTEGER NOT NULL REFERENCES dup_run(id) ON DELETE CASCADE,
+        entry_id        INTEGER NOT NULL,
+        size            INTEGER NOT NULL,
+        partial         BLOB,
+        full            BLOB,
+        PRIMARY KEY (run_id, entry_id)
+    )
+    """,
+    "CREATE INDEX file_hash_by_digest ON file_hash (run_id, size, full)",
+    """
+    CREATE TABLE dup_error (
+        id                INTEGER PRIMARY KEY,
+        run_id            INTEGER NOT NULL REFERENCES dup_run(id) ON DELETE CASCADE,
+        entry_id          INTEGER NOT NULL,
+        rel_path_display  TEXT    NOT NULL,
+        operation         TEXT    NOT NULL,
+        errno             INTEGER,
+        message           TEXT    NOT NULL
+    )
+    """,
+    "CREATE INDEX dup_error_by_run ON dup_error (run_id)",
+    "CREATE INDEX entry_by_inode ON entry (scan_id, dev, ino)",
+)
+
+MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1, _V2, _V3)

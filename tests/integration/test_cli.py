@@ -192,3 +192,47 @@ def test_scan_parasites_with_selection(tmp_path: Path, capsys: pytest.CaptureFix
     assert main(["--config", str(config), "scan", "parasites", "1", "--min-confidence", "101"]) == (
         EXIT_ERROR
     )
+
+
+def test_dupes_run_list_show(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    root = tmp_path / "root"
+    content = b"duplicate content " * 200
+    for where in ("photos/a.jpg", "Downloads/a (1).jpg"):
+        (root / where).parent.mkdir(parents=True, exist_ok=True)
+        (root / where).write_bytes(content)
+    for index in range(3):
+        (root / f"n{index}").mkdir()
+        (root / f"n{index}" / "tiny.txt").write_bytes(b"hi")
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f'data_dir = "{tmp_path / "data"}"\n[[roots]]\nid = "r"\npath = "{root}"\n'
+        'display_path = "/media/disk"\nallow_system_volume = true\n',
+        encoding="utf-8",
+    )
+    base = ["--config", str(config)]
+    assert main([*base, "scan", "run", "r"]) == EXIT_OK
+    assert main([*base, "dupes", "run", "1"]) == EXIT_OK
+    assert "analyse 1 : complet" in capsys.readouterr().out
+    assert main([*base, "dupes", "run", "1", "--micro"]) == EXIT_OK
+    assert main([*base, "dupes", "list"]) == EXIT_OK
+    listing = capsys.readouterr().out
+    assert "micro" in listing and ">= 1024 o" in listing
+
+    assert main([*base, "dupes", "show", "1", "--select", "all"]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "G1" in out and "★" in out
+    assert "gio trash -- \\\n  '/media/disk/Downloads/a (1).jpg'" in out
+
+    assert (
+        main([*base, "dupes", "show", "1", "--select", "G1", "--keep", "1", "--action", "delete"])
+        == EXIT_OK
+    )
+    assert "rm -rf -- \\\n  /media/disk/photos/a.jpg" in capsys.readouterr().out
+
+    assert main([*base, "dupes", "show", "2"]) == EXIT_OK
+    assert "Micro-nettoyage" in capsys.readouterr().out
+    assert main([*base, "dupes", "show", "1", "--keep", "1"]) == EXIT_ERROR
+    assert main([*base, "dupes", "show", "1", "--select", "G7"]) == EXIT_ERROR
+    assert main([*base, "dupes", "show", "99"]) == EXIT_ERROR
+    assert main([*base, "dupes", "run", "99"]) == EXIT_ERROR
+    capsys.readouterr()

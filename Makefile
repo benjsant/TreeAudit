@@ -26,7 +26,7 @@ COMPOSE := docker compose $(COMPOSE_FILES)
 DEV := $(COMPOSE) run --rm dev
 HOST_IDS := --user "$$(id -u):$$(id -g)"
 
-.PHONY: help env data lock build check-root up scan parasites scans down test lint format typecheck check
+.PHONY: help env data lock build check-root up scan parasites dupes micro dupes-show scans down test lint format typecheck check
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -71,6 +71,21 @@ scan: check-root ## Scan the audited folder (SUBPATH=sub/folder to scan only par
 parasites: ## Rebuildable/useless folders of the last scan (SCAN=id SELECT=green ACTION=trash|delete|archive)
 	$(COMPOSE) run --rm app scan parasites "$(or $(SCAN),$$($(COMPOSE) run --rm -T app scan list | head -1 | cut -f1))" \
 	  $(if $(SELECT),--select "$(SELECT)" --action "$(or $(ACTION),trash)") $(ARGS)
+
+LAST_SCAN = $$($(COMPOSE) run --rm -T app scan list | head -1 | cut -f1)
+LAST_DUPES = $$($(COMPOSE) run --rm -T app dupes list | head -1 | cut -f1)
+
+dupes: ## Find exact duplicates (>= 1 KiB) in the last scan (SCAN=id), then show them
+	$(COMPOSE) run --rm app dupes run "$(or $(SCAN),$(LAST_SCAN))" $(ARGS)
+	$(COMPOSE) run --rm app dupes show "$(LAST_DUPES)"
+
+micro: ## Micro-cleanup: identical files under 1 KiB and empty files of the last scan
+	$(COMPOSE) run --rm app dupes run "$(or $(SCAN),$(LAST_SCAN))" --micro $(ARGS)
+	$(COMPOSE) run --rm app dupes show "$(LAST_DUPES)"
+
+dupes-show: ## Show an analysis (RUN=id SELECT=G1,G3|all KEEP=n ACTION=trash|delete)
+	$(COMPOSE) run --rm app dupes show "$(or $(RUN),$(LAST_DUPES))" \
+	  $(if $(SELECT),--select "$(SELECT)" --action "$(or $(ACTION),trash)") $(if $(KEEP),--keep "$(KEEP)") $(ARGS)
 
 scans: ## List recorded scans
 	$(COMPOSE) run --rm app scan list

@@ -72,7 +72,7 @@ def odd_names(base: Path) -> None:
         "émoji 📁.txt",
         "café.txt",  # NFC
         "café.txt",  # NFD, a different name
-        "<script>alert(1)</script>.html",
+        "<img src=x onerror=alert(1)>.html",
         "$(echo pwned).txt",
         "a" * 200 + ".txt",
     ]:
@@ -149,6 +149,36 @@ def duplicates(base: Path) -> None:
             touch(base / "dupes" / copy / f"photo{index:02d}.jpg", bytes([index]) * 32)
 
 
+def large_duplicates(base: Path, rng: random.Random) -> None:
+    """A few MB: real copies, near-copies that only a full read tells apart, a hard link."""
+    clip = rng.randbytes(2 * 1024 * 1024)
+    for where in ["videos/clip.mp4", "backup/old/clip.mp4", "Downloads/clip (1).mp4"]:
+        touch(base / "dupes" / where, clip)
+    # Same size, different last bytes: told apart by the partial digest.
+    touch(base / "dupes" / "near" / "a.bin", clip[:-1] + b"A")
+    touch(base / "dupes" / "near" / "b.bin", clip[:-1] + b"B")
+    # Same first and last 64 KiB, different middle: only the full digest tells.
+    middle = rng.randbytes(1024 * 1024)
+    touch(base / "dupes" / "middle" / "a.bin", middle)
+    touch(base / "dupes" / "middle" / "b.bin", middle[:500_000] + b"X" + middle[500_001:])
+    # Two names for one inode: not a duplicate.
+    touch(base / "dupes" / "hard" / "original.dat", rng.randbytes(50_000))
+    os.link(base / "dupes" / "hard" / "original.dat", base / "dupes" / "hard" / "alias.dat")
+
+
+def micro_duplicates(base: Path) -> None:
+    """Many tiny identical files and empty files, some of them protected."""
+    for index in range(300):
+        touch(base / "micro" / f"dir{index:03d}" / "note.txt", b"hello\n")
+    for index in range(100):
+        touch(base / "micro" / "logs" / f"empty{index:03d}.log")
+    repo = base / "micro" / "repo"
+    touch(repo / ".git" / "HEAD", b"ref: refs/heads/main\n")
+    touch(repo / "src" / "__init__.py")
+    touch(repo / "data" / "sample.txt", b"hello\n")  # same content, but inside a repository
+    touch(repo / "empty.log")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("target", type=Path)
@@ -169,6 +199,8 @@ def main() -> int:
     links_and_specials(target)
     parasite_directories(target)
     duplicates(target)
+    large_duplicates(target, rng)
+    micro_duplicates(target)
     print(f"dummy tree written to {target}")
     return 0
 

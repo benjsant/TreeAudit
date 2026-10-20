@@ -15,7 +15,7 @@ TreeAudit/
 │   ├── scanner/     parcours par descripteurs, métadonnées, erreurs, annulation, progression
 │   ├── db/          schéma SQLite, migrations simples, écritures par lots
 │   ├── filters/     extension, glob, regex
-│   ├── duplicates/  regroupement par taille, empreintes, groupes de doublons
+│   ├── duplicates/  lecture sûre, empreintes, groupes, protections, copie à garder (D-015, D-026)
 │   ├── parasites/   catalogue rules.toml, détection sur l'index, commandes proposées (D-023, D-025)
 │   ├── reports/     JSON, CSV, puis HTML
 │   ├── web/         application FastAPI, routes, templates, fichiers statiques
@@ -68,6 +68,9 @@ En Docker, `path` vaut `/audit/roots/<id>` et `data_dir` vaut `/data`.
 - `dir_summary` : totaux du contenu de chaque dossier entièrement parcouru (D-022).
 - `scan_error` : chemin, opération (`open_dir`, `list_dir`, `stat_entry`…), `errno`, message système.
 - `scan_exclusion` : chemin et motif (point de montage).
+- `dup_run` (schéma v3) : analyse de doublons d'un scan, état (D-012), options, fichiers et octets lus, erreurs.
+- `file_hash` : empreintes partielle et complète d'un inode représentatif ; jamais de contenu.
+- `dup_error` : fichiers non lus ou exclus (modifiés, remplacés, illisibles), avec l'opération et `errno`.
 
 Mode WAL, clés étrangères actives, version du schéma dans `PRAGMA user_version` ; une base plus récente que le code est refusée. Les totaux finaux d'un scan sont recalculés en SQL sur ce qui a réellement été enregistré, ce qui garantit qu'un scan annulé ou incomplet n'annonce jamais plus que ce qu'il a vu. Chaque scan est un instantané indépendant.
 

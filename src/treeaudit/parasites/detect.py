@@ -9,19 +9,17 @@ from __future__ import annotations
 
 import dataclasses
 import fnmatch
-import re
 import sqlite3
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
 from treeaudit.parasites.rules import Evidence, EvidenceKind, Recreate, Rule, Target
+from treeaudit.shellcmd import is_displayable
 
 GREEN_THRESHOLD = 80
 ORANGE_THRESHOLD = 50
 DEFAULT_MIN_CONFIDENCE = 30
-
-_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 # SQL in this module is assembled from constant fragments (column names, fixed
 # conditions) only; every value, including rule names and globs, is bound with "?".
@@ -79,14 +77,6 @@ class Finding:
     def displayable(self) -> bool:
         """True if the path can be shown and quoted safely in a shell command."""
         return is_displayable(self.rel_path)
-
-
-def is_displayable(raw: bytes) -> bool:
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return False
-    return not _CONTROL_CHARS.search(text)
 
 
 def _exists(conn: sqlite3.Connection, sql: str, params: Sequence[object]) -> bool:

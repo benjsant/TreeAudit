@@ -4,7 +4,7 @@ Application locale d'audit, d'analyse et d'aide au rangement des fichiers et dos
 
 TreeAudit parcourt une arborescence explicitement autorisée, indexe ses métadonnées et aide à comprendre ce qu'elle contient : répartition de l'espace, doublons exacts, dossiers techniques (`.venv`, `node_modules`, `__pycache__`…), arborescences proches. L'outil **présente des preuves et des explications ; il ne modifie jamais les données auditées**.
 
-> **État : pré-alpha.** Implémenté en ligne de commande : validation des racines autorisées, conteneurs durcis, inventaire (parcours, tailles, extensions, erreurs, statut du scan) et détection des dossiers parasites avec indice de confiance et commandes de nettoyage proposées. Pas encore d'interface web, ni de filtres, ni de recherche de doublons. Les autres fonctionnalités ci-dessous sont des objectifs.
+> **État : pré-alpha.** Implémenté en ligne de commande : validation des racines autorisées, conteneurs durcis, inventaire (parcours, tailles, extensions, erreurs, statut du scan) détection des dossiers parasites avec indice de confiance, doublons exacts et micro-nettoyage, avec commandes de nettoyage proposées. Pas encore d'interface web ni de filtres. Les autres fonctionnalités ci-dessous sont des objectifs.
 
 ## Pourquoi un outil de plus ?
 
@@ -57,6 +57,8 @@ Le dossier est monté **en lecture seule**. Sous SELinux en mode enforcing : `ma
 Inventaire en ligne de commande : `make scan` (tout le dossier) ou `make scan SUBPATH=sous/dossier`, puis `make scans` pour lister les scans enregistrés.
 
 Dossiers parasites du dernier scan : `make parasites`. Pour obtenir une commande prête à copier : `make parasites SELECT=green` (corbeille), `SELECT=1,4-6 ACTION=delete` ou `ACTION=archive`. **TreeAudit ne supprime jamais rien lui-même** : il affiche la commande, tu décides de la lancer.
+
+Doublons exacts du dernier scan : `make dupes` (fichiers d'au moins 1 Kio) ou `make micro` (petits fichiers identiques et fichiers vides). Pour une commande : `make dupes-show SELECT=all` (les fichiers vides ne sont jamais inclus dans `all`), ou `SELECT=G3 KEEP=2 ACTION=delete`. Les copies situées dans un dépôt git, un jeu, un environnement Python ou `node_modules` ne sont jamais proposées.
 
 Développement : `make test`, `make lint`, `make typecheck`, ou `make check` pour tout lancer. `make help` liste les commandes.
 

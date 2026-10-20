@@ -69,12 +69,16 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Chemin hôte affiché en Docker (`TREEAUDIT_DISPLAY_PATH_<ID>`, affichage uniquement).
 - [x] Tests de faux positifs (`venv` sans `pyvenv.cfg`, `bin` de scripts personnels, lien symbolique nommé `node_modules`) et de noms hostiles dans les commandes.
 
-## Phase 4 — Doublons exacts
-- [ ] Regroupement par taille, empreinte partielle, SHA-256 complet (D-015).
-- [ ] Vérification `fstat` avant et après lecture ; fichiers modifiés pendant l'analyse.
-- [ ] Liens physiques distingués des doublons.
-- [ ] Comparaison octet à octet optionnelle.
-- [ ] Rapport JSON et CSV, sans action sur les fichiers.
+## Phase 4 — Doublons exacts (D-015, D-026)
+- [x] Regroupement par taille (index seul), empreinte partielle (premiers et derniers 64 Kio), SHA-256 complet.
+- [x] Lecture sûre : chaque dossier ouvert depuis la racine avec `O_NOFOLLOW`, fichier ouvert avec `O_NONBLOCK`, identité (inode, taille, date) vérifiée avant et après lecture ; fichiers modifiés ou remplacés exclus et signalés.
+- [x] Liens physiques distingués des doublons.
+- [x] Comparaison octet à octet optionnelle (`--verify-bytes`).
+- [x] Micro-nettoyage (`--micro`) : fichiers de moins de 1 Kio et fichiers vides, regroupés par zone, jamais sélectionnés en masse.
+- [x] Copies protégées : fichiers-marqueurs, dépôts git, logiciels et dépendances installés ; une copie hors logiciel toujours gardée.
+- [x] Copie à garder suggérée et expliquée ; commande unique (corbeille ou suppression) pour les autres copies.
+- [x] Mesures (2026-10-20, arborescence synthétique de 152 970 entrées, Docker) : analyse principale 0,3 s (8,9 Mio lus) ; micro-nettoyage 0,16 s en natif après correction d'une requête SQL (2 s auparavant) ; affichage du micro-nettoyage 0,5 s et 32 Mio (159 Mio auparavant).
+- [ ] Rapport JSON et CSV : reporté à la phase 6 (interface et rapports).
 
 ## Phase 5 — Filtres
 - [ ] Extension, glob de nom, glob de chemin, regex nom et chemin relatif.

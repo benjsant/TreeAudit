@@ -6,10 +6,13 @@ Exit codes: 0 success, 1 root rejected, 2 usage or configuration error.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import json
 import logging
 import sqlite3
 import sys
-from collections.abc import Sequence
+import threading
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from treeaudit import __version__
@@ -119,6 +122,36 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[a.value for a in Action],
         default=Action.TRASH.value,
         help="commande à générer pour --select (défaut : trash, réversible)",
+    )
+
+    dupes = commands.add_parser("dupes", help="fichiers en double (rien n'est supprimé)")
+    dupes_commands = dupes.add_subparsers(dest="dupes_command", required=True)
+    dupes_run = dupes_commands.add_parser("run", help="chercher les doublons d'un scan")
+    dupes_run.add_argument("scan_id", type=int)
+    dupes_run.add_argument(
+        "--min-size", type=int, default=1024, help="taille minimale en octets (défaut : 1024)"
+    )
+    dupes_run.add_argument(
+        "--micro",
+        action="store_true",
+        help="micro-nettoyage : fichiers de moins de 1 Kio et fichiers vides",
+    )
+    dupes_run.add_argument(
+        "--verify-bytes", action="store_true", help="confirmer chaque groupe octet par octet"
+    )
+    dupes_commands.add_parser("list", help="lister les analyses de doublons")
+    dupes_show = dupes_commands.add_parser("show", help="afficher les groupes d'une analyse")
+    dupes_show.add_argument("run_id", type=int)
+    dupes_show.add_argument("--limit", type=int, default=30, help="groupes affichés")
+    dupes_show.add_argument("--copies", type=int, default=10, help="copies affichées par groupe")
+    dupes_show.add_argument(
+        "--select", default=None, help="groupes pour la commande : G1,G3-5 ou 'all'"
+    )
+    dupes_show.add_argument(
+        "--keep", type=int, default=None, help="numéro de la copie à garder (un seul groupe)"
+    )
+    dupes_show.add_argument(
+        "--action", choices=["trash", "delete"], default="trash", help="défaut : trash"
     )
 
     commands.add_parser("serve", help="démarrer le serveur web local")
@@ -306,7 +339,7 @@ def _format_totals(
 
 def _open_index(args: argparse.Namespace) -> sqlite3.Connection:
     from treeaudit.core.datadir import ScanLock, ScanLockedError
-    from treeaudit.db import scans
+    from treeaudit.db import dupes, scans
     from treeaudit.db.connection import connect
 
     config = _load(args)
@@ -320,6 +353,7 @@ def _open_index(args: argparse.Namespace) -> sqlite3.Connection:
         return conn
     try:
         scans.fail_interrupted_scans(conn)
+        dupes.fail_interrupted_runs(conn)
     finally:
         lock.release()
     return conn
@@ -457,6 +491,167 @@ def _cmd_scan_parasites(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _run_in_thread[R](
+    job: Callable[[threading.Event], R], describe: Callable[[], str]
+) -> tuple[R | None, BaseException | None]:
+    """Run a long job in a thread, show progress, cancel it on Ctrl+C."""
+    cancel = threading.Event()
+    result: list[R] = []
+    failure: list[BaseException] = []
+
+    def worker() -> None:
+        try:
+            result.append(job(cancel))
+        except BaseException as exc:  # reported by the caller
+            failure.append(exc)
+
+    thread = threading.Thread(target=worker, name="treeaudit-job")
+    thread.start()
+    try:
+        while thread.is_alive():
+            thread.join(0.5)
+            print(f"\r{describe()}", end="", file=sys.stderr)
+    except KeyboardInterrupt:
+        print("\nannulation demandée…", file=sys.stderr)
+        cancel.set()
+        thread.join()
+    print(file=sys.stderr)
+    return (result[0] if result else None), (failure[0] if failure else None)
+
+
+def _cmd_dupes_run(args: argparse.Namespace) -> int:
+    from treeaudit.duplicates.runner import (
+        DupOptions,
+        DupProgress,
+        execute_duplicates,
+    )
+    from treeaudit.scanner.models import ScanStatus
+
+    if args.micro:
+        options = DupOptions.for_micro(verify_bytes=args.verify_bytes)
+    else:
+        if args.min_size < 1:
+            print("erreur : --min-size doit être au moins 1", file=sys.stderr)
+            return EXIT_ERROR
+        options = DupOptions(min_size=args.min_size, verify_bytes=args.verify_bytes)
+    config = _load(args)
+    progress = DupProgress()
+
+    def describe() -> str:
+        return (
+            f"{progress.stage} : {progress.files_hashed}/{progress.candidates} fichiers, "
+            f"{human_size(progress.bytes_read)} lus, {progress.errors} erreurs"
+        )
+
+    outcome, failure = _run_in_thread(
+        lambda cancel: execute_duplicates(
+            config,
+            args.scan_id,
+            options,
+            mounts=read_mountinfo(),
+            home=current_home(),
+            cancel=cancel,
+            progress=progress,
+        ),
+        describe,
+    )
+    if failure is not None:
+        if isinstance(failure, RootRejectedError):
+            print(
+                f"REFUSÉ [{failure.reason.value}] {failure.path} : "
+                f"{REASON_MESSAGES[failure.reason]}"
+            )
+            return EXIT_REJECTED
+        raise failure
+    if outcome is None:  # pragma: no cover - the worker either returns or fails
+        return EXIT_ERROR
+    print(f"analyse {outcome.run_id} : {_STATUS_LABELS[outcome.status.value]}")
+    print(
+        f"  {outcome.candidates} fichiers candidats, {outcome.files_hashed} lus, "
+        f"{human_size(outcome.bytes_read)} lus, {outcome.errors} erreurs"
+    )
+    if outcome.failure:
+        print(f"cause : {outcome.failure}")
+    return {
+        ScanStatus.COMPLETE: EXIT_OK,
+        ScanStatus.INCOMPLETE: EXIT_INCOMPLETE,
+        ScanStatus.CANCELLED: EXIT_CANCELLED,
+    }.get(outcome.status, EXIT_ERROR)
+
+
+def _cmd_dupes_list(args: argparse.Namespace) -> int:
+    from treeaudit.db import dupes
+
+    conn = _open_index(args)
+    try:
+        rows = dupes.list_runs(conn)
+        if not rows:
+            print("Aucune analyse de doublons.")
+        for row in rows:
+            options = json.loads(row["options"])
+            kind = "micro" if options.get("micro") else f">= {options.get('min_size')} o"
+            print(
+                f"{row['id']}\tscan {row['scan_id']}\t{row['started_at']}\t"
+                f"{_STATUS_LABELS[row['status']]}\t{kind}\t{row['files_hashed']} lus\t"
+                f"{row['errors']} erreurs"
+            )
+    finally:
+        conn.close()
+    return EXIT_OK
+
+
+def _cmd_dupes_show(args: argparse.Namespace) -> int:
+    from treeaudit.db import dupes, scans
+    from treeaudit.duplicates.groups import load_groups
+    from treeaudit.duplicates.report import (
+        SelectionError,
+        override_keep,
+        parse_groups,
+        render_command,
+        render_groups,
+    )
+    from treeaudit.shellcmd import Action as ShellAction
+
+    config = _load(args)
+    conn = _open_index(args)
+    try:
+        run = dupes.get_run(conn, args.run_id)
+        if run is None:
+            print(f"erreur : analyse inconnue : {args.run_id}", file=sys.stderr)
+            return EXIT_ERROR
+        scan = scans.get_scan(conn, run["scan_id"])
+        root = config.get_root(scan["root_id"]) if scan is not None else None
+        root_display = root.shown_path if root is not None else (scan["root_path"] if scan else "")
+        if run["status"] != "complete":
+            print(
+                f"⚠ l'analyse {args.run_id} n'est pas complète ({run['status']}) : "
+                "des doublons peuvent manquer."
+            )
+        report = load_groups(conn, args.run_id)
+        print(render_groups(report, limit=max(args.limit, 0), copies=max(args.copies, 1)))
+        for error in dupes.list_errors(conn, args.run_id, limit=20):
+            print(f"  [{error['operation']}] {error['rel_path_display']} : {error['message']}")
+        if args.select is None:
+            if args.keep is not None:
+                print("erreur : --keep s'utilise avec --select", file=sys.stderr)
+                return EXIT_ERROR
+            return EXIT_OK
+        try:
+            selected = parse_groups(args.select, report.groups)
+            if args.keep is not None:
+                if len(selected) != 1:
+                    raise SelectionError("--keep s'utilise avec un seul groupe")
+                selected = [override_keep(selected[0], args.keep)]
+        except SelectionError as exc:
+            print(f"erreur : {exc}", file=sys.stderr)
+            return EXIT_ERROR
+        print()
+        print(render_command(selected, ShellAction(args.action), root_display=root_display))
+    finally:
+        conn.close()
+    return EXIT_OK
+
+
 def _cmd_gateway(args: argparse.Namespace) -> int:
     import asyncio
 
@@ -495,8 +690,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_scan_show(args)
         if args.command == "scan" and args.scan_command == "parasites":
             return _cmd_scan_parasites(args)
+        if args.command == "dupes" and args.dupes_command == "run":
+            return _cmd_dupes_run(args)
+        if args.command == "dupes" and args.dupes_command == "list":
+            return _cmd_dupes_list(args)
+        if args.command == "dupes" and args.dupes_command == "show":
+            return _cmd_dupes_show(args)
         if args.command == "gateway":
             return _cmd_gateway(args)
+    except BrokenPipeError:
+        # Output piped into a command that stopped reading (e.g. "| head"): stop
+        # quietly. Closing stdout here avoids a second error when Python flushes it.
+        with contextlib.suppress(BrokenPipeError):
+            sys.stdout.close()
+        return EXIT_OK
     except (TreeAuditError, MountInfoError, OSError) as exc:
         print(f"erreur : {exc}", file=sys.stderr)
         return EXIT_ERROR
