@@ -54,14 +54,18 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Annulation et progression.
 - [x] Index SQLite par lots.
 - [x] CLI : `treeaudit scan <id-racine>`, `treeaudit scan show <id-scan>`.
-- [ ] Mesure de performance documentée (nombre d'entrées, durée, mémoire) sur une arborescence réelle.
+- [x] Mesure de performance (2026-10-20), sur l'arborescence synthétique `tools/make_dummy_tree.py` (152 246 entrées dont 149 942 fichiers, 2 298 dossiers, 11 Mo réels) :
+  - Docker : 2,7 s, 27 Mio de mémoire maximale, statut `complete` ;
+  - natif (Python 3.14 de l'hôte) : 2,1 s, 35 Mio ;
+  - base SQLite : environ 42 Mo, soit environ 270 octets par entrée.
+  Le mainteneur mesure lui-même sur ses données réelles (aucune donnée personnelle n'est transmise).
 
-## Phase 3 — Filtres
-- [ ] Extension, glob de nom, glob de chemin, regex nom et chemin relatif.
-- [ ] Option de casse ; correspondance complète ou partielle.
-- [ ] Prévisualisation (nombre et exemples).
-- [ ] Limites anti-ReDoS.
-- [ ] Tests de casse, Unicode, fichiers cachés, regex invalides.
+## Phase 3 — Dossiers parasites (D-023)
+- [ ] Catalogue de règles versionné dans le dépôt : `.venv`/`venv`, `__pycache__`, `node_modules`, `__MACOSX`, `.DS_Store`, `Thumbs.db`, caches d'outils (`.pytest_cache`, `.mypy_cache`…), `build`/`dist`, `bin`/`obj`, bibliothèques recopiées (`bootstrap`…).
+- [ ] Indices de confirmation (ex. `pyvenv.cfg`, `package.json` voisin, `.csproj` voisin) et contre-indices.
+- [ ] Indicateur de confiance (pourcentage) expliqué : règles et indices qui l'ont produit.
+- [ ] Commande de recréation et options de suppression **affichées, jamais exécutées**, avec chemins correctement échappés.
+- [ ] Tests de faux positifs (`venv` sans `pyvenv.cfg`, `bin` de scripts personnels…).
 
 ## Phase 4 — Doublons exacts
 - [ ] Regroupement par taille, empreinte partielle, SHA-256 complet (D-015).
@@ -70,18 +74,21 @@ Aucun parcours de fichiers dans cette phase.
 - [ ] Comparaison octet à octet optionnelle.
 - [ ] Rapport JSON et CSV, sans action sur les fichiers.
 
-## Phase 5 — Interface web et rapports
+## Phase 5 — Filtres
+- [ ] Extension, glob de nom, glob de chemin, regex nom et chemin relatif.
+- [ ] Option de casse ; correspondance complète ou partielle.
+- [ ] Prévisualisation (nombre et exemples).
+- [ ] Limites anti-ReDoS.
+- [ ] Tests de casse, Unicode, fichiers cachés, regex invalides.
+
+## Phase 6 — Interface web et rapports
+- [ ] Choix du sous-dossier à analyser dans la zone autorisée (D-021).
 - [ ] Lancement, progression et annulation d'un scan.
-- [ ] Répartition de l'espace, erreurs, exclusions, filtres, doublons.
+- [ ] Répartition de l'espace, erreurs, exclusions, dossiers parasites, doublons, filtres.
 - [ ] Export local.
 - [ ] Tests XSS (noms piégés), CSRF, accessibilité de base.
 
-## Phase 6 — Dossiers techniques
-- [ ] Règles déclaratives (`.venv`, `venv`, `node_modules`, `__pycache__`, `bin`/`obj`, `build`, `dist`, caches connus), avec indices de confirmation (ex. `pyvenv.cfg` pour un `.venv`, `.csproj` voisin pour `bin`/`obj`).
-- [ ] Explication affichée et niveau de confiance ; jamais de verdict « inutile ».
-- [ ] Tests de faux positifs (`bin` contenant des scripts personnels, etc.).
-
-## Phase 7 — Comparaison d'arborescences
+## Phase 7 — Similarité (fichiers et arborescences)
 - [ ] Définir les critères d'identité (mêmes chemins relatifs, mêmes empreintes).
 - [ ] Définir un score de similarité explicable.
 - [ ] Tester arbres renommés, sous-ensembles et fichiers manquants.
@@ -95,9 +102,10 @@ Aucun parcours de fichiers dans cette phase.
 - [ ] Aucune anomalie critique connue avant de déclarer la V1 terminée.
 
 ## Phase 9 — IA locale (optionnelle)
-- [ ] Démontrer un besoin que l'approche déterministe ne couvre pas.
+- [ ] Cas visés : trancher les détections ambiguës (bibliothèque recopiée ou modifiée, dossier `bin` incertain…) et expliquer les résultats.
 - [ ] Comparer runtimes et modèles par benchmark ; documenter taille, RAM et performances.
 - [ ] N'envoyer que les métadonnées nécessaires.
+- [ ] Le modèle propose, il n'exécute jamais rien (CLAUDE.md, règle 8).
 - [ ] Tester les réponses erronées.
 - [ ] Vérifier que le produit fonctionne sans IA.
 

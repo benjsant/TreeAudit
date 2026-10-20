@@ -5,6 +5,9 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 -include .env
+# A trailing "/" typed by the user is harmless: strip it before validation, so
+# that what is validated and what is mounted are the same normalized path.
+override TREEAUDIT_ROOT_PATH := $(patsubst %/,%,$(TREEAUDIT_ROOT_PATH))
 # Hand compose exactly the values make validated. Without this, a variable set in
 # the user's shell would take precedence for compose while make validated the
 # .env value: check-root and the actual mount could disagree.

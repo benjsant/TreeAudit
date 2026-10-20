@@ -130,3 +130,10 @@ Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers
 - Un changement de numéro de périphérique qui ne correspond à aucun point de montage connu (sous-volume btrfs) n'est pas une exclusion : le parcours continue.
 - Un point de montage n'est détecté que s'il existe au début du scan (lecture de `mountinfo`). Un montage créé pendant le scan n'est pas détecté : limite documentée.
 - Les numéros d'inode et de périphérique sont des entiers non signés sur 64 bits ; ils sont convertis en entiers signés pour SQLite, sans perte.
+
+## D-023 — Ordre des phases et dossiers parasites (2026-10-20)
+- Priorité du mainteneur : repérer les dossiers « parasites » recréables (`.venv`, `__pycache__`, `node_modules`, `__MACOSX`…) et les doublons. Nouvel ordre : dossiers parasites (3), doublons exacts (4), filtres (5), interface web (6), similarité (7), validation Linux (8), IA locale (9).
+- Chaque détection porte un **indicateur de confiance** en pourcentage, accompagné des règles et indices qui l'expliquent.
+- TreeAudit **affiche** la commande de recréation et les options de suppression, mais **n'exécute jamais rien** : la V1 reste en lecture seule (D-002). Les chemins des commandes affichées sont échappés ; un nom qui ne peut pas être affiché sans risque (caractères de contrôle, octets invalides) n'a pas de commande proposée.
+- Les détections ambiguës sont le cas d'usage visé pour l'IA locale (phase 9), qui propose sans jamais agir.
+- Tests : arborescence synthétique `tools/make_dummy_tree.py`, jamais les données personnelles du mainteneur.

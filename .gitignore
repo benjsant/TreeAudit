@@ -235,3 +235,6 @@ compose.override.yaml
 .idea/
 .vscode/
 .DS_Store
+
+# Synthetic test tree (tools/make_dummy_tree.py)
+/dummy_folder/

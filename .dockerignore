@@ -14,3 +14,4 @@ venv
 *.db
 docs/
 tests/
+dummy_folder/
