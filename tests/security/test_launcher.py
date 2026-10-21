@@ -25,8 +25,9 @@ def launcher(tmp_path: Path) -> Path:
 
 def settings(launcher: Path, **environ: str) -> dict[str, str]:
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "COMPOSE_SELINUX": "0", **environ}
-    result = subprocess.run(
-        ["bash", str(launcher), "settings"],
+    # The repository's own launcher, with a controlled environment.
+    result = subprocess.run(  # noqa: S603
+        ["bash", str(launcher), "settings"],  # noqa: S607
         env=env,
         capture_output=True,
         text=True,
@@ -77,8 +78,11 @@ def test_selinux_override_is_added_when_asked(launcher: Path) -> None:
 
 
 def test_unknown_command_fails(launcher: Path) -> None:
-    result = subprocess.run(
-        ["bash", str(launcher), "nope"], capture_output=True, text=True, timeout=30
+    result = subprocess.run(  # noqa: S603
+        ["bash", str(launcher), "nope"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     assert result.returncode == 2
     assert "Commande inconnue" in result.stderr

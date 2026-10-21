@@ -82,7 +82,8 @@ ARCHIVE_DIR_MESSAGES: dict[ArchiveDirReason, str] = {
         "choisir un sous-dossier"
     ),
     ArchiveDirReason.NOT_MOUNTED: (
-        "le dossier d'archives n'est pas monté dans le conteneur : relancer TreeAudit avec ./treeaudit"
+        "le dossier d'archives n'est pas monté dans le conteneur : "
+        "relancer TreeAudit avec ./treeaudit"
     ),
     ArchiveDirReason.NOT_FOUND: "le dossier n'existe pas (le créer d'abord)",
     ArchiveDirReason.PERMISSION_DENIED: "le dossier n'est pas accessible avec les droits actuels",

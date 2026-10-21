@@ -230,9 +230,10 @@ cmd_lock() {
         treeaudit-uv:local uv lock
 }
 
+# Chained with &&: "set -e" does not apply inside a function called from a
+# "&&" list (as in "check"), so a failure must be propagated explicitly.
 cmd_lint() {
-    "${DEV[@]}" ruff check .
-    "${DEV[@]}" ruff format --check .
+    "${DEV[@]}" ruff check . && "${DEV[@]}" ruff format --check .
 }
 
 cmd_help() {
