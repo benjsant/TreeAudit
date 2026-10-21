@@ -53,8 +53,9 @@ Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C`
 1. **Choisir le disque** : TreeAudit propose les disques externes branchés, avec leur occupation. Navigue dans les dossiers, puis « Analyser ».
 2. **Analyse** : la progression s'affiche, et tu peux annuler.
 3. **Bilan** : ce qui peut être nettoyé sans risque, les doublons, où va la place, et une recherche.
-4. **Archiver si besoin** : « 🗜 Archiver » crée une copie compressée et vérifiée du dossier. Tu la retrouves dans « 🗜 Mes archives ».
-5. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
+4. **Explorer** : « 📂 Explorer les fichiers » se parcourt comme un gestionnaire de fichiers. Chaque élément porte ses repères (🧹 à nettoyer, 📑 en double, 🛡 protégé), et ⓘ ouvre sa fiche. Coche ce que tu veux dans n'importe quels dossiers : tout va dans le **🧺 panier**, qui prépare la commande.
+5. **Archiver si besoin** : « 🗜 Archiver » crée une copie compressée et vérifiée du dossier. Tu la retrouves dans « 🗜 Mes archives ».
+6. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
 
 ### Quels disques sont proposés ?
 

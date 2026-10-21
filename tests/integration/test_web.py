@@ -21,6 +21,7 @@ from treeaudit.db.connection import database_path
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.registry import evaluate_roots
 from treeaudit.roots.validation import RejectReason
+from treeaudit.web import explorer
 from treeaudit.web import jobs as jobs_module
 from treeaudit.web.app import create_app
 
@@ -224,7 +225,9 @@ def test_scan_page_and_explorer(client: TestClient, scanned: int) -> None:
     assert "Où va la place" in page.text and "À nettoyer" in page.text
     space = client.get(f"/scans/{scanned}/space")
     assert_safe_html(space.text)
-    match = re.search(rf'href="/scans/{scanned}/space\?dir=(\d+)">📁 photos', space.text)
+    match = re.search(
+        rf'href="/scans/{scanned}/space\?dir=(\d+)&amp;sort=size">📁 photos', space.text
+    )
     assert match is not None
     inside = client.get(f"/scans/{scanned}/space?dir={match.group(1)}")
     assert inside.status_code == 200 and "a.jpg" in inside.text
@@ -637,3 +640,122 @@ def test_archives_page_without_archive_dir(client: TestClient) -> None:
     assert page.status_code == 200
     assert "Archivage indisponible" in page.text
     assert 'href="/archives"' not in client.get("/").text
+
+
+# --- explorer and basket (D-036) -----------------------------------------------------------
+
+
+def entry_ids(client: TestClient, scan_id: int) -> dict[bytes, int]:
+    data_dir = client.app.state.config.data_dir  # type: ignore[attr-defined]
+    conn = sqlite3.connect(database_path(data_dir))
+    try:
+        return {
+            bytes(rel): entry_id
+            for entry_id, rel in conn.execute(
+                "SELECT entry_id, rel_path FROM entry WHERE scan_id = ?", (scan_id,)
+            )
+        }
+    finally:
+        conn.close()
+
+
+def test_explorer_sorts_and_marks(client: TestClient, scanned: int) -> None:
+    ids = entry_ids(client, scanned)
+    by_name = client.get(f"/scans/{scanned}/space", params={"sort": "name"})
+    assert by_name.status_code == 200
+    assert_safe_html(by_name.text)
+    shown = re.findall(r'data-basket-item value="(\d+)"', by_name.text)
+    names = {v: k for k, v in ids.items()}
+    order = [names[int(n)] for n in shown]
+    # Folders first, then files, each by name.
+    assert order[:3] == [XSS_DIR.encode(), b"app", b"photos"]
+    assert set(order[3:]) == {b"=SUM(1).txt", b"link-to-tmp"}
+    assert ids[b""] not in [int(n) for n in shown]  # the analysed folder itself: no checkbox
+    assert client.get(f"/scans/{scanned}/space", params={"sort": "evil"}).status_code == 422
+
+    app = client.get(f"/scans/{scanned}/space", params={"dir": ids[b"app"]})
+    assert "🧹 Dépendances Node.js" in app.text
+
+    photos = client.get(f"/scans/{scanned}/space", params={"dir": ids[b"photos"]})
+    assert "copies" not in photos.text and "doublons pas encore cherchés" in photos.text
+    run_job(client, f"/api/scans/{scanned}/dupes", {"micro": False})
+    photos = client.get(f"/scans/{scanned}/space", params={"dir": ids[b"photos"]})
+    assert photos.text.count("📑 3 copies") == 3
+    assert_safe_html(photos.text)
+
+
+def test_explorer_pages(client: TestClient, scanned: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(explorer, "PAGE_SIZE", 2)
+    page = client.get(f"/scans/{scanned}/space", params={"page": 2})
+    assert "Page 2 sur 3" in page.text
+    assert len(re.findall(r"data-basket-item", page.text)) == 2
+    last = client.get(f"/scans/{scanned}/space", params={"page": 99})
+    assert "Page 3 sur 3" in last.text
+
+
+def test_entry_page(client: TestClient, scanned: int) -> None:
+    run_job(client, f"/api/scans/{scanned}/dupes", {"micro": False})
+    ids = entry_ids(client, scanned)
+    page = client.get(f"/scans/{scanned}/entries/{ids[b'photos/a.jpg']}")
+    assert page.status_code == 200
+    assert_safe_html(page.text)
+    assert "Fichier en 3 exemplaires" in page.text
+    assert "photos/&lt;img src=x onerror=alert(1)&gt;.jpg" in page.text
+    assert f'data-basket-item value="{ids[b"photos/a.jpg"]}"' in page.text
+
+    link = client.get(f"/scans/{scanned}/entries/{ids[b'link-to-tmp']}")
+    assert "Pointe vers" in link.text and "non suivi" in link.text
+    protected = client.get(f"/scans/{scanned}/entries/{ids[b'app/node_modules/dep/index.js']}")
+    assert "🛡 Protégé" in protected.text
+    root = client.get(f"/scans/{scanned}/entries/{ids[b'']}")
+    assert root.status_code == 200 and "data-basket-item" not in root.text
+    assert client.get(f"/scans/{scanned}/entries/999999").status_code == 404
+    assert client.get(f"/scans/999/entries/{ids[b'']}").status_code == 404
+
+
+def test_basket_content_and_command(client: TestClient, scanned: int) -> None:
+    ids = entry_ids(client, scanned)
+    assert_safe_html(client.get(f"/scans/{scanned}/basket").text)
+    chosen = [
+        ids[b"photos"],
+        ids[b"photos/a.jpg"],  # inside a selected folder
+        ids[XSS_DIR.encode()],
+        ids[b"app/node_modules/dep/index.js"],  # protected
+        ids[b""],  # the analysed folder itself
+        999999,
+    ]
+    url = f"/api/scans/{scanned}/basket"
+    assert client.post(url, json={"entries": chosen}).status_code == 403
+    content = client.post(url, json={"entries": chosen}, headers=CSRF).json()
+    assert [i["path"] for i in content["items"]] == [
+        XSS_DIR,
+        "app/node_modules/dep/index.js",
+        "photos",
+    ]
+    assert content["covered"] == [ids[b"photos/a.jpg"]]
+    assert content["unknown"] == [999999]
+    assert content["root_refused"] is True
+    assert content["items"][1]["protection"].startswith("logiciel ou dépendances")
+
+    command = client.post(f"{url}/command", json={"entries": chosen}, headers=CSRF)
+    assert command.status_code == 200
+    data = command.json()
+    assert data["command"].startswith("gio trash -- \\\n  ")
+    assert f"'{DISPLAY}/\"><svg onload=alert(2)>'" in data["command"]
+    assert f"'{DISPLAY}/photos'" in data["command"]
+    assert "a.jpg" not in data["command"]
+    assert f"'{DISPLAY}'" not in data["command"]  # never the whole disk
+    assert any("dossier analysé entier" in w for w in data["warnings"])
+    assert any(w.startswith("Protégé") for w in data["warnings"])
+
+    archive = client.post(
+        f"{url}/command", json={"entries": [ids[b"photos"]], "action": "archive"}, headers=CSRF
+    ).json()
+    assert "tar --create" in archive["command"]
+    assert archive["command"].endswith(" -- \\\n  ./photos")
+    only_root = client.post(f"{url}/command", json={"entries": [ids[b""]]}, headers=CSRF)
+    assert only_root.status_code == 422
+    assert client.post(url, json={"entries": []}, headers=CSRF).status_code == 422
+    assert (
+        client.post("/api/scans/999/basket", json={"entries": [1]}, headers=CSRF).status_code == 404
+    )

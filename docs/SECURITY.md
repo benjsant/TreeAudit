@@ -103,6 +103,7 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Un chemin contenant des caractères de contrôle ou de l'UTF-8 invalide ne reçoit aucune commande : il ne pourrait pas être affiché sans ambiguïté.
 - La corbeille (réversible) est proposée avant la suppression définitive ; une sélection hors du vert est signalée.
 - Les modèles de commandes de recréation viennent uniquement du catalogue versionné ; leur seul paramètre (`{name}`) est échappé.
+- **Panier de l'explorateur (D-036)** : le navigateur n'envoie que des numéros d'éléments. Le serveur relit chaque chemin dans l'index de l'analyse ; un numéro inconnu est ignoré et signalé. Le dossier analysé entier n'est jamais proposé, un élément déjà compris dans un dossier sélectionné est retiré, et un élément protégé (dépôt git, logiciel installé) est signalé. Les noms sont affichés par `textContent` uniquement.
 
 ## Archives vérifiées (D-024, D-032)
 - Par défaut, le dossier d'archives est `archives/`, dans le dossier de TreeAudit (D-034). C'est un dossier dédié, que TreeAudit possède, et non un disque choisi dans l'interface : cela évite de monter un disque externe en écriture.

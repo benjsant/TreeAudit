@@ -39,7 +39,7 @@ from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
 from treeaudit.scanner.browse import list_folders
 from treeaudit.scanner.walker import SubpathError, parse_subpath
-from treeaudit.web import queries, summaries
+from treeaudit.web import explorer, queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, root_display
 from treeaudit.web.search_form import SearchForm, spec_from_form
 
@@ -76,8 +76,20 @@ def _date(value: int | str | None) -> str:
     if isinstance(value, str):
         moment = datetime.fromisoformat(value)
     else:
-        moment = datetime.fromtimestamp(value / 1e9, UTC)
+        try:
+            moment = datetime.fromtimestamp(value / 1e9, UTC)
+        except (OverflowError, OSError, ValueError):  # a file dated year 300 000
+            return "date invalide"
     return f"{moment.day} {_MONTHS[moment.month - 1]} {moment.year}"
+
+
+def _datetime(value: int) -> str:
+    """'20 oct. 2026 à 14:05' (local time) from an mtime in nanoseconds."""
+    try:
+        moment = datetime.fromtimestamp(value / 1e9).astimezone()
+    except (OverflowError, OSError, ValueError):
+        return "date invalide"
+    return f"{moment.day} {_MONTHS[moment.month - 1]} {moment.year} à {moment:%H:%M}"
 
 
 _THIN_SPACE = chr(0x202F)  # French thousands separator
@@ -98,6 +110,7 @@ def _environment() -> jinja2.Environment:
     )
     env.filters["size"] = human_size
     env.filters["date"] = _date
+    env.filters["datetime"] = _datetime
     env.filters["number"] = _number
     env.filters["status"] = lambda value: STATUS_LABELS.get(value, value)
     env.globals["version"] = __version__
@@ -302,7 +315,10 @@ def space_page(
     conn: Db,
     config: Config,
     dir: Annotated[int | None, Query(ge=1)] = None,
+    sort: explorer.Sort = explorer.Sort.SIZE,
+    page: Annotated[int, Query(ge=1, le=1_000_000)] = 1,
 ) -> Response:
+    """The explorer (D-036): browse the analysed folder like a file manager."""
     scan = _scan_or_404(conn, scan_id)
     if dir is None:
         node = queries.start_node(conn, scan_id)
@@ -310,7 +326,12 @@ def space_page(
         node = queries.get_node(conn, scan_id, dir)
     if node is None or node.kind != "dir":
         raise HTTPException(404, "Ce dossier n'existe pas dans cette analyse.")
-    kids, total_kids = queries.children(conn, scan_id, node.entry_id)
+    nodes = explorer.sort_nodes(queries.all_children(conn, scan_id, node.entry_id), sort)
+    pages = max(1, -(-len(nodes) // explorer.PAGE_SIZE))
+    page = min(page, pages)
+    shown = nodes[(page - 1) * explorer.PAGE_SIZE : page * explorer.PAGE_SIZE]
+    source = explorer.MarkSource(conn, scan_id)
+    marks = source.marks([(n.entry_id, n.raw_path, n.kind) for n in shown])
     return render(
         request,
         "space.html",
@@ -318,9 +339,44 @@ def space_page(
         title=analysis_title(config, scan),
         node=node,
         crumbs=queries.breadcrumb(conn, scan_id, node),
-        children=kids,
-        total_children=total_kids,
+        children=shown,
+        marks=marks,
+        total_children=len(nodes),
+        sort=sort,
+        sorts=explorer.SORT_LABELS,
+        page=page,
+        pages=pages,
+        dupes_run=source.dupes_run,
     )
+
+
+@router.get("/scans/{scan_id}/entries/{entry_id}")
+def entry_page(request: Request, scan_id: int, entry_id: int, conn: Db, config: Config) -> Response:
+    """Everything TreeAudit knows about one file or folder."""
+    scan = _scan_or_404(conn, scan_id)
+    details = explorer.entry_details(conn, scan_id, entry_id)
+    if details is None:
+        raise HTTPException(404, "Cet élément n'existe pas dans cette analyse.")
+    parent = (
+        None if details.parent_id is None else queries.get_node(conn, scan_id, details.parent_id)
+    )
+    return render(
+        request,
+        "entry.html",
+        scan=scan,
+        title=analysis_title(config, scan),
+        entry=details,
+        parent=parent,
+        crumbs=queries.breadcrumb(conn, scan_id, parent) if parent is not None else [],
+        dupes_run=explorer.latest_dupes_run(conn, scan_id),
+    )
+
+
+@router.get("/scans/{scan_id}/basket")
+def basket_page(request: Request, scan_id: int, conn: Db, config: Config) -> Response:
+    """The basket. Its content lives in the browser; the list is fetched by app.js."""
+    scan = _scan_or_404(conn, scan_id)
+    return render(request, "basket.html", scan=scan, title=analysis_title(config, scan))
 
 
 @router.get("/scans/{scan_id}/parasites")

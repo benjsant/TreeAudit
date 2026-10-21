@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Panier · {{ title }}{% endblock %}
+{% block content %}
+<p class="back"><a href="/scans/{{ scan.id }}/space">← Explorateur</a></p>
+<h1>🧺 Panier</h1>
+<p class="lead">Ce que tu as coché dans l'explorateur de {{ title }}. Rien n'est modifié tant que tu ne lances pas toi-même la commande.</p>
+
+<div data-basket-view data-scan="{{ scan.id }}" data-command-builder data-kind="basket" data-endpoint="/api/scans/{{ scan.id }}/basket/command">
+  <p class="muted" data-basket-status role="status">Chargement…</p>
+  <ul class="items" data-basket-list></ul>
+  <ul class="warnings" data-basket-notes></ul>
+  <div class="actions" data-basket-filled hidden>
+    <button type="button" class="button small" data-basket-clear>Vider le panier</button>
+  </div>
+  <div data-basket-filled hidden>
+    {% include "command_panel.html" %}
+  </div>
+</div>
+{% endblock %}

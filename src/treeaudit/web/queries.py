@@ -14,6 +14,7 @@ class Node:
     parent_id: int | None
     name: str
     rel_path: str
+    raw_path: bytes
     kind: str
     size: int | None
     """Files: their size. Folders: space used by their subtree (None if not fully scanned)."""
@@ -22,8 +23,9 @@ class Node:
 
 
 _NODE_SQL = (
-    "SELECT e.entry_id, e.parent_id, e.name_display, e.rel_path_display, e.kind, e.size, "
-    "e.allocated_size, e.mtime_ns, d.allocated_size AS subtree, d.files AS subtree_files "
+    "SELECT e.entry_id, e.parent_id, e.name_display, e.rel_path_display, e.rel_path, e.kind, "
+    "e.size, e.allocated_size, e.mtime_ns, d.allocated_size AS subtree, "
+    "d.files AS subtree_files "
     "FROM entry e LEFT JOIN dir_summary d ON d.scan_id = e.scan_id AND d.entry_id = e.entry_id "
 )
 
@@ -39,6 +41,7 @@ def _node(row: sqlite3.Row) -> Node:
         parent_id=row["parent_id"],
         name=row["name_display"],
         rel_path=row["rel_path_display"],
+        raw_path=bytes(row["rel_path"]),
         kind=row["kind"],
         size=size,
         files=files,
@@ -58,14 +61,18 @@ def get_node(conn: sqlite3.Connection, scan_id: int, entry_id: int) -> Node | No
     return None if row is None else _node(row)
 
 
+def all_children(conn: sqlite3.Connection, scan_id: int, entry_id: int) -> list[Node]:
+    rows = conn.execute(
+        _NODE_SQL + "WHERE e.scan_id = ? AND e.parent_id = ?", (scan_id, entry_id)
+    ).fetchall()
+    return [_node(row) for row in rows]
+
+
 def children(
     conn: sqlite3.Connection, scan_id: int, entry_id: int, limit: int = MAX_CHILDREN
 ) -> tuple[list[Node], int]:
     """Children of a folder, largest first, and their total number."""
-    rows = conn.execute(
-        _NODE_SQL + "WHERE e.scan_id = ? AND e.parent_id = ?", (scan_id, entry_id)
-    ).fetchall()
-    nodes = [_node(row) for row in rows]
+    nodes = all_children(conn, scan_id, entry_id)
     nodes.sort(key=lambda n: (-(n.size or 0), n.name))
     return nodes[:limit], len(nodes)
 

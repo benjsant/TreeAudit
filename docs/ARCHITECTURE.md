@@ -19,7 +19,8 @@ TreeAudit/
 │   ├── parasites/   catalogue rules.toml, détection sur l'index, commandes proposées (D-023, D-025)
 │   ├── reports/     JSON, CSV, puis HTML
 │   ├── web/         app.py (assemblage), api.py (JSON), pages.py + templates/ (HTML), exports.py,
-│   │                jobs.py (tâches longues), queries.py, search_form.py, static/ (CSS, un JS)
+│   │                jobs.py (tâches longues), queries.py, explorer.py (explorateur, panier),
+│   │                search_form.py, static/ (CSS, un JS)
 │   ├── gateway.py   relais TCP entre le port publié et le conteneur app (D-020)
 │   └── cli.py       point d'entrée en ligne de commande (argparse)
 ├── tests/
@@ -81,6 +82,7 @@ Mode WAL, clés étrangères actives, version du schéma dans `PRAGMA user_versi
 - Pages HTML rendues par Jinja2 ; un seul fichier JavaScript natif (lancement des tâches, suivi de la progression par interrogation périodique, sélections, génération et copie des commandes).
 - API JSON sous `/api/`, exports sous `/export/`, pages ailleurs. Une erreur s'affiche en JSON pour l'API et les exports, en page HTML sinon.
 - Pas de framework frontend, pas d'outil de build JavaScript.
+- Explorateur et panier (D-036) : lus uniquement dans l'index, jamais sur le disque. Le panier ne contient que des numéros d'éléments, gardés par analyse dans le navigateur (`localStorage`) ; la commande est construite par le serveur à partir des chemins de l'index.
 
 ## Choix techniques
 - Python ≥ 3.12 (D-017).

@@ -118,6 +118,13 @@ Aucun parcours de fichiers dans cette phase.
   - mémoire maximale : 31 → 75 Mio (cache SQLite plus grand).
   Le dossier factice étant écrit d'un seul tenant, ses fichiers sont contigus : sur un disque de sauvegarde fragmenté, l'ordre physique devrait apporter davantage.
 
+## Phase 6 septies — Explorateur et panier (D-036)
+- [x] Explorateur : tri, pages, dates, repères (à nettoyer, en double, protégé).
+- [x] Fiche d'un élément (autres copies, raison des repères).
+- [x] Panier : sélection entre dossiers, commande construite par le serveur depuis l'index.
+- [x] Essai réel sur `dummy_folder` : 30 000 éléments par dossier, 0,13 s par page.
+- [ ] Aperçu des images (étape dédiée, lecture du contenu).
+
 ## Phase 6 sexies — Sans make (D-035)
 - [x] Lanceur `./treeaudit` (bash) à la place du `Makefile`, mêmes validations avant montage.
 - [x] `.env` lu comme des données (jamais exécuté), testé ; SELinux détecté.

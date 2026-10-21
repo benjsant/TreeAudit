@@ -77,6 +77,12 @@
 - Web : liste des disques avec leur occupation, liste des disques non proposés, nom piégé, analyse d'un disque, conseil d'activation quand l'option est désactivée.
 - Réel : détection par Docker (`/mnt/Data` refusé), disque forgé refusé dans le conteneur, mode « un dossier » inchangé.
 
+## Explorateur et panier (D-036)
+- Explorateur : tri par taille, nom (dossiers d'abord) et date ; tri inconnu refusé ; pages ; repères « à nettoyer », « en double » (après une recherche de doublons seulement) et « protégé » ; noms piégés échappés ; pas de case pour le dossier analysé.
+- Fiche : autres copies d'un doublon, lien symbolique non suivi, élément protégé, élément ou analyse inconnus (404).
+- Panier : en-tête CSRF exigé ; dossier analysé, numéro inconnu, élément compris dans un dossier sélectionné écartés et signalés ; commande corbeille et archive avec des noms piégés, jamais le disque entier ; panier vide refusé.
+- Réel (Docker, `dummy_folder`) : dossier de 30 000 éléments affiché en 0,13 s par page, quel que soit le tri ; repères, fiche et commande vérifiés.
+
 ## Sécurité
 - Aucun accès hors de la racine autorisée, y compris par substitution de lien pendant le scan.
 - Liens symboliques extérieurs non suivis.

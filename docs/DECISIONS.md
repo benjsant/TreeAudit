@@ -306,3 +306,21 @@ Précise la mise en œuvre de D-024.
 - **SELinux** : en mode enforcing (lu dans `/sys/fs/selinux/enforce`), `compose.selinux.yaml` est ajouté tout seul. `COMPOSE_SELINUX=0` ou `1` force le choix.
 - **Perdu** : les raccourcis « dernière analyse par défaut » des cibles `make scan`, `make dupes`… En ligne de commande, le numéro est donné explicitement (`scan list`, `dupes list`) ; le navigateur reste le chemin normal.
 - *Limite* inchangée : `docker compose up` lancé à la main saute la validation sur l'hôte ; la vérification dans le conteneur garantit tout de même la lecture seule (D-008, D-033).
+- *Correction (2026-10-21)* : `./treeaudit check` masquait un échec de `ruff check` (`set -e` ne s'applique pas dans une fonction appelée depuis une liste `&&`). L'échec est maintenant propagé, et les deux erreurs de lint passées inaperçues sont corrigées.
+
+## D-036 — Explorateur de fichiers et panier, en lecture seule (2026-10-21)
+- **Demande du mainteneur** : une interface proche d'un gestionnaire de fichiers.
+- **Limite non négociable** : TreeAudit ne déplace, ne renomme et ne supprime rien lui-même (D-024, D-025), et les disques sont montés en lecture seule. Un gestionnaire qui agit directement exigerait un montage en écriture : écarté.
+- **Ce qui est fait** :
+  - la page « Où va la place ? » devient l'**explorateur** : tri par taille, nom ou date, pages de 200 éléments, date de modification ;
+  - des **repères** sur chaque élément : « 🧹 à nettoyer » (règles D-023), « 📑 en double » (dernière recherche de doublons terminée), « 🛡 protégé » (dépôt git, logiciel installé ; pas affiché sur un élément à nettoyer, pour ne pas embrouiller) ;
+  - une **fiche** par élément : chemin, taille, dates, droits, cible d'un lien (jamais suivie), autres copies d'un doublon, raison d'un repère ;
+  - un **panier** : cases à cocher qui restent cochées d'un dossier à l'autre, puis une page qui produit la commande corbeille, suppression ou archive, à relire et lancer soi-même.
+- **Tout vient de l'index** : le disque n'est pas relu, ce qui garde l'explorateur instantané sur un disque USB lent. Contrepartie : il montre l'état au moment de l'analyse, ce que la commande rappelle.
+- **Panier dans le navigateur** (`localStorage`, une liste par analyse) : il ne contient que des numéros. Le garder sur le serveur ferait écrire l'interface dans `data/` sans bénéfice de sécurité. Si le navigateur refuse le stockage, le panier ne survit pas au changement de page, et la barre le dit.
+- **Le serveur décide de ce qui entre dans la commande** :
+  - chemins relus dans l'index, numéros inconnus ignorés ;
+  - dossier analysé entier jamais proposé ;
+  - élément déjà compris dans un dossier sélectionné retiré ;
+  - élément protégé et analyse incomplète signalés.
+- **Écarté pour l'instant** : l'aperçu des images, seule partie qui lirait le contenu des fichiers. Une image ou un SVG piégé peut contenir du code ; il faudra une étape dédiée (types limités, en-têtes stricts).

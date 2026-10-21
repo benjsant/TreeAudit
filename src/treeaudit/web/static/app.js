@@ -244,6 +244,171 @@ function setupJobMonitor() {
   refresh();
 }
 
+// --- basket (D-036) ------------------------------------------------------------------------
+// The basket holds entry numbers only, per analysis, in this browser. Paths are
+// always read back from the index by the server.
+
+const BASKET_LIMIT = 100000;
+const memoryBaskets = new Map();
+let basketPersistent = true;
+
+function basketKey(scan) {
+  return `treeaudit-basket-${scan}`;
+}
+
+function readBasket(scan) {
+  try {
+    const raw = window.localStorage.getItem(basketKey(scan));
+    const list = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(list)) return new Set(list.filter((n) => Number.isSafeInteger(n) && n > 0));
+  } catch (error) {
+    basketPersistent = false;
+  }
+  return new Set(memoryBaskets.get(scan) || []);
+}
+
+function writeBasket(scan, entries) {
+  const list = [...entries].slice(0, BASKET_LIMIT);
+  memoryBaskets.set(scan, list);
+  try {
+    window.localStorage.setItem(basketKey(scan), JSON.stringify(list));
+  } catch (error) {
+    basketPersistent = false;
+  }
+}
+
+function setupBasket() {
+  const bar = document.querySelector("[data-basket-bar]");
+  if (!bar) return;
+  const scan = bar.dataset.scan;
+  const boxes = () => [...document.querySelectorAll("[data-basket-item]")];
+
+  function refresh() {
+    const entries = readBasket(scan);
+    bar.querySelector("[data-basket-count]").textContent = entries.size.toLocaleString("fr-FR");
+    for (const box of boxes()) box.checked = entries.has(Number(box.value));
+    if (!basketPersistent) {
+      bar.querySelector("[data-basket-count]").textContent +=
+        " (ce navigateur ne garde pas le panier d'une page à l'autre)";
+    }
+  }
+
+  function change(updates) {
+    const entries = readBasket(scan);
+    for (const [entry, wanted] of updates) {
+      if (wanted) entries.add(entry);
+      else entries.delete(entry);
+    }
+    writeBasket(scan, entries);
+    refresh();
+  }
+
+  for (const box of boxes()) {
+    box.addEventListener("change", () => change([[Number(box.value), box.checked]]));
+  }
+  for (const button of document.querySelectorAll("[data-basket-page]")) {
+    button.addEventListener("click", () => {
+      const wanted = button.dataset.basketPage === "add";
+      change(boxes().map((box) => [Number(box.value), wanted]));
+    });
+  }
+  window.addEventListener("storage", refresh);
+  refresh();
+}
+
+function setupBasketView() {
+  const view = document.querySelector("[data-basket-view]");
+  if (!view) return;
+  const scan = view.dataset.scan;
+  const status = view.querySelector("[data-basket-status]");
+  const list = view.querySelector("[data-basket-list]");
+  const notes = view.querySelector("[data-basket-notes]");
+  const filled = view.querySelectorAll("[data-basket-filled]");
+
+  function note(text) {
+    const item = document.createElement("li");
+    item.textContent = text;
+    notes.append(item);
+  }
+
+  async function load() {
+    list.replaceChildren();
+    notes.replaceChildren();
+    const entries = readBasket(scan);
+    for (const part of filled) part.hidden = entries.size === 0;
+    if (entries.size === 0) {
+      status.textContent = "Le panier est vide : coche des fichiers ou des dossiers dans l'explorateur.";
+      return;
+    }
+    let data;
+    try {
+      data = await post(`/api/scans/${encodeURIComponent(scan)}/basket`, { entries: [...entries] });
+    } catch (error) {
+      status.textContent = `Impossible de lire le panier : ${error.message}`;
+      return;
+    }
+    if (data.unknown.length) {
+      for (const entry of data.unknown) entries.delete(entry);
+      writeBasket(scan, entries);
+      note(`${data.unknown.length} élément(s) introuvables dans cette analyse ont été retirés.`);
+    }
+    if (data.root_refused) note("Le dossier analysé entier n'est jamais proposé : il est ignoré.");
+    if (data.covered.length) {
+      note(`${data.covered.length} élément(s) sont déjà compris dans un dossier du panier.`);
+    }
+    for (const item of data.items) {
+      const row = document.createElement("li");
+      row.className = "item";
+      const line = document.createElement("div");
+      line.className = "item-main";
+      const text = document.createElement("span");
+      text.className = "item-text";
+      const name = document.createElement("strong");
+      name.className = "path";
+      name.textContent = `${item.kind === "dir" ? "📁" : item.kind === "symlink" ? "🔗" : "📄"} ${item.path}`;
+      const size = document.createElement("span");
+      size.className = "size";
+      size.textContent = item.size === null ? " · taille inconnue" : ` · ${humanSize(item.size)}`;
+      text.append(name, size);
+      if (item.protection) {
+        const warn = document.createElement("span");
+        warn.className = "warn-text small";
+        warn.textContent = ` · 🛡 protégé (${item.protection})`;
+        text.append(warn);
+      }
+      if (!item.readable) {
+        const warn = document.createElement("span");
+        warn.className = "error-text small";
+        warn.textContent = " · nom illisible : pas de commande possible";
+        text.append(warn);
+      }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "button small";
+      remove.textContent = "Retirer";
+      remove.addEventListener("click", () => {
+        const current = readBasket(scan);
+        current.delete(item.entry);
+        writeBasket(scan, current);
+        load();
+      });
+      line.append(text, remove);
+      row.append(line);
+      list.append(row);
+    }
+    const total = `${humanSize(data.total)}${data.unknown_size ? " au moins" : ""}`;
+    status.textContent = `${data.items.length.toLocaleString("fr-FR")} élément(s), ${total} sur le disque.`;
+    for (const part of filled) part.hidden = data.items.length === 0;
+  }
+
+  view.querySelector("[data-basket-clear]")?.addEventListener("click", () => {
+    if (!window.confirm("Vider le panier ? Rien n'est supprimé sur le disque.")) return;
+    writeBasket(scan, new Set());
+    load();
+  });
+  load();
+}
+
 // --- selections and proposed commands -----------------------------------------------------
 
 function setupCommandBuilders() {
@@ -271,14 +436,19 @@ function setupCommandBuilders() {
     builder.querySelector("[data-build-command]")?.addEventListener("click", async () => {
       errorBox.hidden = true;
       warnings.replaceChildren();
-      const chosen = picks().filter((box) => box.checked).map((box) => Number(box.dataset.pick));
+      const chosen =
+        builder.dataset.kind === "basket"
+          ? [...readBasket(builder.dataset.scan)]
+          : picks().filter((box) => box.checked).map((box) => Number(box.dataset.pick));
       if (chosen.length === 0) {
         showError(builder, "Coche au moins un élément.");
         return;
       }
       const action = builder.querySelector('input[name="action"]:checked').value;
       const body = { action };
-      if (builder.dataset.kind === "dupes") {
+      if (builder.dataset.kind === "basket") {
+        body.entries = chosen;
+      } else if (builder.dataset.kind === "dupes") {
         body.groups = chosen;
         body.keep = {};
         for (const number of chosen) {
@@ -298,6 +468,7 @@ function setupCommandBuilders() {
           notes.push(`⚠ Sélection hors du vert (${data.outside_green.join(", ")}) : vérifie ces éléments.`);
         }
         for (const path of data.skipped || []) notes.push(`⚠ Ignoré (nom non affichable sans risque) : ${path}`);
+        for (const warning of data.warnings || []) notes.push(`⚠ ${warning}`);
         for (const note of notes) {
           const item = document.createElement("li");
           item.textContent = note;
@@ -327,4 +498,6 @@ document.addEventListener("DOMContentLoaded", () => {
   setupArchiveButtons();
   setupJobMonitor();
   setupCommandBuilders();
+  setupBasket();
+  setupBasketView();
 });

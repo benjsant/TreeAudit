@@ -28,7 +28,8 @@ from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES
 from treeaudit.scanner.browse import list_folders
 from treeaudit.scanner.walker import SubpathError
-from treeaudit.shellcmd import Action, cleanup_command
+from treeaudit.shellcmd import Action, cleanup_command, is_displayable
+from treeaudit.web.explorer import Basket, resolve_basket
 from treeaudit.web.jobs import Job, JobError, JobManager
 
 RootId = Annotated[str, Field(pattern=f"^{ROOT_ID_PATTERN.pattern}$")]
@@ -260,4 +261,81 @@ def dupes_command(run_id: int, body: DupesCommand, conn: Db, config: Config) -> 
         "count": len(targets),
         "freed": sum(g.recoverable for g in selected),
         "skipped": [c.rel_path_display for c in result.skipped],
+    }
+
+
+class BasketBody(BaseModel):
+    entries: list[int] = Field(min_length=1, max_length=MAX_SELECTION)
+
+
+class BasketCommand(BasketBody):
+    action: Literal["trash", "delete", "archive"] = "trash"
+
+
+def _basket(
+    conn: sqlite3.Connection, scan_id: int, entries: list[int]
+) -> tuple[sqlite3.Row, Basket]:
+    scan = scans_db.get_scan(conn, scan_id)
+    if scan is None:
+        raise HTTPException(404, "scan inconnu")
+    return scan, resolve_basket(conn, scan_id, entries)
+
+
+@router.post("/scans/{scan_id}/basket")
+def basket_content(scan_id: int, body: BasketBody, conn: Db) -> dict[str, Any]:
+    """What the basket holds, read back from the index (D-036)."""
+    _, basket = _basket(conn, scan_id, body.entries)
+    return {
+        "items": [
+            {
+                "entry": item.entry_id,
+                "path": item.rel_path_display,
+                "kind": item.kind,
+                "size": item.allocated,
+                "protection": item.protection,
+                "readable": is_displayable(item.rel_path),
+            }
+            for item in basket.items
+        ],
+        "total": basket.total,
+        "unknown_size": basket.unknown_size,
+        "unknown": list(basket.unknown),
+        "covered": list(basket.covered),
+        "root_refused": basket.root_refused,
+    }
+
+
+@router.post("/scans/{scan_id}/basket/command")
+def basket_command(scan_id: int, body: BasketCommand, conn: Db, config: Config) -> dict[str, Any]:
+    """Command for the basket. Paths come from the index, never from the page."""
+    scan, basket = _basket(conn, scan_id, body.entries)
+    warnings: list[str] = []
+    if basket.root_refused:
+        warnings.append("Le dossier analysé entier n'est jamais proposé : il a été retiré.")
+    if basket.unknown:
+        warnings.append(
+            f"{len(basket.unknown)} élément(s) n'existent pas dans cette analyse : ignorés."
+        )
+    if not basket.items:
+        raise HTTPException(422, "Le panier est vide.")
+    for item in basket.items:
+        if item.protection:
+            warnings.append(f"Protégé ({item.protection}) : {item.rel_path_display}")
+    if scan["status"] != "complete":
+        warnings.append("L'analyse est incomplète : vérifie les éléments avant de lancer.")
+    warnings.append(
+        "Commande préparée d'après l'analyse : si le disque a changé depuis, relance une analyse."
+    )
+    result = cleanup_command(
+        Action(body.action),
+        basket.items,
+        root_display(config, scan),
+        archive_name=f"scan{scan_id}-panier.tar.gz",
+    )
+    return {
+        "command": result.text,
+        "count": len(basket.items),
+        "freed": basket.total,
+        "skipped": [item.rel_path_display for item in result.skipped],
+        "warnings": warnings,
     }

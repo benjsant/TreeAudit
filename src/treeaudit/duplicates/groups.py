@@ -165,7 +165,7 @@ def choose_keep(copies: list[Copy]) -> tuple[tuple[Copy, ...], tuple[str, ...]]:
     return (*protected, best), tuple(reasons)
 
 
-def _repo_dirs(conn: sqlite3.Connection, scan_id: int) -> set[bytes]:
+def repo_dirs_of(conn: sqlite3.Connection, scan_id: int) -> set[bytes]:
     """Directories containing a .git entry (file or directory)."""
     rows = conn.execute(
         "SELECT rel_path FROM entry WHERE scan_id = ? AND name = ?", (scan_id, b".git")
@@ -173,7 +173,7 @@ def _repo_dirs(conn: sqlite3.Connection, scan_id: int) -> set[bytes]:
     return {row[0].rpartition(b"/")[0] for row in rows}
 
 
-def _protection(rel_path: bytes, repo_dirs: set[bytes]) -> str | None:
+def protection_reason(rel_path: bytes, repo_dirs: set[bytes]) -> str | None:
     parent, _, name = rel_path.rpartition(b"/")
     if name in PROTECTED_NAMES:
         return f"fichier-marqueur {name.decode('utf-8', 'backslashreplace')}"
@@ -227,7 +227,7 @@ def load_groups(conn: sqlite3.Connection, run_id: int) -> GroupReport:
     scan_id = run["scan_id"]
     options = json.loads(run["options"])
     micro = bool(options.get("micro"))
-    repo_dirs = _repo_dirs(conn, scan_id)
+    repo_dirs = repo_dirs_of(conn, scan_id)
 
     groups: list[DuplicateGroup] = []
     digests = conn.execute(
@@ -245,7 +245,7 @@ def load_groups(conn: sqlite3.Connection, run_id: int) -> GroupReport:
             "WHERE h.run_id = ? AND h.size = ? AND h.full = ?",
             (scan_id, run_id, digest_row["size"], digest_row["full"]),
         )
-        copies = [_copy(row, _protection(row["rel_path"], repo_dirs)) for row in rows]
+        copies = [_copy(row, protection_reason(row["rel_path"], repo_dirs)) for row in rows]
         groups.append(_make_group(digest_row["size"], digest_row["full"], copies))
 
     protected_empty = 0
@@ -260,7 +260,7 @@ def load_groups(conn: sqlite3.Connection, run_id: int) -> GroupReport:
         # Protected ones are only counted: there can be hundreds of thousands.
         zones: dict[bytes, list[Copy]] = {}
         for row in empty:
-            protection = _protection(row["rel_path"], repo_dirs)
+            protection = protection_reason(row["rel_path"], repo_dirs)
             if protection:
                 protected_empty += 1
                 continue

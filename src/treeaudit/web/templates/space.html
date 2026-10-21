@@ -1,12 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Place · {{ title }}{% endblock %}
+{% from "marks.html" import badges %}
+{% block title %}Explorateur · {{ title }}{% endblock %}
 {% block content %}
 <p class="back"><a href="/scans/{{ scan.id }}">← Bilan de {{ title }}</a></p>
-<h1>📊 Où va la place ?</h1>
+<h1>📂 Explorateur</h1>
+{% include "basket_bar.html" %}
 <nav class="crumbs" aria-label="Dossier affiché">
-  {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/space?dir={{ crumb.entry_id }}">{{ crumb.name or title }}</a>{% endfor %}
+  {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/space?dir={{ crumb.entry_id }}&amp;sort={{ sort.value }}">{{ crumb.name or title }}</a>{% endfor %}
 </nav>
-<p class="lead">{{ node.size | size if node.size is not none else "Taille inconnue (dossier pas entièrement lu)" }} dans ce dossier. Clique sur un dossier pour y entrer.</p>
+<p class="lead">{{ node.size | size if node.size is not none else "Taille inconnue (dossier pas entièrement lu)" }} dans ce dossier, {{ total_children | number }} élément{{ "s" if total_children > 1 else "" }}. Coche ce que tu veux mettre au panier ; rien n'est modifié sur le disque.</p>
+{% if scan.status != "complete" %}<p class="notice warn" role="alert">L'analyse n'a pas pu tout voir : certains dossiers peuvent être incomplets.</p>{% endif %}
+
+<div class="explorer-tools">
+  <p class="sort">Trier par :
+    {% for key, label in sorts.items() %}
+      {% if key == sort %}<strong aria-current="true">{{ label }}</strong>{% else %}<a href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ key.value }}">{{ label }}</a>{% endif %}
+    {% endfor %}
+  </p>
+  <p class="legend muted small">🧹 à nettoyer · 📑 en double{% if not dupes_run %} (doublons pas encore cherchés){% endif %} · 🛡 protégé (projet, logiciel)</p>
+</div>
 {% if archive.enabled %}
 <div class="actions">
   <button type="button" class="button small" data-start-archive data-endpoint="/api/scans/{{ scan.id }}/entries/{{ node.entry_id }}/archive" data-name="{{ node.name or title }}" data-where="{{ archive.where }}">🗜 Archiver ce dossier</button>
@@ -14,20 +26,34 @@
   <p class="error-text" data-error role="alert" hidden></p>
 </div>
 {% endif %}
-<ul class="bars wide">
-{% for child in children %}
-  <li>
-    <span class="bar-label">
-      {% if child.kind == "dir" %}<a href="/scans/{{ scan.id }}/space?dir={{ child.entry_id }}">📁 {{ child.name }}</a>
-      {% elif child.kind == "symlink" %}🔗 {{ child.name }} <span class="muted">(raccourci, non suivi)</span>
-      {% else %}📄 {{ child.name }}{% endif %}
+
+{% if children %}
+<div class="actions"><button type="button" class="button small" data-basket-page="add">Tout cocher (cette page)</button> <button type="button" class="button small" data-basket-page="remove">Tout décocher (cette page)</button></div>
+{% endif %}
+<ul class="files">
+{% for child in children %}{% set m = marks[child.entry_id] %}
+  <li class="file-row">
+    <input type="checkbox" data-basket-item value="{{ child.entry_id }}" aria-label="Mettre « {{ child.name }} » au panier">
+    <span class="file-name">
+      {% if child.kind == "dir" %}<a href="/scans/{{ scan.id }}/space?dir={{ child.entry_id }}&amp;sort={{ sort.value }}">📁 {{ child.name }}</a>
+      {% elif child.kind == "symlink" %}<a href="/scans/{{ scan.id }}/entries/{{ child.entry_id }}">🔗 {{ child.name }}</a> <span class="muted small">(raccourci, non suivi)</span>
+      {% else %}<a href="/scans/{{ scan.id }}/entries/{{ child.entry_id }}">📄 {{ child.name }}</a>{% endif %}
+      {{ badges(m) }}
     </span>
-    <span class="bar-size">{{ child.size | size if child.size is not none else "?" }}{% if child.files %} · {{ child.files | number }} fichiers{% endif %}</span>
-    {% if node.size and child.size is not none %}<meter min="0" max="{{ node.size }}" value="{{ child.size }}"></meter>{% endif %}
+    <span class="file-size">{{ child.size | size if child.size is not none else "?" }}{% if child.files %}<span class="muted small"> · {{ child.files | number }} fichiers</span>{% endif %}</span>
+    <span class="file-date muted small">{{ child.mtime_ns | date }}</span>
+    <a class="file-info" href="/scans/{{ scan.id }}/entries/{{ child.entry_id }}" aria-label="Détails de « {{ child.name }} »" title="Détails">ⓘ</a>
+    {% if sort.value == "size" and node.size and child.size is not none %}<meter min="0" max="{{ node.size }}" value="{{ child.size }}"></meter>{% endif %}
   </li>
 {% else %}
   <li class="muted">Dossier vide.</li>
 {% endfor %}
 </ul>
-{% if total_children > children | length %}<p class="muted">Les {{ children | length }} plus gros éléments sur {{ total_children | number }} sont affichés.</p>{% endif %}
+{% if pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  {% if page > 1 %}<a class="button small" href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ sort.value }}&amp;page={{ page - 1 }}">← Précédente</a>{% endif %}
+  <span class="muted">Page {{ page }} sur {{ pages }}</span>
+  {% if page < pages %}<a class="button small" href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ sort.value }}&amp;page={{ page + 1 }}">Suivante →</a>{% endif %}
+</nav>
+{% endif %}
 {% endblock %}
