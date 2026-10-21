@@ -35,7 +35,7 @@ TreeAudit/
 
 Disposition `src/` : les tests s'exécutent sur le paquet installé, pas sur le dossier source, ce qui évite les imports accidentels.
 
-Règle de dépendance entre modules : `web` et `cli` dépendent du moteur ; le moteur ne dépend jamais de `web`. Seul `db` écrit sur disque, et uniquement dans le dossier de données.
+Règle de dépendance entre modules : `web` et `cli` dépendent du moteur ; le moteur ne dépend jamais de `web`. Seul `db` écrit sur disque, et uniquement dans le dossier de données ; seule exception, `archive/output.py` écrit les archives vérifiées dans le dossier d'archives (D-032).
 
 ## Configuration
 Fichier TOML lu avec `tomllib` (bibliothèque standard) :

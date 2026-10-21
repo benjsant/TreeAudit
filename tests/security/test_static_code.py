@@ -15,8 +15,9 @@ import pytest
 SRC = Path(__file__).resolve().parents[2] / "src" / "treeaudit"
 
 # Relative to src/treeaudit; entries ending with "/" allow a whole package.
-# These modules only write inside the data directory. reports/ will join later.
-WRITE_ALLOWED = frozenset({"core/datadir.py", "db/"})
+# These modules only write inside the data directory, except archive/output.py,
+# which only writes verified archives inside the archive directory (D-032).
+WRITE_ALLOWED = frozenset({"core/datadir.py", "db/", "archive/output.py"})
 
 
 def _may_write(rel_path: str) -> bool:

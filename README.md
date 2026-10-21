@@ -6,7 +6,7 @@
 > **Mise en garde — à lire avant utilisation**
 >
 > - **Projet en pré-alpha.** Il fonctionne et il est testé, mais il est jeune : des erreurs restent possibles. Il est fourni **« tel quel », sans aucune garantie** (voir la [licence MIT](LICENSE)).
-> - **TreeAudit ne supprime, ne déplace et ne modifie jamais rien.** Il lit, il analyse, et il **propose** des commandes (corbeille, suppression, archive). **Ces commandes, elles, agissent pour de vrai quand tu les lances.** Relis toujours une commande avant de l'exécuter.
+> - **TreeAudit ne supprime, ne déplace et ne modifie jamais rien de ce qu'il analyse.** Il lit, il analyse, et il **propose** des commandes (corbeille, suppression, archive). **Ces commandes, elles, agissent pour de vrai quand tu les lances.** Relis toujours une commande avant de l'exécuter. Sa seule écriture, quand tu la demandes, est une archive vérifiée dans le dossier d'archives que tu as choisi.
 > - **Préfère la corbeille** (proposée par défaut, réversible) à la suppression définitive.
 > - **Aie une sauvegarde à jour** de ce qui compte avant tout nettoyage. TreeAudit n'est pas un outil de sauvegarde.
 > - Les pourcentages de confiance des « dossiers à nettoyer » sont des **estimations** fondées sur des indices (présence d'un `package.json`, d'un `pyvenv.cfg`…), pas des certitudes. Un dossier vert peut exceptionnellement contenir quelque chose d'important.
@@ -26,7 +26,7 @@
 | Recherche : nom, extension, motif, regex, taille, type | ✅ disponible |
 | Commandes de nettoyage prêtes à copier (corbeille, suppression, archive) | ✅ disponible |
 | Exports JSON et CSV | ✅ disponible |
-| Archivage intégré et vérifié avant nettoyage | 🚧 prévu |
+| **Archive vérifiée** d'un dossier avant nettoyage (`.tar.gz`), relue et comparée fichier par fichier | ✅ en ligne de commande (interface web à venir) |
 | Dossiers presque identiques (similarité) | 🚧 prévu |
 | Aide d'une IA locale pour les cas ambigus (sans jamais rien exécuter) | 🚧 envisagé |
 | Windows, macOS | ❌ pas en V1 |
@@ -78,8 +78,25 @@ Le dossier est monté **en lecture seule** dans le conteneur : même en cas de b
 | `make dupes` / `make micro` | Doublons (≥ 1 Kio) / petits fichiers en double et fichiers vides |
 | `make dupes-show SELECT=all` | Commande pour les copies en trop (les fichiers vides ne sont jamais inclus) |
 | `make search ARGS="--ext jpg --min-size 5M"` | Recherche ([syntaxe](docs/FILTERS_AND_REGEX.md)) |
+| `make archive SUBPATH=sous/dossier` | Archive vérifiée dans `TREEAUDIT_ARCHIVE_PATH` (voir ci-dessous) |
 | `make bench ARGS="--dupes"` | Mesure les performances, **en n'affichant que des chiffres** |
 | `make help` | Toutes les commandes |
+
+### Archiver avant de nettoyer
+
+Indique dans `.env` un dossier **existant** où ranger les archives, de préférence sur **un autre disque** que celui que tu analyses :
+
+```bash
+TREEAUDIT_ARCHIVE_PATH=/media/moi/AutreDisque/archives
+```
+
+`make archive SUBPATH=Projets/vieux-site` crée alors `vieux-site-AAAAMMJJ-HHMMSS.tar.gz`. TreeAudit vérifie d'abord l'espace libre, puis écrit l'archive sous un nom temporaire. Il la relit ensuite et compare chaque fichier à l'original, et ne la valide que si tout concorde : sinon, il la retire.
+
+- **« Archive complète et vérifiée »** : l'archive contient tout le dossier.
+- **`-INCOMPLET` dans le nom** : il manque des éléments (fichier illisible, fichier modifié pendant la lecture, fichier spécial…). La liste s'affiche. **Ne supprime pas l'original en te fiant à cette archive.**
+- Un avertissement s'affiche si l'archive est sur le même disque que l'original : ce n'est pas une vraie sauvegarde.
+
+Le dossier d'archives ne peut pas être dans le dossier analysé, ni l'inverse. L'original n'est jamais modifié. Pour restaurer : `tar -xzf archive.tar.gz`. Pour un nom de fichier non UTF-8, GNU tar affiche un avertissement « mot clé inconnu hdrcharset » sans conséquence : le nom est restauré à l'identique.
 
 ## Sécurité en bref
 
@@ -108,6 +125,7 @@ Méthode et chiffres détaillés : [docs/ROADMAP.md](docs/ROADMAP.md) (phase 6 t
 - Linux uniquement ; validé pour l'instant sous Fedora / Nobara.
 - Les règles de « dossiers à nettoyer » et la protection des logiciels installés reposent sur des noms de dossiers connus : un logiciel installé dans un dossier au nom inattendu ne sera pas reconnu comme tel.
 - Une très grande sélection produit une commande très longue.
+- Archives : les dates sont gardées à la seconde ; un fichier ayant plusieurs liens physiques est copié en entier pour chaque nom ; un fichier creux occupe sa taille réelle avant compression.
 - Interface en français uniquement.
 
 ## Documentation

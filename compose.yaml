@@ -29,6 +29,8 @@ services:
     environment:
       # Host path of the root, used only to display copy-pasteable commands (D-025).
       TREEAUDIT_DISPLAY_PATH_MAIN: "${TREEAUDIT_ROOT_PATH:-}"
+      # Host time zone, for the local time in archive names (D-032).
+      TZ: "${TREEAUDIT_TZ:-UTC}"
     volumes:
       - type: bind
         source: "${TREEAUDIT_ROOT_PATH:-/TREEAUDIT_ROOT_PATH_is_not_set}"

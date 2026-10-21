@@ -58,6 +58,16 @@
 - Erreur de lecture pendant le calcul : signalée.
 - Comparaison octet à octet activée : résultat identique.
 
+## Archives vérifiées (phase 6 bis, D-032)
+- Dossier d'archives refusé : dossier système, `/tmp`, dossier personnel entier, lien symbolique, non accessible en écriture, `tmpfs`, lecture seule, chevauchement avec une racine ou le dossier de données ; dans le conteneur : non monté, sous-dossier du montage, deux montages du même dossier de l'hôte.
+- Archive complète en `.tar.gz` et `.tar.xz` : noms en UTF-8 invalide, avec retour à la ligne, de plus de 100 octets ; liens archivés comme liens (y compris vers `/etc/passwd`) ; droits ; dossiers vides ; chaque dossier suivi de son contenu ; source inchangée (droits, taille, date, contenu).
+- Incomplète : fifo, fichier ou dossier illisible, disque monté à l'intérieur, fichier qui grandit ou rétrécit pendant la lecture (l'archive reste lisible et vérifiée).
+- Annulation avant l'écriture, pendant l'écriture et pendant la vérification ; vérification qui échoue (octet modifié) ; erreur d'écriture : aucun fichier ne reste.
+- Espace insuffisant, dossier non configuré, chevauchement, sous-dossier invalide : refus sans rien écrire.
+- Nom déjà pris : jamais remplacé, avec ou sans liens physiques. Un fichier temporaire remplacé n'est ni supprimé ni publié.
+- Vérification seule : entrée différente, en trop, manquante, archive tronquée, somme de contrôle gzip altérée.
+- Manuel : extraction par GNU tar et comparaison avec l'original (contenu, droits, dates, liens).
+
 ## Sécurité
 - Aucun accès hors de la racine autorisée, y compris par substitution de lien pendant le scan.
 - Liens symboliques extérieurs non suivis.

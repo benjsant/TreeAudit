@@ -18,6 +18,9 @@ override TREEAUDIT_ARCHIVE_PATH := $(patsubst %/,%,$(TREEAUDIT_ARCHIVE_PATH))
 # Hand compose exactly the values make validated, so check-root and the actual
 # mount can never disagree.
 export TREEAUDIT_UID TREEAUDIT_GID $(SETTINGS)
+# Host time zone (e.g. Europe/Paris), so that archive names use local time.
+TREEAUDIT_TZ ?= $(shell readlink /etc/localtime 2>/dev/null | sed -n 's|^.*/zoneinfo/||p')
+export TREEAUDIT_TZ
 
 COMPOSE_FILES := -f compose.yaml
 # The archive directory is mounted (read-write) only when it is set (D-032).
@@ -31,7 +34,7 @@ COMPOSE := docker compose $(COMPOSE_FILES)
 DEV := $(COMPOSE) run --rm dev
 HOST_IDS := --user "$$(id -u):$$(id -g)"
 
-.PHONY: help env data lock build check-root up scan parasites dupes micro dupes-show search bench scans down test lint format typecheck check
+.PHONY: help env data lock build check-root up scan parasites dupes micro dupes-show search archive bench scans down test lint format typecheck check
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -105,6 +108,10 @@ dupes-show: ## Show an analysis (RUN=id SELECT=G1,G3|all KEEP=n ACTION=trash|del
 
 search: ## Search the last scan (SCAN=id ARGS="--ext jpg --min-size 10M", see treeaudit search -h)
 	$(COMPOSE) run --rm app search "$(or $(SCAN),$(LAST_SCAN))" $(ARGS)
+
+archive: check-root ## Verified archive of the audited folder into TREEAUDIT_ARCHIVE_PATH (SUBPATH=sub/folder, ARGS=--xz)
+	@test -n "$(TREEAUDIT_ARCHIVE_PATH)" || { echo "TREEAUDIT_ARCHIVE_PATH est vide dans .env : indiquer un dossier d'archives"; exit 2; }
+	$(COMPOSE) run --rm app archive run main $(if $(SUBPATH),--path "$(SUBPATH)") $(ARGS)
 
 bench: check-root ## Measure performance on the folder of .env (numbers only; ARGS="--dupes --micro")
 	$(COMPOSE) run --rm app bench main $(if $(SUBPATH),--path "$(SUBPATH)") $(ARGS)

@@ -44,10 +44,15 @@ def prepare_data_dir(data_dir: str) -> Path:
 
 
 LOCK_FILENAME = "scan.lock"
+ARCHIVE_LOCK_FILENAME = "archive.lock"
 
 
 class ScanLockedError(ConfigError):
     """Another scan is already running with this data directory."""
+
+
+class ArchiveLockedError(ConfigError):
+    """Another archive is already being written with this data directory."""
 
 
 class ScanLock:
@@ -57,9 +62,14 @@ class ScanLock:
     never leaves a stale lock behind.
     """
 
+    filename = LOCK_FILENAME
+
     def __init__(self, data_dir: str) -> None:
-        self.path = Path(data_dir) / LOCK_FILENAME
+        self.path = Path(data_dir) / self.filename
         self._fd: int | None = None
+
+    def _locked_error(self) -> ConfigError:
+        return ScanLockedError("another scan is already running")
 
     def acquire(self) -> None:
         fd = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
@@ -67,7 +77,7 @@ class ScanLock:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             os.close(fd)
-            raise ScanLockedError("another scan is already running") from exc
+            raise self._locked_error() from exc
         self._fd = fd
 
     def release(self) -> None:
@@ -81,3 +91,12 @@ class ScanLock:
 
     def __exit__(self, *exc_info: object) -> None:
         self.release()
+
+
+class ArchiveLock(ScanLock):
+    """One archive at a time: two would compete for the disk and the free space."""
+
+    filename = ARCHIVE_LOCK_FILENAME
+
+    def _locked_error(self) -> ConfigError:
+        return ArchiveLockedError("another archive is already being written")

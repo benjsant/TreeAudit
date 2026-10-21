@@ -12,6 +12,7 @@ Commencer par le minimum, verrouiller les versions avec empreintes (`uv.lock`, D
 - `os` (`scandir`, `open` avec `dir_fd`, `O_NOFOLLOW`, `O_DIRECTORY`, `O_NOATIME`), `stat` : parcours et métadonnées.
 - `pathlib` : manipulation de chemins hors parcours (configuration, affichage).
 - `hashlib` : SHA-256.
+- `tarfile`, `gzip`, `lzma` : archives vérifiées (D-032). Pour l'écriture, seuls `TarInfo.tobuf()` et les compresseurs servent ; la relecture se fait en mode flux, sans rien extraire.
 - `re` : regex Python.
 - `fnmatch` : glob de nom.
 - `sqlite3` : index local.

@@ -290,3 +290,40 @@ def test_archive_status(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> N
     out = capsys.readouterr().out
     assert "Archivage désactivé (/etc/nope)" in out
     assert "dossier système" in out
+
+
+def test_archive_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from treeaudit import cli
+    from treeaudit.archive import destination
+    from treeaudit.roots.mountinfo import parse_mountinfo
+
+    # pytest's tmp_path is below /tmp (refused for archives) and on tmpfs here.
+    trees = tuple(tree for tree in destination.SYSTEM_TREES if tree != "/tmp")
+    monkeypatch.setattr(destination, "SYSTEM_TREES", trees)
+    table = parse_mountinfo(write_mountinfo(tmp_path, tmp_path).read_bytes())
+    monkeypatch.setattr(cli, "read_mountinfo", lambda: table)
+
+    source = tmp_path / "audit"
+    (source / "sub").mkdir(parents=True)
+    (source / "sub" / "a.txt").write_bytes(b"a")
+    archives = tmp_path / "archives"
+    archives.mkdir()
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f'data_dir = "{tmp_path / "data"}"\narchive_dir = "{archives}"\n'
+        f'[[roots]]\nid = "main"\npath = "{source}"\n',
+        encoding="utf-8",
+    )
+    base = ["--config", str(config), "archive", "run"]
+    assert main([*base, "main", "--path", "sub"]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "Archive complète et vérifiée" in out
+    assert "même disque" in out
+    assert [p.name[:4] for p in archives.iterdir()] == ["sub-"]
+
+    assert main([*base, "main", "--path", "nope"]) == EXIT_ERROR
+    assert "Archivage échoué" in capsys.readouterr().out
+    assert main([*base, "other"]) == EXIT_ERROR
+    assert len(list(archives.iterdir())) == 1

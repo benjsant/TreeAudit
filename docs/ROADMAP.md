@@ -120,10 +120,12 @@ Aucun parcours de fichiers dans cette phase.
 
 ## Phase 6 bis — Archivage vérifié (D-024)
 - [x] Dossier de sortie dédié, déclaré et validé (D-032) : natif, hôte (`make check-root`) et conteneur.
-- [ ] Archive `.tar.gz` / `.tar.xz` (bibliothèque standard) écrite sous un nom temporaire, renommée une fois terminée.
-- [ ] Vérification après écriture (taille et empreinte de chaque fichier) avant tout « feu vert ».
-- [ ] Espace disque vérifié avant de commencer ; liens archivés comme liens ; fichiers spéciaux signalés.
-- [ ] Avertissement si l'archive est sur le même disque que l'original.
+- [x] Archive `.tar.gz` / `.tar.xz` (bibliothèque standard) écrite sous un nom temporaire, publiée sans jamais écraser, fichier temporaire retiré en cas d'échec ou d'annulation (`make archive`).
+- [x] Vérification après écriture (type, nom, droits, taille et SHA-256 de chaque entrée, somme de contrôle gzip/xz) avant tout « feu vert ».
+- [x] Espace disque vérifié avant de commencer ; liens archivés comme liens ; fichiers spéciaux signalés (archive `incomplete`).
+- [x] Avertissement si l'archive est sur le même disque que l'original.
+- [x] Mesures (SSD, 1 040 903 éléments, 1,3 Gio, Docker) : 97 s vérification comprise, moins de 55 Mio de mémoire (D-032). Extraction par GNU tar 1.35 identique à l'original (contenu, droits, dates, liens).
+- [ ] Interface web : bouton « Archiver », progression, annulation, résultat.
 - [ ] Revue de sécurité dédiée (première fonction qui écrit hors du dossier de données).
 
 ## Phase 7 — Similarité (fichiers et arborescences)

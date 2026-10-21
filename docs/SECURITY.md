@@ -104,6 +104,17 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - La corbeille (réversible) est proposée avant la suppression définitive ; une sélection hors du vert est signalée.
 - Les modèles de commandes de recréation viennent uniquement du catalogue versionné ; leur seul paramètre (`{name}`) est échappé.
 
+## Archives vérifiées (D-024, D-032)
+- C'est la seule fonction qui écrit en dehors du dossier de données. Tout passe par un descripteur du dossier d'archives, ouvert sans suivre de lien juste après sa validation. Le code est dans un seul module, `archive/output.py`, le seul ajouté à la liste blanche du test statique.
+- **Création** de l'archive avec `O_CREAT | O_EXCL | O_NOFOLLOW`, droits `0600` : jamais un fichier existant, jamais à travers un lien.
+- **Publication** sous le nom final sans jamais remplacer de fichier (`link(2)`). Sans liens physiques (FAT, exFAT), TreeAudit vérifie que le nom est libre, puis renomme.
+- **Seule suppression du code** : celle du fichier temporaire que TreeAudit vient de créer, après un échec ou une annulation, et seulement s'il s'agit toujours du même inode. Un fichier remplacé entre-temps est laissé en place (testé).
+- **Source lue** exactement comme pour les doublons : par descripteurs avec `O_NOFOLLOW`, identité du fichier vérifiée avant et après la lecture. Les liens sont archivés comme des liens, jamais suivis : un lien vers `/etc/passwd` donne un lien dans l'archive, pas le fichier (testé).
+- **Noms dans l'archive** : tous relatifs, construits à partir des noms listés (jamais `..` ni `/`), sous un dossier de tête. Le nom du fichier d'archive ne garde que `A-Z a-z 0-9 . _ -`.
+- **Aucune confiance avant vérification** : l'archive est relue sur le disque et comparée entrée par entrée. Une archive qui ne correspond pas est supprimée, jamais présentée comme bonne. Une archive à laquelle il manque quelque chose porte `-INCOMPLET` dans son nom.
+- La relecture n'extrait rien : les entrées sont lues en mémoire, bloc par bloc.
+- **Limite connue** : sous SELinux en mode enforcing, écrire dans le dossier d'archives depuis le conteneur suppose `COMPOSE_SELINUX=1`, comme pour la lecture des racines. Sinon, l'écriture échoue et l'échec est signalé.
+
 ## Toute future fonction destructive est interdite
 Elle exigera une spécification et une revue de sécurité séparées, un aperçu avant action, une confirmation explicite, une journalisation, une stratégie de restauration ou de quarantaine et des tests d'interruption et d'échec.
 

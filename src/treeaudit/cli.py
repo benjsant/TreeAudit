@@ -104,6 +104,18 @@ def build_parser() -> argparse.ArgumentParser:
     archive = commands.add_parser("archive", help="archives vérifiées (D-032)")
     archive_commands = archive.add_subparsers(dest="archive_command", required=True)
     archive_commands.add_parser("status", help="état du dossier d'archives configuré")
+    archive_run = archive_commands.add_parser(
+        "run",
+        help="créer une archive vérifiée d'un dossier (l'original n'est jamais modifié ; "
+        "Ctrl+C pour annuler)",
+    )
+    archive_run.add_argument("root_id", help="identifiant de la racine configurée")
+    archive_run.add_argument(
+        "--path", default="", help="sous-dossier à archiver, relatif à la racine (défaut : tout)"
+    )
+    archive_run.add_argument(
+        "--xz", action="store_true", help="format .tar.xz (plus compact, beaucoup plus lent)"
+    )
     archive_check = archive_commands.add_parser(
         "check", help="vérifier qu'un dossier peut recevoir des archives"
     )
@@ -303,6 +315,117 @@ def _cmd_archive_status(args: argparse.Namespace) -> int:
         where = f" ({status.shown_path})" if shown else ""
         print(f"Archivage désactivé{where} : {status.message}")
     return EXIT_OK
+
+
+_ARCHIVE_STAGES = {
+    "preparing": "préparation",
+    "writing": "écriture",
+    "verifying": "vérification",
+    "done": "terminé",
+}
+
+
+def _cmd_archive_run(args: argparse.Namespace) -> int:
+    from treeaudit.archive.output import Compression
+    from treeaudit.archive.runner import (
+        ArchiveProgress,
+        ArchiveRequest,
+        ArchiveStatus,
+        InsufficientSpaceError,
+        execute_archive,
+    )
+
+    config = _load(args)
+    root = config.get_root(args.root_id)
+    if root is None:
+        print(f"erreur : racine inconnue : {args.root_id}", file=sys.stderr)
+        return EXIT_ERROR
+    request = ArchiveRequest(
+        root=root,
+        subpath=args.path,
+        compression=Compression.XZ if args.xz else Compression.GZ,
+    )
+    progress = ArchiveProgress()
+
+    def describe() -> str:
+        if progress.stage == "verifying":
+            done = f"{human_size(progress.bytes_verified)} relus"
+        else:
+            done = (
+                f"{progress.entries_done}/{progress.entries_total} éléments, "
+                f"{human_size(progress.bytes_read)}/{human_size(progress.bytes_total)}"
+            )
+        return f"{_ARCHIVE_STAGES[progress.stage]} : {done}, {progress.problems} problème(s)    "
+
+    outcome, failure = _run_in_thread(
+        lambda cancel: execute_archive(
+            config,
+            request,
+            mounts=read_mountinfo(),
+            home=current_home(),
+            cancel=cancel,
+            progress=progress,
+        ),
+        describe,
+    )
+    if failure is not None:
+        if isinstance(failure, ArchiveDirRejectedError):
+            print(f"REFUSÉ [{failure.reason.value}] {ARCHIVE_DIR_MESSAGES[failure.reason]}")
+            return EXIT_REJECTED
+        if isinstance(failure, RootRejectedError):
+            print(
+                f"REFUSÉ [{failure.reason.value}] {failure.path} : "
+                f"{REASON_MESSAGES[failure.reason]}"
+            )
+            return EXIT_REJECTED
+        if isinstance(failure, InsufficientSpaceError):
+            print(
+                f"REFUSÉ : espace insuffisant dans le dossier d'archives "
+                f"({human_size(failure.needed)} nécessaires au pire, "
+                f"{human_size(failure.available)} disponibles). Rien n'a été écrit."
+            )
+            return EXIT_REJECTED
+        raise failure
+    if outcome is None:  # pragma: no cover - the worker either returns or fails
+        return EXIT_ERROR
+
+    status = outcome.status
+    if status is ArchiveStatus.COMPLETE:
+        print(f"✔ Archive complète et vérifiée : {outcome.archive_path_shown}")
+    elif status is ArchiveStatus.INCOMPLETE:
+        print(
+            f"⚠ Archive INCOMPLÈTE (vérifiée, mais il manque des éléments) : "
+            f"{outcome.archive_path_shown}"
+        )
+        print("  Ne pas supprimer l'original en se fiant à cette archive.")
+    elif status is ArchiveStatus.CANCELLED:
+        print("Archivage annulé : le fichier temporaire a été retiré, rien n'a été conservé.")
+    else:
+        print("✘ Archivage échoué : le fichier temporaire a été retiré, rien n'a été conservé.")
+    if outcome.failure:
+        print(f"cause : {outcome.failure}")
+    if outcome.verified:
+        print(
+            f"  {outcome.entries} éléments, {human_size(outcome.bytes_read)} lus, "
+            f"archive de {human_size(outcome.archive_size)}"
+        )
+    if outcome.same_disk and outcome.archive_name:
+        print(
+            "⚠ L'archive est sur le même disque que l'original : ce n'est pas une vraie "
+            "sauvegarde (une panne du disque ferait perdre les deux)."
+        )
+    if outcome.problem_count:
+        print(f"\nProblèmes ({outcome.problem_count}) :")
+        for problem in outcome.problems:
+            print(f"  {problem.path} : {problem.message}")
+        hidden = outcome.problem_count - len(outcome.problems)
+        if hidden > 0:
+            print(f"  … et {hidden} autres")
+    return {
+        ArchiveStatus.COMPLETE: EXIT_OK,
+        ArchiveStatus.INCOMPLETE: EXIT_INCOMPLETE,
+        ArchiveStatus.CANCELLED: EXIT_CANCELLED,
+    }.get(status, EXIT_ERROR)
 
 
 def _cmd_roots_list(args: argparse.Namespace) -> int:
@@ -945,6 +1068,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_archive_check(args)
         if args.command == "archive" and args.archive_command == "status":
             return _cmd_archive_status(args)
+        if args.command == "archive" and args.archive_command == "run":
+            return _cmd_archive_run(args)
         if args.command == "serve":
             return _cmd_serve(args)
         if args.command == "scan" and args.scan_command == "run":
