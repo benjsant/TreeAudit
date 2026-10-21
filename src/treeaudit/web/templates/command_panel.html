@@ -1,11 +1,11 @@
 <section class="panel final-step" aria-labelledby="final-step-title">
   <h2 id="final-step-title">Dernière étape</h2>
-  <p>Que faire de la sélection ?</p>
+  <p>Quelle commande préparer pour la sélection ? TreeAudit ne lance rien : tu copies la commande et c'est toi qui la lances.</p>
   <div class="options">
-    <label class="option"><input type="radio" name="action" value="trash" checked> <span><strong>Mettre à la corbeille</strong> <span class="muted">— recommandé, tu peux récupérer les fichiers</span></span></label>
-    <label class="option"><input type="radio" name="action" value="delete"> <span><strong class="danger">Supprimer définitivement</strong> <span class="muted">— impossible à annuler</span></span></label>
+    <label class="option"><input type="radio" name="action" value="trash" checked> <span><strong>Commande pour tout mettre à la corbeille</strong> <span class="muted">— recommandé, tu peux récupérer les fichiers ; vide la corbeille ensuite pour libérer la place</span></span></label>
+    <label class="option"><input type="radio" name="action" value="delete"> <span><strong class="danger">Commande pour tout supprimer définitivement</strong> <span class="muted">— impossible à annuler</span></span></label>
     {% if allow_archive is not defined or allow_archive %}
-    <label class="option"><input type="radio" name="action" value="archive"> <span><strong>Faire une archive de sauvegarde</strong> <span class="muted">— une copie compressée, rien n'est supprimé</span></span></label>
+    <label class="option"><input type="radio" name="action" value="archive"> <span><strong>Commande pour tout archiver</strong> <span class="muted">— une copie compressée de sauvegarde, rien n'est supprimé</span></span></label>
     {% endif %}
   </div>
   <div class="actions"><button type="button" class="button primary big" data-build-command>Préparer la commande</button></div>
