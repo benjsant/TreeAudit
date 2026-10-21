@@ -1,8 +1,10 @@
-"""Background jobs for the web interface: one scan or duplicate analysis at a time.
+"""Background jobs for the web interface: one scan, duplicate analysis or archive
+at a time.
 
-Jobs reuse the engine entry points (execute_scan, execute_duplicates), which
-take the data-directory lock: a job started while the CLI is running a scan
-fails cleanly instead of running concurrently.
+Jobs reuse the engine entry points (execute_scan, execute_duplicates,
+execute_archive), which take the data-directory locks: a job started while the
+CLI is running the same kind of work fails cleanly instead of running
+concurrently.
 """
 
 from __future__ import annotations
@@ -17,10 +19,20 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from treeaudit.archive.destination import ARCHIVE_DIR_MESSAGES, ArchiveDirRejectedError
+from treeaudit.archive.runner import (
+    ArchiveOutcome,
+    ArchiveProgress,
+    ArchiveRequest,
+    InsufficientSpaceError,
+    execute_archive,
+)
 from treeaudit.core.config import AppConfig
+from treeaudit.core.datadir import ArchiveLockedError, ScanLockedError
 from treeaudit.core.errors import TreeAuditError
 from treeaudit.db.connection import connect
 from treeaudit.duplicates.runner import DupOptions, DupOutcome, DupProgress, execute_duplicates
+from treeaudit.parasites.report import human_size
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.validation import REASON_MESSAGES, RootRejectedError
 from treeaudit.scanner.runner import ScanOutcome, ScanProgress, ScanRequest, execute_scan
@@ -33,6 +45,7 @@ logger = logging.getLogger(__name__)
 class JobKind(StrEnum):
     SCAN = "scan"
     DUPES = "dupes"
+    ARCHIVE = "archive"
 
 
 class JobError(TreeAuditError):
@@ -45,10 +58,10 @@ class Job:
     kind: JobKind
     label: str
     cancel: threading.Event = field(default_factory=threading.Event)
-    progress: ScanProgress | DupProgress = field(default_factory=ScanProgress)
+    progress: ScanProgress | DupProgress | ArchiveProgress = field(default_factory=ScanProgress)
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
-    outcome: ScanOutcome | DupOutcome | None = None
+    outcome: ScanOutcome | DupOutcome | ArchiveOutcome | None = None
     error: str | None = None
     thread: threading.Thread | None = None
 
@@ -76,6 +89,16 @@ class Job:
                 "current_dir": progress.current_dir,
             }
             data["scan_id"] = progress.scan_id
+        elif isinstance(progress, ArchiveProgress):
+            data["progress"] = {
+                "stage": progress.stage.value,
+                "entries_total": progress.entries_total,
+                "entries_done": progress.entries_done,
+                "bytes_total": progress.bytes_total,
+                "bytes_read": progress.bytes_read,
+                "bytes_verified": progress.bytes_verified,
+                "problems": progress.problems,
+            }
         else:
             data["progress"] = {
                 "stage": progress.stage,
@@ -87,7 +110,40 @@ class Job:
             data["run_id"] = progress.run_id
         if self.outcome is not None:
             data["status"] = self.outcome.status.value
+        if isinstance(self.outcome, ArchiveOutcome):
+            data["archive"] = _archive_result(self.outcome)
         return data
+
+
+def _archive_result(outcome: ArchiveOutcome) -> dict[str, Any]:
+    """Archive outcome for the page. The path is the one the user chose (display only)."""
+    return {
+        "path": outcome.archive_path_shown,
+        "verified": outcome.verified,
+        "same_disk": outcome.same_disk,
+        "entries": outcome.entries,
+        "bytes_read": outcome.bytes_read,
+        "archive_size": outcome.archive_size,
+        "failure": outcome.failure,
+        "problem_count": outcome.problem_count,
+        "problems": [{"path": p.path, "message": p.message} for p in outcome.problems],
+    }
+
+
+def _error_message(exc: TreeAuditError) -> str:
+    """Plain-French message for an error raised before a job could do anything."""
+    if isinstance(exc, ArchiveDirRejectedError):
+        return f"archivage impossible : {ARCHIVE_DIR_MESSAGES[exc.reason]}"
+    if isinstance(exc, InsufficientSpaceError):
+        return (
+            f"espace insuffisant dans le dossier d'archives : {human_size(exc.needed)} "
+            f"nécessaires au pire, {human_size(exc.available)} disponibles. Rien n'a été écrit."
+        )
+    if isinstance(exc, ArchiveLockedError):
+        return "un archivage est déjà en cours (peut-être en ligne de commande)"
+    if isinstance(exc, ScanLockedError):
+        return "une analyse est déjà en cours (peut-être en ligne de commande)"
+    return str(exc)
 
 
 class JobManager:
@@ -105,10 +161,12 @@ class JobManager:
         self._ids = itertools.count(1)
         self.current: Job | None = None
 
-    def _start(self, job: Job, work: Callable[[Job], ScanOutcome | DupOutcome]) -> Job:
+    def _start(
+        self, job: Job, work: Callable[[Job], ScanOutcome | DupOutcome | ArchiveOutcome]
+    ) -> Job:
         with self._lock:
             if self.current is not None and self.current.running:
-                raise JobError("une analyse est déjà en cours ; attends sa fin ou annule-la")
+                raise JobError("une tâche est déjà en cours ; attends sa fin ou annule-la")
             self.current = job
 
         def run() -> None:
@@ -117,7 +175,7 @@ class JobManager:
             except RootRejectedError as exc:
                 job.error = f"racine refusée : {REASON_MESSAGES[exc.reason]}"
             except TreeAuditError as exc:
-                job.error = str(exc)
+                job.error = _error_message(exc)
             except Exception as exc:  # reported to the user, logged with traceback
                 logger.exception("job %d failed", job.id)
                 job.error = f"erreur interne : {type(exc).__name__}"
@@ -183,6 +241,32 @@ class JobManager:
             finally:
                 conn.close()
             return outcome
+
+        return self._start(job, work)
+
+    def start_archive(self, root_id: str, subpath: str) -> Job:
+        """Archive a folder of a root; ``subpath`` may hold undecodable bytes
+        (surrogate escapes) when it comes from the index."""
+        root = self.config.get_root(root_id)
+        if root is None:
+            raise JobError("racine inconnue")
+        parts = parse_subpath(subpath)  # SubpathError if unsafe
+        name = parts[-1] if parts else os.path.basename(root.shown_path.rstrip("/"))
+        shown = os.fsencode(name).decode("utf-8", errors="replace") or root.label
+        label = f"Archive de « {shown} »"
+        progress = ArchiveProgress()
+        job = Job(id=next(self._ids), kind=JobKind.ARCHIVE, label=label, progress=progress)
+        request = ArchiveRequest(root=root, subpath="/".join(parts))
+
+        def work(j: Job) -> ArchiveOutcome:
+            return execute_archive(
+                self.config,
+                request,
+                mounts=self._mounts(),
+                home=self._home(),
+                cancel=j.cancel,
+                progress=progress,
+            )
 
         return self._start(job, work)
 

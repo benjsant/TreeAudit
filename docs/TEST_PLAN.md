@@ -66,7 +66,8 @@
 - Espace insuffisant, dossier non configuré, chevauchement, sous-dossier invalide : refus sans rien écrire.
 - Nom déjà pris : jamais remplacé, avec ou sans liens physiques. Un fichier temporaire remplacé n'est ni supprimé ni publié.
 - Vérification seule : entrée différente, en trop, manquante, archive tronquée, somme de contrôle gzip altérée.
-- Manuel : extraction par GNU tar et comparaison avec l'original (contenu, droits, dates, liens).
+- Web : bouton absent et route refusée (409) sans dossier d'archives ; en-tête CSRF exigé ; chemins hors racine refusés ; archive depuis le choix du dossier et depuis une analyse (nom piégé, nom non UTF-8) ; un fichier n'est pas archivable ; message clair en cas d'espace insuffisant ; pages sans code en ligne.
+- Manuel : extraction par GNU tar et comparaison avec l'original (contenu, droits, dates, liens) ; archivage et annulation par la passerelle Docker.
 
 ## Sécurité
 - Aucun accès hors de la racine autorisée, y compris par substitution de lien pendant le scan.

@@ -113,6 +113,7 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - **Noms dans l'archive** : tous relatifs, construits à partir des noms listés (jamais `..` ni `/`), sous un dossier de tête. Le nom du fichier d'archive ne garde que `A-Z a-z 0-9 . _ -`.
 - **Aucune confiance avant vérification** : l'archive est relue sur le disque et comparée entrée par entrée. Une archive qui ne correspond pas est supprimée, jamais présentée comme bonne. Une archive à laquelle il manque quelque chose porte `-INCOMPLET` dans son nom.
 - La relecture n'extrait rien : les entrées sont lues en mémoire, bloc par bloc.
+- **Interface web** : l'archivage se lance par `POST`, avec la protection CSRF habituelle. Le dossier est désigné par la racine et un sous-chemin relatif, ou par l'analyse et le numéro d'entrée ; jamais par un chemin absolu. Le chemin de l'archive affiché est celui que l'utilisateur a choisi. Les noms des éléments manquants sont insérés avec `textContent` (testé avec des noms piégés).
 - **Limite connue** : sous SELinux en mode enforcing, écrire dans le dossier d'archives depuis le conteneur suppose `COMPOSE_SELINUX=1`, comme pour la lecture des racines. Sinon, l'écriture échoue et l'échec est signalé.
 
 ## Toute future fonction destructive est interdite

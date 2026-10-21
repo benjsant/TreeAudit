@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import re
+import sqlite3
 import threading
 from collections.abc import Callable, Iterator
 from html.parser import HTMLParser
@@ -13,7 +15,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from treeaudit.archive import destination
 from treeaudit.core.config import AppConfig, RootConfig
+from treeaudit.db.connection import database_path
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.registry import evaluate_roots
 from treeaudit.roots.validation import RejectReason
@@ -374,3 +378,136 @@ def test_pages_never_show_the_container_root_path(
 def test_inline_code_finder_catches_injections(html: str) -> None:
     with pytest.raises(AssertionError):
         assert_safe_html(html)
+
+
+# --- archives (D-032) ----------------------------------------------------------------------
+
+
+def test_archive_disabled_without_archive_dir(client: TestClient) -> None:
+    page = client.get("/scan/new?root=main")
+    assert "Archivage désactivé" in page.text
+    assert "data-start-archive" not in page.text
+    response = client.post("/api/archives", json={"root_id": "main"}, headers=CSRF)
+    assert response.status_code == 409
+    assert "archivage indisponible" in response.json()["detail"]
+
+
+@pytest.fixture
+def archive_client(
+    tmp_path: Path,
+    root: Path,
+    data_disk_table: Callable[..., MountTable],
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[TestClient]:
+    # pytest's tmp_path lives below /tmp, refused for archives: lift that one rule.
+    trees = tuple(tree for tree in destination.SYSTEM_TREES if tree != "/tmp")
+    monkeypatch.setattr(destination, "SYSTEM_TREES", trees)
+    (tmp_path / "archives").mkdir()
+    (root / os.fsdecode(b"caf\xe9")).mkdir()  # not valid UTF-8
+    (root / os.fsdecode(b"caf\xe9") / "a.txt").write_bytes(b"a")
+    config = AppConfig(
+        data_dir=str(tmp_path / "data"),
+        roots=(RootConfig(id="main", path=str(root), label="Disque", display_path=DISPLAY),),
+        archive_dir=str(tmp_path / "archives"),
+    )
+    mounts = data_disk_table(str(tmp_path))
+    statuses = evaluate_roots(config, mounts, home=None)
+    app = create_app(config, statuses, mounts=lambda: mounts, home=lambda: None)
+    with TestClient(app, base_url="http://127.0.0.1:8765") as test_client:
+        yield test_client
+    app.state.jobs.cancel()
+    app.state.jobs.wait()
+
+
+def archive_names(client: TestClient) -> list[str]:
+    archive_dir = client.app.state.config.archive_dir  # type: ignore[attr-defined]
+    return sorted(os.listdir(archive_dir))
+
+
+def test_archive_from_the_folder_picker(archive_client: TestClient) -> None:
+    page = archive_client.get("/scan/new?root=main&path=photos")
+    assert "data-start-archive" in page.text
+    assert "Archiver « photos »" in page.text
+    assert_safe_html(page.text)
+
+    body = {"root_id": "main", "subpath": "photos"}
+    assert archive_client.post("/api/archives", json=body).status_code == 403  # no CSRF header
+    snapshot = run_job(archive_client, "/api/archives", body)
+    assert snapshot["kind"] == "archive"
+    assert snapshot["status"] == "complete"
+    result = snapshot["archive"]
+    assert isinstance(result, dict)
+    assert result["verified"] and result["same_disk"]
+    assert str(result["path"]).endswith(".tar.gz")
+    assert result["problems"] == []
+    [name] = archive_names(archive_client)
+    assert name.startswith("photos-") and str(result["path"]).endswith(name)
+
+    job_page = archive_client.get("/jobs/current")
+    assert "data-archive-result" in job_page.text
+    assert_safe_html(job_page.text)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"root_id": "main", "subpath": "../.."},
+        {"root_id": "main", "subpath": "/etc"},
+        {"root_id": "nope"},
+        {"root_id": "BAD ID"},
+    ],
+)
+def test_archive_refuses_bad_requests(archive_client: TestClient, body: dict[str, str]) -> None:
+    response = archive_client.post("/api/archives", json=body, headers=CSRF)
+    assert response.status_code in (404, 409, 422)
+    assert archive_names(archive_client) == []
+
+
+def test_archive_from_an_analysis_with_hostile_names(archive_client: TestClient) -> None:
+    scan = run_job(archive_client, "/api/scans", {"root_id": "main", "subpath": ""})
+    scan_id = int(scan["scan_id"])  # type: ignore[call-overload]
+    data_dir = archive_client.app.state.config.data_dir  # type: ignore[attr-defined]
+    conn = sqlite3.connect(database_path(data_dir))
+    try:
+        rows = {
+            bytes(rel): (entry_id, kind)
+            for entry_id, rel, kind in conn.execute(
+                "SELECT entry_id, rel_path, kind FROM entry WHERE scan_id = ?", (scan_id,)
+            )
+        }
+    finally:
+        conn.close()
+
+    space = archive_client.get(f"/scans/{scan_id}/space?dir={rows[XSS_DIR.encode()][0]}")
+    assert "Archiver ce dossier" in space.text
+    assert_safe_html(space.text)
+
+    for raw in (XSS_DIR.encode(), b"caf\xe9"):
+        entry_id = rows[raw][0]
+        url = f"/api/scans/{scan_id}/entries/{entry_id}/archive"
+        snapshot = run_job(archive_client, url, {})
+        assert snapshot["status"] == "complete", snapshot
+        assert_safe_html(archive_client.get("/jobs/current").text)
+    assert len(archive_names(archive_client)) == 2
+
+    file_id = rows[b"photos/a.jpg"][0]
+    url = f"/api/scans/{scan_id}/entries/{file_id}/archive"
+    assert archive_client.post(url, json={}, headers=CSRF).status_code == 422
+    url = f"/api/scans/{scan_id}/entries/999999/archive"
+    assert archive_client.post(url, json={}, headers=CSRF).status_code == 404
+
+
+def test_archive_errors_are_plain_french(
+    archive_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from treeaudit.archive.output import ArchiveOutput
+
+    monkeypatch.setattr(ArchiveOutput, "free_bytes", lambda self: 10)
+    response = archive_client.post(
+        "/api/archives", json={"root_id": "main", "subpath": "photos"}, headers=CSRF
+    )
+    assert response.status_code == 202
+    archive_client.app.state.jobs.wait()  # type: ignore[attr-defined]
+    snapshot = archive_client.get("/api/jobs/current").json()["job"]
+    assert snapshot["error"].startswith("espace insuffisant dans le dossier d'archives")
+    assert archive_names(archive_client) == []

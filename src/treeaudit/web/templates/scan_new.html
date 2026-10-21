@@ -22,8 +22,18 @@
     <button type="button" class="button big primary" data-start-scan data-root="{{ root.id }}" data-path="{{ listing.path }}">
       Analyser « {{ current_name }} »
     </button>
+    {% if archive.enabled %}
+    <button type="button" class="button" data-start-archive data-endpoint="/api/archives" data-root="{{ root.id }}" data-path="{{ listing.path }}" data-name="{{ current_name }}" data-where="{{ archive.where }}">
+      🗜 Archiver « {{ current_name }} »
+    </button>
+    {% endif %}
     <p class="error-text" data-error role="alert" hidden></p>
   </div>
+  {% if archive.enabled %}
+  <p class="muted">« Archiver » crée une copie compressée et vérifiée dans {{ archive.where }}. Le dossier d'origine n'est pas modifié.</p>
+  {% else %}
+  <p class="muted">Archivage désactivé : {{ archive.message }}.</p>
+  {% endif %}
 
   <h2>…ou ouvrir un sous-dossier</h2>
   <ul class="folders">

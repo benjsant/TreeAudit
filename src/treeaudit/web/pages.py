@@ -111,6 +111,11 @@ def render(request: Request, name: str, status_code: int = 200, **context: Any) 
     jobs = request.app.state.jobs
     job = jobs.current
     context.setdefault("running_job", job.snapshot() if job is not None and job.running else None)
+    archive = request.app.state.archive_status
+    context.setdefault(
+        "archive",
+        {"enabled": archive.enabled, "where": archive.shown_path, "message": archive.message},
+    )
     return templates.TemplateResponse(request, name, context, status_code=status_code)
 
 

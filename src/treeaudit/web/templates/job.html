@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Analyse en cours{% endblock %}
 {% block content %}
+{% if job is none or job.kind != "archive" %}
 <p class="steps">1. Choisir le dossier › <strong>2. Analyse</strong> › 3. Bilan</p>
+{% endif %}
 {% if job is none %}
   <h1>Rien en cours</h1>
   <p><a class="button primary" href="/scan/new">Analyser un dossier</a></p>
@@ -16,6 +18,17 @@
       <button type="button" class="button" data-cancel-job {% if not job.running %}hidden{% endif %}>Annuler</button>
       <a class="button primary" data-field="result" href="/" hidden>Voir le bilan</a>
     </div>
+  </section>
+  <section class="panel" data-archive-result aria-live="polite" hidden>
+    <h2 data-field="archive-title"></h2>
+    <p class="path" data-field="archive-path"></p>
+    <p class="muted" data-field="archive-details"></p>
+    <p class="notice warn" data-field="archive-advice" hidden></p>
+    <p class="notice warn" data-field="archive-same-disk" hidden>⚠ L'archive est sur le même disque que l'original : ce n'est pas une vraie sauvegarde (une panne du disque ferait perdre les deux).</p>
+    <details data-field="archive-problems-box" hidden>
+      <summary data-field="archive-problems-title"></summary>
+      <ul class="path" data-field="archive-problems"></ul>
+    </details>
   </section>
 {% endif %}
 {% endblock %}

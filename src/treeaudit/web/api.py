@@ -7,6 +7,7 @@ routes are POST and go through the CSRF guard (web/security.py).
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from collections.abc import Iterator
 from typing import Annotated, Any, Literal
@@ -15,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
+from treeaudit.archive.destination import ArchiveDirStatus
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
@@ -27,7 +29,7 @@ from treeaudit.roots.validation import REASON_MESSAGES
 from treeaudit.scanner.browse import list_folders
 from treeaudit.scanner.walker import SubpathError
 from treeaudit.shellcmd import Action, cleanup_command
-from treeaudit.web.jobs import JobError, JobManager
+from treeaudit.web.jobs import Job, JobError, JobManager
 
 RootId = Annotated[str, Field(pattern=f"^{ROOT_ID_PATTERN.pattern}$")]
 MAX_SELECTION = 100_000
@@ -124,6 +126,55 @@ def start_dupes(scan_id: int, body: DupesStart, jobs: Jobs, conn: Db) -> dict[st
     except JobError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"job": job.snapshot()}
+
+
+def archive_enabled(request: Request) -> None:
+    status: ArchiveDirStatus = request.app.state.archive_status
+    if not status.enabled:
+        raise HTTPException(409, f"archivage indisponible : {status.message}")
+
+
+class ArchiveStart(BaseModel):
+    root_id: RootId
+    subpath: str = Field(default="", max_length=4096)
+
+
+@router.post("/archives", status_code=202)
+def start_archive(body: ArchiveStart, request: Request, jobs: Jobs) -> dict[str, Any]:
+    """Archive a folder chosen in the folder picker (names shown there are valid UTF-8)."""
+    archive_enabled(request)
+    accepted_root(request, body.root_id)
+    return {"job": _start_archive(jobs, body.root_id, body.subpath).snapshot()}
+
+
+@router.post("/scans/{scan_id}/entries/{entry_id}/archive", status_code=202)
+def start_archive_of_entry(
+    scan_id: int, entry_id: int, request: Request, jobs: Jobs, conn: Db
+) -> dict[str, Any]:
+    """Archive a folder seen in an analysis. Its raw name comes from the index, so
+    folders whose name is not valid UTF-8 can be archived too (D-014)."""
+    archive_enabled(request)
+    scan = scans_db.get_scan(conn, scan_id)
+    row = conn.execute(
+        "SELECT rel_path, kind FROM entry WHERE scan_id = ? AND entry_id = ?",
+        (scan_id, entry_id),
+    ).fetchone()
+    if scan is None or row is None:
+        raise HTTPException(404, "dossier inconnu")
+    if row["kind"] != "dir":
+        raise HTTPException(422, "seuls les dossiers peuvent être archivés")
+    accepted_root(request, scan["root_id"])
+    subpath = os.fsdecode(bytes(row["rel_path"]))
+    return {"job": _start_archive(jobs, scan["root_id"], subpath).snapshot()}
+
+
+def _start_archive(jobs: JobManager, root_id: str, subpath: str) -> Job:
+    try:
+        return jobs.start_archive(root_id, subpath)
+    except SubpathError as exc:
+        raise HTTPException(422, "sous-dossier invalide") from exc
+    except JobError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("/jobs/current")

@@ -2,8 +2,8 @@
 
 Routes identify roots by their configured id, scans and analyses by their
 number, folders by a path relative to a root: no route accepts an absolute
-path, and no response contains a host path except the display path used in
-the proposed commands (D-025).
+path, and no response contains a host path except display paths: the one used
+in the proposed commands (D-025) and the archive directory the user chose (D-032).
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from treeaudit import __version__
+from treeaudit.archive.destination import evaluate_archive_dir
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig
 from treeaudit.core.datadir import prepare_data_dir
 from treeaudit.roots.mountinfo import MountTable, read_mountinfo
@@ -86,6 +87,12 @@ def create_app(
     app.state.config = config
     app.state.statuses = {status.root.id: status for status in statuses}
     app.state.jobs = JobManager(config, mounts=mounts, home=home)
+    # Shown on the pages; execute_archive validates the directory again before writing.
+    app.state.archive_status = (
+        evaluate_archive_dir(config, mounts(), home())
+        if config.archive_dir is not None
+        else evaluate_archive_dir(config, MountTable(entries=()), None)
+    )
 
     @app.get("/health")
     def health() -> dict[str, str]:

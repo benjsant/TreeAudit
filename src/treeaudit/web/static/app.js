@@ -24,7 +24,7 @@ async function post(url, body) {
 }
 
 function showError(scope, message) {
-  const target = scope.querySelector("[data-error]");
+  const target = scope?.querySelector("[data-error]");
   if (target) {
     target.textContent = message;
     target.hidden = false;
@@ -52,7 +52,7 @@ function setupStartButtons() {
         await post("/api/scans", { root_id: button.dataset.root, subpath: button.dataset.path });
         window.location.assign("/jobs/current");
       } catch (error) {
-        showError(button.closest(".actions"), error.message);
+        showError(button.closest(".actions, .choice"), error.message);
         button.disabled = false;
       }
     });
@@ -66,11 +66,103 @@ function setupStartButtons() {
         });
         window.location.assign("/jobs/current");
       } catch (error) {
-        showError(button.closest(".actions"), error.message);
+        showError(button.closest(".actions, .choice"), error.message);
         button.disabled = false;
       }
     });
   }
+}
+
+// --- archives ------------------------------------------------------------------------------
+
+function setupArchiveButtons() {
+  for (const button of document.querySelectorAll("[data-start-archive]")) {
+    button.addEventListener("click", async () => {
+      const question =
+        `Créer une archive vérifiée de « ${button.dataset.name} » dans ${button.dataset.where} ?\n\n` +
+        "Le dossier d'origine ne sera pas modifié.";
+      if (!window.confirm(question)) return;
+      button.disabled = true;
+      const body = button.dataset.root
+        ? { root_id: button.dataset.root, subpath: button.dataset.path }
+        : {};
+      try {
+        await post(button.dataset.endpoint, body);
+        window.location.assign("/jobs/current");
+      } catch (error) {
+        showError(button.closest(".actions, .choice"), error.message);
+        button.disabled = false;
+      }
+    });
+  }
+}
+
+const ARCHIVE_STAGES = {
+  preparing: "Préparation",
+  writing: "Écriture",
+  verifying: "Vérification",
+  done: "Terminé",
+};
+
+function archiveProgress(p) {
+  const stage = ARCHIVE_STAGES[p.stage] || p.stage;
+  if (p.stage === "preparing") {
+    return `${stage} : ${p.entries_total.toLocaleString("fr-FR")} éléments trouvés`;
+  }
+  if (p.stage === "verifying") {
+    return `${stage} : ${humanSize(p.bytes_verified)} relus sur ${humanSize(p.bytes_read)}`;
+  }
+  return (
+    `${stage} : ${p.entries_done.toLocaleString("fr-FR")} / ` +
+    `${p.entries_total.toLocaleString("fr-FR")} éléments ` +
+    `(${humanSize(p.bytes_read)} / ${humanSize(p.bytes_total)})`
+  );
+}
+
+const ARCHIVE_TITLES = {
+  complete: "✔ Archive complète et vérifiée",
+  incomplete: "⚠ Archive INCOMPLÈTE (vérifiée, mais il manque des éléments)",
+  cancelled: "Archivage annulé : rien n'a été conservé",
+  failed: "✘ Archivage échoué : rien n'a été conservé",
+};
+
+function showArchiveResult(job) {
+  const box = document.querySelector("[data-archive-result]");
+  if (!box || !job.archive) return;
+  const field = (name) => box.querySelector(`[data-field="${name}"]`);
+  const result = job.archive;
+  field("archive-title").textContent = ARCHIVE_TITLES[job.status] || job.status;
+  field("archive-path").textContent = result.path || "";
+  const details = [];
+  if (result.verified) {
+    details.push(
+      `${result.entries.toLocaleString("fr-FR")} éléments, ${humanSize(result.bytes_read)} lus, ` +
+        `archive de ${humanSize(result.archive_size)}`,
+    );
+  }
+  if (result.failure) details.push(`Cause : ${result.failure}`);
+  field("archive-details").textContent = details.join(" · ");
+  const advice = field("archive-advice");
+  advice.hidden = job.status !== "incomplete";
+  advice.textContent = "Ne supprime pas l'original en te fiant à cette archive : regarde d'abord ce qui manque.";
+  field("archive-same-disk").hidden = !(result.same_disk && result.path);
+  const problems = field("archive-problems");
+  problems.replaceChildren();
+  for (const problem of result.problems) {
+    const item = document.createElement("li");
+    item.textContent = `${problem.path} : ${problem.message}`;
+    problems.append(item);
+  }
+  const hidden = result.problem_count - result.problems.length;
+  if (hidden > 0) {
+    const item = document.createElement("li");
+    item.textContent = `… et ${hidden.toLocaleString("fr-FR")} autres`;
+    problems.append(item);
+  }
+  field("archive-problems-title").textContent = `Éléments manquants ou incertains (${result.problem_count})`;
+  field("archive-problems-box").hidden = result.problem_count === 0;
+  field("archive-problems-box").open = job.status === "incomplete";
+  box.hidden = false;
 }
 
 // --- following a job -------------------------------------------------------------------
@@ -110,6 +202,9 @@ function setupJobMonitor() {
     if (job.kind === "scan") {
       field("progress").textContent = `${p.entries.toLocaleString("fr-FR")} éléments vus`;
       field("current").textContent = p.current_dir || "–";
+    } else if (job.kind === "archive") {
+      field("progress").textContent = archiveProgress(p);
+      field("current").textContent = p.problems ? `${p.problems} élément(s) à signaler` : "";
     } else {
       field("progress").textContent =
         `${p.files_hashed.toLocaleString("fr-FR")} / ${p.candidates.toLocaleString("fr-FR")} ` +
@@ -127,6 +222,10 @@ function setupJobMonitor() {
     if (job.error) {
       field("error").textContent = job.error;
       field("error").hidden = false;
+    }
+    if (job.kind === "archive") {
+      showArchiveResult(job);
+      return;
     }
     const link = field("result");
     let target = null;
@@ -225,6 +324,7 @@ function setupCommandBuilders() {
 
 document.addEventListener("DOMContentLoaded", () => {
   setupStartButtons();
+  setupArchiveButtons();
   setupJobMonitor();
   setupCommandBuilders();
 });

@@ -26,7 +26,7 @@
 | Recherche : nom, extension, motif, regex, taille, type | ✅ disponible |
 | Commandes de nettoyage prêtes à copier (corbeille, suppression, archive) | ✅ disponible |
 | Exports JSON et CSV | ✅ disponible |
-| **Archive vérifiée** d'un dossier avant nettoyage (`.tar.gz`), relue et comparée fichier par fichier | ✅ en ligne de commande (interface web à venir) |
+| **Archive vérifiée** d'un dossier avant nettoyage (`.tar.gz`), relue et comparée fichier par fichier | ✅ disponible |
 | Dossiers presque identiques (similarité) | 🚧 prévu |
 | Aide d'une IA locale pour les cas ambigus (sans jamais rien exécuter) | 🚧 envisagé |
 | Windows, macOS | ❌ pas en V1 |
@@ -90,7 +90,7 @@ Indique dans `.env` un dossier **existant** où ranger les archives, de préfér
 TREEAUDIT_ARCHIVE_PATH=/media/moi/AutreDisque/archives
 ```
 
-`make archive SUBPATH=Projets/vieux-site` crée alors `vieux-site-AAAAMMJJ-HHMMSS.tar.gz`. TreeAudit vérifie d'abord l'espace libre, puis écrit l'archive sous un nom temporaire. Il la relit ensuite et compare chaque fichier à l'original, et ne la valide que si tout concorde : sinon, il la retire.
+Dans le navigateur, un bouton **« 🗜 Archiver »** apparaît alors sur le choix du dossier et dans « Où va la place ? ». En ligne de commande, `make archive SUBPATH=Projets/vieux-site` crée `vieux-site-AAAAMMJJ-HHMMSS.tar.gz`. TreeAudit vérifie d'abord l'espace libre, puis écrit l'archive sous un nom temporaire. Il la relit ensuite et compare chaque fichier à l'original, et ne la valide que si tout concorde : sinon, il la retire.
 
 - **« Archive complète et vérifiée »** : l'archive contient tout le dossier.
 - **`-INCOMPLET` dans le nom** : il manque des éléments (fichier illisible, fichier modifié pendant la lecture, fichier spécial…). La liste s'affiche. **Ne supprime pas l'original en te fiant à cette archive.**
