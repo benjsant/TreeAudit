@@ -145,6 +145,11 @@ def _scan_or_404(conn: sqlite3.Connection, scan_id: int) -> sqlite3.Row:
     return scan
 
 
+def path_prefix(config: AppConfig, scan: sqlite3.Row) -> str:
+    """Host path of the analysed root, ending with "/": shown before relative paths."""
+    return root_display(config, scan).rstrip("/") + "/"
+
+
 def analysis_title(config: AppConfig, scan: sqlite3.Row) -> str:
     """Short name of what was analysed: the folder name, as the user knows it."""
     shown = root_display(config, scan).rstrip("/")
@@ -366,6 +371,7 @@ def entry_page(request: Request, scan_id: int, entry_id: int, conn: Db, config: 
         scan=scan,
         title=analysis_title(config, scan),
         entry=details,
+        prefix=path_prefix(config, scan),
         parent=parent,
         crumbs=queries.breadcrumb(conn, scan_id, parent) if parent is not None else [],
         dupes_run=explorer.latest_dupes_run(conn, scan_id),
@@ -426,6 +432,7 @@ def dupes_page(
         scan=scan,
         title=analysis_title(config, scan),
         report=report,
+        prefix=path_prefix(config, scan),
         groups=report.groups[:limit],
         limit=limit,
         copies=copies,

@@ -279,6 +279,9 @@ def test_duplicates_page_and_command(client: TestClient, scanned: int) -> None:
     assert page.status_code == 200
     assert "exemplaires" in page.text
     assert_safe_html(page.text)
+    # Full host path: the disk in muted text, then the path inside it.
+    assert f'<span class="muted">{DISPLAY}/</span>photos/a.jpg' in page.text
+    assert f'<span class="muted">{DISPLAY}/</span>photos/&lt;img src=x' in page.text
 
     url = f"/api/dupes/{run_id}/command"
     suggested = client.post(url, json={"groups": [1]}, headers=CSRF).json()
@@ -364,8 +367,20 @@ def test_rejected_root_listed_but_unusable(client: TestClient) -> None:
 def test_pages_never_show_the_container_root_path(
     client: TestClient, scanned: int, root: Path
 ) -> None:
-    for url in ("/", f"/scans/{scanned}", f"/scans/{scanned}/parasites", "/scan/new?root=main"):
-        assert str(root) not in client.get(url).text
+    run = run_job(client, f"/api/scans/{scanned}/dupes", {"micro": False})
+    urls = [
+        "/",
+        f"/scans/{scanned}",
+        f"/scans/{scanned}/parasites",
+        f"/scans/{scanned}/space",
+        f"/scans/{scanned}/entries/1",
+        f"/dupes/{run['run_id']}",
+        "/scan/new?root=main",
+    ]
+    for url in urls:
+        page = client.get(url)
+        assert page.status_code == 200, url
+        assert str(root) not in page.text, url
 
 
 @pytest.mark.parametrize(

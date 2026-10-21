@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "marks.html" import badges %}
+{% from "paths.html" import full_path %}
 {% block title %}{{ entry.name or title }} · {{ title }}{% endblock %}
 {% block content %}
 <p class="back">{% if parent %}<a href="/scans/{{ scan.id }}/space?dir={{ parent.entry_id }}">← Retour au dossier</a>{% else %}<a href="/scans/{{ scan.id }}/space">← Explorateur</a>{% endif %}</p>
@@ -24,7 +25,7 @@
 
 <section class="panel">
   <dl class="stats">
-    <dt>Chemin</dt><dd class="path">{{ entry.rel_path_display or "(dossier analysé)" }}</dd>
+    <dt>Chemin</dt><dd>{{ full_path(prefix, entry.rel_path_display) }}</dd>
     <dt>Type</dt><dd>{{ {"dir": "dossier", "file": "fichier", "symlink": "lien symbolique (jamais suivi)", "other": "fichier spécial"}[entry.kind] }}</dd>
     {% if entry.kind == "dir" %}
       {% if entry.subtree %}
@@ -56,7 +57,7 @@
   <h2>📑 Fichier en {{ entry.marks.copies }} exemplaires</h2>
   <p>Même contenu, vérifié octet par octet (empreinte SHA-256). Les autres copies :</p>
   <ul class="plain">
-  {% for copy in entry.other_copies %}<li><a class="path" href="/scans/{{ scan.id }}/entries/{{ copy.entry_id }}">{{ copy.rel_path_display }}</a></li>{% endfor %}
+  {% for copy in entry.other_copies %}<li><a href="/scans/{{ scan.id }}/entries/{{ copy.entry_id }}">{{ full_path(prefix, copy.rel_path_display) }}</a></li>{% endfor %}
   </ul>
   {% if dupes_run %}<p><a href="/dupes/{{ dupes_run.id }}">Voir tous les doublons</a></p>{% endif %}
 </section>
