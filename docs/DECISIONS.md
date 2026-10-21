@@ -250,4 +250,10 @@ Précise la mise en œuvre de D-024.
   - **Interface web (étape c)** : un bouton « Archiver » apparaît sur le choix du dossier et sur l'exploration de l'espace, seulement si le dossier d'archives est valide. Sinon, la raison s'affiche. Une confirmation rappelle la destination.
     - Deux routes `POST`, protégées contre le CSRF : `/api/archives` (racine plus sous-dossier relatif) et `/api/scans/{n}/entries/{m}/archive`. Cette dernière lit le nom brut dans l'index, ce qui permet d'archiver un dossier au nom non UTF-8. Aucune route n'accepte de chemin absolu.
     - L'archivage est une tâche comme une analyse : une seule tâche à la fois, avec progression et annulation. Le résultat (statut, chemin de l'archive, éléments manquants) s'affiche sur la page de suivi.
+  - **Revue de sécurité (étape d)** : trois défauts corrigés.
+    - Le fichier temporaire n'était pas supprimé quand le disque était plein.
+    - Une archive lancée depuis une analyse pouvait viser un autre dossier si la racine avait changé ; le dossier doit maintenant avoir le même inode.
+    - Le nom final n'était pas revérifié après publication.
+    
+    Les risques résiduels sont listés dans `SECURITY.md`.
   - **Mesures** (SSD, 1 040 903 éléments, 1,3 Gio, dans Docker) : 168 s → 97 s, vérification comprise, et moins de 55 Mio de mémoire. À titre de comparaison, `tar czf` met 10 s, mais sans parcours sécurisé ni vérification. Le coût restant vient surtout de `tarfile`, en Python pur, entrée par entrée ; écrire soi-même les en-têtes tar ne vaut pas le risque.

@@ -126,7 +126,7 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Avertissement si l'archive est sur le même disque que l'original.
 - [x] Mesures (SSD, 1 040 903 éléments, 1,3 Gio, Docker) : 97 s vérification comprise, moins de 55 Mio de mémoire (D-032). Extraction par GNU tar 1.35 identique à l'original (contenu, droits, dates, liens).
 - [x] Interface web : bouton « Archiver » (choix du dossier et exploration de l'espace), confirmation, progression, annulation, résultat en clair. Essai réel par la passerelle Docker, annulation comprise.
-- [ ] Revue de sécurité dédiée (première fonction qui écrit hors du dossier de données).
+- [x] Revue de sécurité dédiée (2026-10-21, `SECURITY.md`) : 3 défauts corrigés et testés, risques résiduels documentés.
 
 ## Phase 7 — Similarité (fichiers et arborescences)
 - [ ] Définir les critères d'identité (mêmes chemins relatifs, mêmes empreintes).

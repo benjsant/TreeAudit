@@ -18,6 +18,7 @@ from __future__ import annotations
 import errno as errno_codes
 import gzip
 import io
+import logging
 import lzma
 import os
 import stat
@@ -27,6 +28,8 @@ from types import TracebackType
 from typing import BinaryIO, Protocol
 
 from treeaudit.core.errors import TreeAuditError
+
+logger = logging.getLogger(__name__)
 
 DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 CREATE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
@@ -158,10 +161,12 @@ class ArchiveOutput:
             compressor.close()  # does not close the underlying file
 
     def close_file(self) -> None:
-        self._close_compressor()
-        if self._file is not None:
-            file, self._file = self._file, None
-            file.close()
+        try:
+            self._close_compressor()
+        finally:
+            if self._file is not None:
+                file, self._file = self._file, None
+                file.close()
 
     def open_partial_for_reading(self) -> int:
         """Reopen the temporary archive read-only, checking it is still ours."""
@@ -222,10 +227,25 @@ class ArchiveOutput:
         except OSError as exc:
             if exc.errno not in _NO_LINK_ERRNOS:
                 raise
-            return self._rename_if_free(partial, name)
-        # Both names now point to the archive: drop the temporary one.
-        self._remove_partial()
+            if not self._rename_if_free(partial, name):
+                return False
+            self._check_published(name)
+            self._partial_name = None
+            return True
+        self._check_published(name)
+        # Both names now point to the archive: drop the temporary one, if it is
+        # still ours (otherwise it is left alone).
+        if self._partial_is_ours():
+            self._remove_partial()
+        else:
+            self._partial_name = None
         return True
+
+    def _check_published(self, name: str) -> None:
+        """The final name must designate the archive this object wrote."""
+        st = os.stat(name, dir_fd=self.dir_fd, follow_symlinks=False)
+        if (st.st_dev, st.st_ino) != self._partial_id or not stat.S_ISREG(st.st_mode):
+            raise OutputError("the published name does not designate the verified archive")
 
     def _rename_if_free(self, partial: str, name: str) -> bool:
         """Fallback without hard links: rename after checking the name is free.
@@ -249,8 +269,15 @@ class ArchiveOutput:
         The only removal in TreeAudit (D-032): it targets nothing but the file
         this object created, relative to the archive directory descriptor, and
         only if it is still the same inode. Returns True if it was removed.
+
+        It must work when writing failed because the disk is full: closing the
+        file then fails again (the buffered data cannot be written), which must
+        not prevent the removal that frees the space.
         """
-        self.close_file()
+        try:
+            self.close_file()
+        except OSError as exc:
+            logger.warning("temporary archive could not be closed cleanly: %s", exc.strerror)
         if self._partial_name is None or self._dir_fd is None:
             return False
         if not self._partial_is_ours():

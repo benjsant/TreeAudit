@@ -114,6 +114,29 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - **Aucune confiance avant vérification** : l'archive est relue sur le disque et comparée entrée par entrée. Une archive qui ne correspond pas est supprimée, jamais présentée comme bonne. Une archive à laquelle il manque quelque chose porte `-INCOMPLET` dans son nom.
 - La relecture n'extrait rien : les entrées sont lues en mémoire, bloc par bloc.
 - **Interface web** : l'archivage se lance par `POST`, avec la protection CSRF habituelle. Le dossier est désigné par la racine et un sous-chemin relatif, ou par l'analyse et le numéro d'entrée ; jamais par un chemin absolu. Le chemin de l'archive affiché est celui que l'utilisateur a choisi. Les noms des éléments manquants sont insérés avec `textContent` (testé avec des noms piégés).
+- **Archives sûres à extraire** : tous les noms sont relatifs, sans `..`, et aucune entrée n'est placée sous un lien symbolique de l'archive, puisque le parcours ne descend jamais dans un lien. Extraire une archive TreeAudit ne peut donc rien écrire hors du dossier d'extraction (l'attaque classique « lien puis fichier à travers le lien » est impossible). Testé, y compris avec le filtre `data` de Python (PEP 706).
+
+### Revue de sécurité de la phase 6 bis (2026-10-21)
+Relecture critique de tout le code d'archivage, centrée sur le seul module qui écrit.
+
+**Défauts trouvés et corrigés** (chacun a un test qui échoue avec l'ancien code) :
+1. **Disque plein** : en cas d'échec d'écriture, la suppression du fichier temporaire commençait par fermer ce fichier. Or la fermeture échoue à nouveau, faute de place pour vider le tampon, si bien que le fichier temporaire restait sur le disque plein. La fermeture est désormais tentée et son échec journalisé, mais la suppression a toujours lieu.
+2. **Archive lancée depuis une analyse** : elle reposait sur le chemin relatif enregistré dans l'index. Si le dossier audité avait changé entre-temps (autre dossier dans `.env`, dossier remplacé), TreeAudit archivait un autre dossier portant le même chemin. Désormais, le dossier doit avoir le même périphérique et le même inode que lors de l'analyse ; sinon, rien n'est écrit et l'utilisateur est invité à relancer l'analyse.
+3. **Publication** : après `link`/`rename`, TreeAudit vérifie que le nom final désigne bien l'archive vérifiée (même inode, fichier ordinaire). Il ne retire le nom temporaire que s'il désigne encore ce fichier. Sinon, l'archivage échoue et le fichier inconnu reste en place.
+
+**Vérifié sans défaut** :
+- Aucune écriture hors du module `archive/output.py` (test statique).
+- Aucun chemin absolu accepté par l'API ; protection CSRF sur les deux routes ; noms piégés affichés sans risque.
+- Racines toujours en lecture seule.
+- Fichier temporaire et archive en `0600`.
+- Annulation et erreurs à chaque étape sans fichier résiduel.
+- Mémoire bornée.
+
+**Risques résiduels acceptés** :
+- **Programme malveillant du même utilisateur** (hors du modèle de menace) : il pourrait remplacer des fichiers du dossier d'archives entre deux vérifications. Les vérifications par inode réduisent la fenêtre sans l'éliminer, faute d'appel système « supprimer ce descripteur ». De même, sans liens physiques (FAT, exFAT), le renommage final pourrait remplacer un fichier apparu à cet instant précis.
+- **Le dossier d'archives est accessible en écriture au conteneur `app`.** Un conteneur compromis pourrait modifier ou supprimer les archives qui s'y trouvent, mais pas les dossiers audités. Il faut donc lui consacrer un dossier dédié, sans autre contenu.
+- **Arrêt brutal** (coupure, `kill -9`) : un fichier caché `.….partial` peut rester. TreeAudit ne supprime jamais un fichier qu'il n'a pas créé pendant l'exécution en cours ; l'utilisateur le supprime lui-même (il est incomplet par définition).
+- **Liens symboliques absolus** (par exemple vers `/etc/passwd`) : ils sont archivés tels quels, comme des liens. GNU tar les restaure comme des liens ; le filtre `data` de Python refuse de les extraire.
 - **Limite connue** : sous SELinux en mode enforcing, écrire dans le dossier d'archives depuis le conteneur suppose `COMPOSE_SELINUX=1`, comme pour la lecture des racines. Sinon, l'écriture échoue et l'échec est signalé.
 
 ## Toute future fonction destructive est interdite

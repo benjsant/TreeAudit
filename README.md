@@ -96,7 +96,7 @@ Dans le navigateur, un bouton **« 🗜 Archiver »** apparaît alors sur le cho
 - **`-INCOMPLET` dans le nom** : il manque des éléments (fichier illisible, fichier modifié pendant la lecture, fichier spécial…). La liste s'affiche. **Ne supprime pas l'original en te fiant à cette archive.**
 - Un avertissement s'affiche si l'archive est sur le même disque que l'original : ce n'est pas une vraie sauvegarde.
 
-Le dossier d'archives ne peut pas être dans le dossier analysé, ni l'inverse. L'original n'est jamais modifié. Pour restaurer : `tar -xzf archive.tar.gz`. Pour un nom de fichier non UTF-8, GNU tar affiche un avertissement « mot clé inconnu hdrcharset » sans conséquence : le nom est restauré à l'identique.
+Consacre à TreeAudit un dossier d'archives **dédié** : il y écrit, et rien d'autre ne devrait s'y trouver. Le dossier d'archives ne peut pas être dans le dossier analysé, ni l'inverse. Après un arrêt brutal (coupure de courant…), un fichier caché `.….partial` peut rester : c'est une archive inachevée, tu peux la supprimer. L'original n'est jamais modifié. Pour restaurer : `tar -xzf archive.tar.gz`. Pour un nom de fichier non UTF-8, GNU tar affiche un avertissement « mot clé inconnu hdrcharset » sans conséquence : le nom est restauré à l'identique.
 
 ## Sécurité en bref
 

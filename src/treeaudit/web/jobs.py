@@ -244,9 +244,12 @@ class JobManager:
 
         return self._start(job, work)
 
-    def start_archive(self, root_id: str, subpath: str) -> Job:
+    def start_archive(
+        self, root_id: str, subpath: str, *, expected_folder: tuple[int, int] | None = None
+    ) -> Job:
         """Archive a folder of a root; ``subpath`` may hold undecodable bytes
-        (surrogate escapes) when it comes from the index."""
+        (surrogate escapes) when it comes from the index, together with the
+        folder identity recorded there (``expected_folder``)."""
         root = self.config.get_root(root_id)
         if root is None:
             raise JobError("racine inconnue")
@@ -256,7 +259,9 @@ class JobManager:
         label = f"Archive de « {shown} »"
         progress = ArchiveProgress()
         job = Job(id=next(self._ids), kind=JobKind.ARCHIVE, label=label, progress=progress)
-        request = ArchiveRequest(root=root, subpath="/".join(parts))
+        request = ArchiveRequest(
+            root=root, subpath="/".join(parts), expected_folder=expected_folder
+        )
 
         def work(j: Job) -> ArchiveOutcome:
             return execute_archive(

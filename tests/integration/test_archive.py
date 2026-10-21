@@ -210,7 +210,27 @@ def test_complete_archive(
     assert found[top + b"/docs/report.pdf"].mtime == 1_600_000_000  # whole seconds
 
     assert_depth_first(archive)
+    assert_safe_to_extract(archive)
     assert snapshot(source) == before, "the archived folder must never change"
+
+
+def assert_safe_to_extract(path: Path) -> None:
+    """No member can be written outside the extraction folder: relative names,
+    no '..', and nothing below a symlink member (the classic tar link attack)."""
+    with tarfile.open(path, encoding="utf-8", errors="surrogateescape") as tar:
+        found = tar.getmembers()
+    links = {os.fsencode(m.name) for m in found if m.issym() or m.islnk()}
+    for member in found:
+        name = os.fsencode(member.name)
+        parts = name.split(b"/")
+        assert not name.startswith(b"/") and b".." not in parts and b"" not in parts, name
+        ancestors = {b"/".join(parts[:i]) for i in range(1, len(parts))}
+        assert not ancestors & links, name
+    # The data filter of Python's tarfile (PEP 706) accepts every member.
+    with tarfile.open(path, encoding="utf-8", errors="surrogateescape") as tar:
+        for member in tar.getmembers():
+            if not member.issym():  # absolute link targets are kept as links, never followed
+                tarfile.data_filter(member, "/extract")
 
 
 def assert_depth_first(path: Path) -> None:
@@ -701,3 +721,71 @@ def test_tar_stream_refuses_a_size_mismatch() -> None:
         TarStream(io.BytesIO()).add(info, io.BytesIO(b"short"))  # type: ignore[arg-type]
     with pytest.raises(OutputError):
         TarStream(io.BytesIO()).add(info)  # type: ignore[arg-type]
+
+
+# --- Security review (step d) ------------------------------------------------------------
+
+
+def test_full_disk_still_removes_the_temporary_file(
+    tmp_path: Path, source: Path, archives: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With a full disk, closing the file fails too: the removal must still happen."""
+
+    close_compressor = ArchiveOutput._close_compressor
+
+    def disk_full(self: ArchiveOutput) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    def close_then_fail(self: ArchiveOutput) -> None:
+        was_open = self._compressor is not None
+        close_compressor(self)  # gzip marks itself closed even when its last write fails
+        if was_open:
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(ArchiveOutput, "sync", disk_full)
+    monkeypatch.setattr(ArchiveOutput, "_close_compressor", close_then_fail)
+    outcome = run(tmp_path, source, archives)
+    assert outcome.status is ArchiveStatus.FAILED
+    assert os.listdir(archives) == []
+
+
+def test_published_name_must_be_the_verified_archive(
+    tmp_path: Path, source: Path, archives: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the final name ends up designating another file, nothing is claimed."""
+
+    def swapped_link(src: str, dst: str, **kwargs: object) -> None:
+        (archives / dst).write_bytes(b"not the archive")
+
+    monkeypatch.setattr(os, "link", swapped_link)
+    outcome = run(tmp_path, source, archives)
+    assert outcome.status is ArchiveStatus.FAILED
+    assert outcome.archive_name is None
+    assert outcome.failure is not None and "does not designate" in outcome.failure
+    # The temporary archive is removed; the foreign file is left alone.
+    assert os.listdir(archives) == ["Backup_2019-20261021-143005.tar.gz"]
+    assert (archives / "Backup_2019-20261021-143005.tar.gz").read_bytes() == b"not the archive"
+
+
+def test_folder_chosen_in_an_analysis_must_still_be_the_same(
+    tmp_path: Path, source: Path, archives: Path
+) -> None:
+    config = config_for(tmp_path, source, archives)
+    docs = os.lstat(source / "docs")
+
+    def archive(expected: tuple[int, int]) -> ArchiveOutcome:
+        request = ArchiveRequest(root=config.roots[0], subpath="docs", expected_folder=expected)
+        return execute_archive(
+            config,
+            request,
+            mounts=mounts_for(tmp_path),
+            home=None,
+            cancel=threading.Event(),
+            now=NOW,
+        )
+
+    assert archive((docs.st_dev, docs.st_ino)).status is ArchiveStatus.COMPLETE
+    outcome = archive((docs.st_dev, docs.st_ino + 1))
+    assert outcome.status is ArchiveStatus.FAILED
+    assert outcome.failure is not None and "n'est plus celui de l'analyse" in outcome.failure
+    assert len(os.listdir(archives)) == 1

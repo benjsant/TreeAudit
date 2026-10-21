@@ -20,7 +20,7 @@ from treeaudit.archive.destination import ArchiveDirStatus
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
-from treeaudit.db.connection import connect
+from treeaudit.db.connection import connect, from_sqlite_int
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.duplicates.report import SelectionError, override_keep
 from treeaudit.parasites.cached import parasite_findings
@@ -156,21 +156,26 @@ def start_archive_of_entry(
     archive_enabled(request)
     scan = scans_db.get_scan(conn, scan_id)
     row = conn.execute(
-        "SELECT rel_path, kind FROM entry WHERE scan_id = ? AND entry_id = ?",
+        "SELECT rel_path, kind, dev, ino FROM entry WHERE scan_id = ? AND entry_id = ?",
         (scan_id, entry_id),
     ).fetchone()
     if scan is None or row is None:
         raise HTTPException(404, "dossier inconnu")
     if row["kind"] != "dir":
         raise HTTPException(422, "seuls les dossiers peuvent être archivés")
-    accepted_root(request, scan["root_id"])
+    status = accepted_root(request, scan["root_id"])
+    if scan["root_path"] != status.root.path:
+        raise HTTPException(409, "cette analyse a été faite sur un autre dossier : relance-la")
     subpath = os.fsdecode(bytes(row["rel_path"]))
-    return {"job": _start_archive(jobs, scan["root_id"], subpath).snapshot()}
+    expected = (from_sqlite_int(row["dev"]), from_sqlite_int(row["ino"]))
+    return {"job": _start_archive(jobs, scan["root_id"], subpath, expected).snapshot()}
 
 
-def _start_archive(jobs: JobManager, root_id: str, subpath: str) -> Job:
+def _start_archive(
+    jobs: JobManager, root_id: str, subpath: str, expected: tuple[int, int] | None = None
+) -> Job:
     try:
-        return jobs.start_archive(root_id, subpath)
+        return jobs.start_archive(root_id, subpath, expected_folder=expected)
     except SubpathError as exc:
         raise HTTPException(422, "sous-dossier invalide") from exc
     except JobError as exc:

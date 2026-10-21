@@ -85,6 +85,9 @@ class ArchiveRequest:
     subpath: str = ""
     compression: Compression = Compression.GZ
     max_depth: int = DEFAULT_MAX_DEPTH
+    expected_folder: tuple[int, int] | None = None
+    """(st_dev, st_ino) the folder must have, when it was chosen in an analysis:
+    the root may point to another folder since, with the same relative path."""
 
 
 @dataclass(slots=True)
@@ -276,6 +279,7 @@ class _ArchiveJob:
 
     def run(self, now: datetime) -> ArchiveOutcome:
         if not self._measure():
+            self.progress.stage = Stage.DONE
             return self.outcome
         before = os.lstat(self.archive_dir)
         with ArchiveOutput(self.archive_dir) as output:
@@ -324,6 +328,13 @@ class _ArchiveJob:
                     self.outcome.status = ArchiveStatus.CANCELLED
                     return False
                 if isinstance(event, EntryRecord):
+                    expected = self.request.expected_folder
+                    if event.depth == 0 and expected not in (None, (event.dev, event.ino)):
+                        self.outcome.failure = (
+                            "ce dossier n'est plus celui de l'analyse (le dossier analysé a "
+                            "changé ou a été remplacé) : relance une analyse"
+                        )
+                        return False
                     self.progress.entries_total += 1
                     if event.kind is EntryKind.FILE:
                         self.progress.bytes_total += event.size

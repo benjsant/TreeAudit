@@ -511,3 +511,25 @@ def test_archive_errors_are_plain_french(
     snapshot = archive_client.get("/api/jobs/current").json()["job"]
     assert snapshot["error"].startswith("espace insuffisant dans le dossier d'archives")
     assert archive_names(archive_client) == []
+
+
+def test_archive_refuses_a_folder_replaced_since_the_analysis(
+    archive_client: TestClient, root: Path
+) -> None:
+    scan = run_job(archive_client, "/api/scans", {"root_id": "main", "subpath": ""})
+    scan_id = int(scan["scan_id"])  # type: ignore[call-overload]
+    data_dir = archive_client.app.state.config.data_dir  # type: ignore[attr-defined]
+    conn = sqlite3.connect(database_path(data_dir))
+    try:
+        (entry_id,) = conn.execute(
+            "SELECT entry_id FROM entry WHERE scan_id = ? AND rel_path = ?", (scan_id, b"photos")
+        ).fetchone()
+    finally:
+        conn.close()
+    (root / "photos").rename(root / "photos-old")
+    (root / "photos").mkdir()  # same relative path, another folder
+    url = f"/api/scans/{scan_id}/entries/{entry_id}/archive"
+    snapshot = run_job(archive_client, url, {})
+    assert snapshot["status"] == "failed"
+    assert "n'est plus celui de l'analyse" in str(snapshot["archive"]["failure"])  # type: ignore[index]
+    assert archive_names(archive_client) == []
