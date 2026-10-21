@@ -64,6 +64,14 @@ services:
     network_mode: none
     entrypoint: ["treeaudit", "roots", "check", "--no-fs-checks", "--mountinfo", "-"]
 
+  # Same, for the archive directory (D-032).
+  check-archive:
+    <<: *hardening
+    image: treeaudit-app:local
+    profiles: [tools]
+    network_mode: none
+    entrypoint: ["treeaudit", "archive", "check", "--no-fs-checks", "--mountinfo", "-"]
+
   # Tests and quality tools. The repository (not an audited folder) is mounted at /app.
   dev:
     <<: *hardening

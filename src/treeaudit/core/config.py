@@ -29,13 +29,15 @@ CONTAINER_BIND_HOST = "0.0.0.0"  # noqa: S104
 
 ROOT_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{0,62}")
 
-_TOP_LEVEL_KEYS = frozenset({"data_dir", "bind_host", "port", "roots"})
+_TOP_LEVEL_KEYS = frozenset({"data_dir", "archive_dir", "bind_host", "port", "roots"})
 _ROOT_KEYS = frozenset(
     {"id", "path", "label", "allow_system_volume", "cross_mounts", "display_path"}
 )
 # In Docker, the host path of a root is only known from the environment
 # (compose passes it); it is used for display only, never to access files.
 DISPLAY_PATH_ENV_PREFIX = "TREEAUDIT_DISPLAY_PATH_"
+# Same for the archive directory (docs/DECISIONS.md D-032).
+ARCHIVE_DISPLAY_PATH_ENV_VAR = "TREEAUDIT_ARCHIVE_DISPLAY_PATH"
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +66,14 @@ class AppConfig:
     bind_host: str = "127.0.0.1"
     port: int = DEFAULT_PORT
     container_mode: bool = False
+    archive_dir: str | None = None
+    """Where verified archives may be written (D-032). None: archiving disabled."""
+    archive_display_path: str | None = None
+    """Path of the archive directory shown to the user (the host path in Docker)."""
+
+    @property
+    def shown_archive_dir(self) -> str | None:
+        return self.archive_display_path or self.archive_dir
 
     def get_root(self, root_id: str) -> RootConfig | None:
         """Return the root with this identifier, or None."""
@@ -104,6 +114,12 @@ def apply_display_paths(config: AppConfig, environ: Mapping[str, str]) -> AppCon
                 root, display_path=_require_absolute(value, display_path_env_var(root.id))
             )
         roots.append(root)
+    archive_display = environ.get(ARCHIVE_DISPLAY_PATH_ENV_VAR)
+    if archive_display and config.archive_dir is not None:
+        config = dataclasses.replace(
+            config,
+            archive_display_path=_require_absolute(archive_display, ARCHIVE_DISPLAY_PATH_ENV_VAR),
+        )
     return dataclasses.replace(config, roots=tuple(roots))
 
 
@@ -129,6 +145,9 @@ def parse_config(raw: Mapping[str, Any], *, container_mode: bool = False) -> App
     _reject_unknown_keys(raw, _TOP_LEVEL_KEYS, "top level")
 
     data_dir = _require_path_string(raw.get("data_dir"), "data_dir")
+    archive_dir = raw.get("archive_dir")
+    if archive_dir is not None:
+        archive_dir = _require_absolute(archive_dir, "archive_dir")
 
     default_host = CONTAINER_BIND_HOST if container_mode else "127.0.0.1"
     bind_host = raw.get("bind_host", default_host)
@@ -157,6 +176,7 @@ def parse_config(raw: Mapping[str, Any], *, container_mode: bool = False) -> App
         bind_host=bind_host,
         port=port,
         container_mode=container_mode,
+        archive_dir=archive_dir,
     )
 
 

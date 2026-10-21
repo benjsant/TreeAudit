@@ -1,0 +1,18 @@
+# Mounts the archive directory, the only host folder TreeAudit may write to
+# (docs/DECISIONS.md D-024, D-032).
+#
+# The Makefile adds this file only when TREEAUDIT_ARCHIVE_PATH is set in .env,
+# after `make check-root` validated that folder on the host. Audited roots stay
+# read-only. Never add ':z' or ':Z' to this mount.
+
+services:
+  app:
+    environment:
+      # Host path of the archive directory, used for display only.
+      TREEAUDIT_ARCHIVE_DISPLAY_PATH: "${TREEAUDIT_ARCHIVE_PATH:?set TREEAUDIT_ARCHIVE_PATH in .env}"
+    volumes:
+      - type: bind
+        source: "${TREEAUDIT_ARCHIVE_PATH:?set TREEAUDIT_ARCHIVE_PATH in .env}"
+        target: /archives
+        bind:
+          create_host_path: false

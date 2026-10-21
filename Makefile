@@ -7,18 +7,23 @@ SHELL := /bin/bash
 # Precedence: command line (make up TREEAUDIT_ROOT_PATH=...), then the shell
 # environment, then .env. Assignments in an included file would otherwise hide
 # the environment, so remember it before reading .env.
-SETTINGS := TREEAUDIT_ROOT_PATH TREEAUDIT_ALLOW_SYSTEM_VOLUME TREEAUDIT_PORT
+SETTINGS := TREEAUDIT_ROOT_PATH TREEAUDIT_ALLOW_SYSTEM_VOLUME TREEAUDIT_PORT TREEAUDIT_ARCHIVE_PATH
 $(foreach v,$(SETTINGS),$(eval _FROM_ENV_$(v) := $(if $(filter environment command line,$(origin $(v))),$(value $(v)))))
 -include .env
 $(foreach v,$(SETTINGS),$(if $(_FROM_ENV_$(v)),$(eval override $(v) := $(_FROM_ENV_$(v)))))
 # A trailing "/" typed by the user is harmless: strip it before validation, so
 # that what is validated and what is mounted are the same normalized path.
 override TREEAUDIT_ROOT_PATH := $(patsubst %/,%,$(TREEAUDIT_ROOT_PATH))
+override TREEAUDIT_ARCHIVE_PATH := $(patsubst %/,%,$(TREEAUDIT_ARCHIVE_PATH))
 # Hand compose exactly the values make validated, so check-root and the actual
 # mount can never disagree.
 export TREEAUDIT_UID TREEAUDIT_GID $(SETTINGS)
 
 COMPOSE_FILES := -f compose.yaml
+# The archive directory is mounted (read-write) only when it is set (D-032).
+ifneq ($(TREEAUDIT_ARCHIVE_PATH),)
+COMPOSE_FILES += -f compose.archive.yaml
+endif
 ifeq ($(COMPOSE_SELINUX),1)
 COMPOSE_FILES += -f compose.selinux.yaml
 endif
@@ -39,7 +44,10 @@ env: ## Create .env with your UID/GID (never overwrites an existing one)
 	    echo "TREEAUDIT_ROOT_PATH="; \
 	    echo "# Set to 1 only to audit, on purpose, a folder on the system volume."; \
 	    echo "TREEAUDIT_ALLOW_SYSTEM_VOLUME=0"; \
-	    echo "TREEAUDIT_PORT=8765"; } > .env; \
+	    echo "TREEAUDIT_PORT=8765"; \
+	    echo "# Optional: existing folder where TreeAudit may write verified archives."; \
+	    echo "# Keep it on another disk than the audited folder. Empty: archiving off."; \
+	    echo "TREEAUDIT_ARCHIVE_PATH="; } > .env; \
 	  chmod 600 .env; echo ".env created: now set TREEAUDIT_ROOT_PATH"; fi
 
 data: ## Create the local data directory (mode 700)
@@ -52,7 +60,7 @@ lock: ## Resolve dependencies and update uv.lock (needs network)
 build: ## Build the dev and app images
 	$(COMPOSE) --profile dev build
 
-check-root: build data ## Validate TREEAUDIT_ROOT_PATH on the host before mounting it
+check-root: build data ## Validate TREEAUDIT_ROOT_PATH (and TREEAUDIT_ARCHIVE_PATH) on the host before mounting
 	@test -n "$(TREEAUDIT_ROOT_PATH)" || { echo "TREEAUDIT_ROOT_PATH is empty in .env (run 'make env')"; exit 2; }
 	@test -d "$(TREEAUDIT_ROOT_PATH)" || { echo "REFUSÉ: '$(TREEAUDIT_ROOT_PATH)' n'est pas un dossier existant"; exit 1; }
 	@real="$$(realpath -e -- "$(TREEAUDIT_ROOT_PATH)")" && test "$$real" = "$(TREEAUDIT_ROOT_PATH)" || \
@@ -60,6 +68,14 @@ check-root: build data ## Validate TREEAUDIT_ROOT_PATH on the host before mounti
 	@$(COMPOSE) run --rm -T check \
 	  $(if $(filter 1,$(TREEAUDIT_ALLOW_SYSTEM_VOLUME)),--allow-system-volume) \
 	  --home "$(HOME)" --data-dir "$(CURDIR)/data" -- "$(TREEAUDIT_ROOT_PATH)" < /proc/self/mountinfo
+ifneq ($(TREEAUDIT_ARCHIVE_PATH),)
+	@test -d "$(TREEAUDIT_ARCHIVE_PATH)" || { echo "REFUSÉ: dossier d'archives '$(TREEAUDIT_ARCHIVE_PATH)' inexistant (le créer d'abord)"; exit 1; }
+	@real="$$(realpath -e -- "$(TREEAUDIT_ARCHIVE_PATH)")" && test "$$real" = "$(TREEAUDIT_ARCHIVE_PATH)" || \
+	  { echo "REFUSÉ: '$(TREEAUDIT_ARCHIVE_PATH)' passe par un lien symbolique ou n'est pas normalisé (chemin réel : $$real)"; exit 1; }
+	@test -w "$(TREEAUDIT_ARCHIVE_PATH)" || { echo "REFUSÉ: '$(TREEAUDIT_ARCHIVE_PATH)' n'est pas accessible en écriture"; exit 1; }
+	@$(COMPOSE) run --rm -T check-archive --home "$(HOME)" --data-dir "$(realpath $(CURDIR)/data)" \
+	  --root "$(TREEAUDIT_ROOT_PATH)" -- "$(TREEAUDIT_ARCHIVE_PATH)" < /proc/self/mountinfo
+endif
 
 up: check-root ## Validate the audited folder, then start TreeAudit on http://127.0.0.1:$(TREEAUDIT_PORT)
 	$(COMPOSE) up app gateway

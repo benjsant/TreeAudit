@@ -16,6 +16,14 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from treeaudit import __version__
+from treeaudit.archive.destination import (
+    ARCHIVE_DIR_MESSAGES,
+    ArchiveDirContext,
+    ArchiveDirReason,
+    ArchiveDirRejectedError,
+    evaluate_archive_dir,
+    validate_archive_dir,
+)
 from treeaudit.core.config import (
     CONTAINER_BIND_HOST,
     DEFAULT_PORT,
@@ -30,7 +38,7 @@ from treeaudit.filters.spec import FilterSpec
 from treeaudit.parasites.commands import Action
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
 from treeaudit.parasites.report import human_size
-from treeaudit.roots.mountinfo import MountInfoError, parse_mountinfo, read_mountinfo
+from treeaudit.roots.mountinfo import MountInfoError, MountTable, parse_mountinfo, read_mountinfo
 from treeaudit.roots.registry import current_home, evaluate_roots
 from treeaudit.roots.validation import (
     REASON_MESSAGES,
@@ -91,6 +99,36 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="ne pas accéder au chemin (existence, type, liens) : à utiliser seulement quand "
         "ces vérifications ont déjà été faites sur la machine qui possède le chemin",
+    )
+
+    archive = commands.add_parser("archive", help="archives vérifiées (D-032)")
+    archive_commands = archive.add_subparsers(dest="archive_command", required=True)
+    archive_commands.add_parser("status", help="état du dossier d'archives configuré")
+    archive_check = archive_commands.add_parser(
+        "check", help="vérifier qu'un dossier peut recevoir des archives"
+    )
+    archive_check.add_argument("path", help="chemin absolu à vérifier")
+    archive_check.add_argument(
+        "--mountinfo",
+        default=None,
+        help="fichier mountinfo à utiliser ('-' pour l'entrée standard) ; "
+        "défaut : /proc/self/mountinfo",
+    )
+    archive_check.add_argument("--home", default=None, help="dossier personnel à protéger")
+    archive_check.add_argument(
+        "--data-dir", default=None, help="dossier de données TreeAudit à ne pas chevaucher"
+    )
+    archive_check.add_argument(
+        "--root",
+        action="append",
+        default=[],
+        help="dossier audité à ne pas chevaucher (option répétable)",
+    )
+    archive_check.add_argument(
+        "--no-fs-checks",
+        action="store_true",
+        help="ne pas accéder au chemin (existence, type, liens, droits) : à utiliser seulement "
+        "quand ces vérifications ont déjà été faites sur la machine qui possède le chemin",
     )
 
     scan = commands.add_parser("scan", help="inventaire d'une racine")
@@ -207,15 +245,8 @@ def _load(args: argparse.Namespace) -> AppConfig:
 
 
 def _cmd_roots_check(args: argparse.Namespace) -> int:
-    if args.mountinfo is None:
-        mounts = read_mountinfo()
-    elif args.mountinfo == "-":
-        mounts = parse_mountinfo(sys.stdin.buffer.read())
-    else:
-        mounts = parse_mountinfo(Path(args.mountinfo).read_bytes())
-
     ctx = ValidationContext(
-        mounts=mounts,
+        mounts=_read_mounts(args.mountinfo),
         home=args.home if args.home is not None else current_home(),
         data_dir=args.data_dir,
         check_filesystem=not args.no_fs_checks,
@@ -230,6 +261,47 @@ def _cmd_roots_check(args: argparse.Namespace) -> int:
         print("  (chevauchement avec le dossier de données non vérifié : --data-dir absent)")
     if args.no_fs_checks:
         print("  (existence, type et liens non vérifiés : --no-fs-checks)")
+    return EXIT_OK
+
+
+def _read_mounts(source: str | None) -> MountTable:
+    if source is None:
+        return read_mountinfo()
+    if source == "-":
+        return parse_mountinfo(sys.stdin.buffer.read())
+    return parse_mountinfo(Path(source).read_bytes())
+
+
+def _cmd_archive_check(args: argparse.Namespace) -> int:
+    ctx = ArchiveDirContext(
+        mounts=_read_mounts(args.mountinfo),
+        home=args.home if args.home is not None else current_home(),
+        data_dir=args.data_dir,
+        root_paths=tuple(args.root),
+        check_filesystem=not args.no_fs_checks,
+    )
+    try:
+        validate_archive_dir(args.path, ctx)
+    except ArchiveDirRejectedError as exc:
+        print(f"REFUSÉ [{exc.reason.value}] {args.path} : {ARCHIVE_DIR_MESSAGES[exc.reason]}")
+        return EXIT_REJECTED
+    print(f"OK {args.path} peut recevoir des archives")
+    if args.data_dir is None or not args.root:
+        print("  (chevauchement non vérifié : --data-dir ou --root absent)")
+    if args.no_fs_checks:
+        print("  (existence, type, liens et droits non vérifiés : --no-fs-checks)")
+    return EXIT_OK
+
+
+def _cmd_archive_status(args: argparse.Namespace) -> int:
+    config = _load(args)
+    status = evaluate_archive_dir(config, read_mountinfo(), current_home())
+    if status.enabled:
+        print(f"Archivage activé : {status.shown_path}")
+    else:
+        shown = status.shown_path and status.reason is not ArchiveDirReason.NOT_MOUNTED
+        where = f" ({status.shown_path})" if shown else ""
+        print(f"Archivage désactivé{where} : {status.message}")
     return EXIT_OK
 
 
@@ -261,6 +333,13 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             logger.info("root %s accepted", status.root.id)
         else:
             logger.warning("root %s rejected: %s", status.root.id, status.reason)
+    archive_status = evaluate_archive_dir(config, read_mountinfo(), current_home())
+    if archive_status.enabled:
+        logger.info("archiving enabled")
+    elif archive_status.reason in (ArchiveDirReason.NOT_CONFIGURED, ArchiveDirReason.NOT_MOUNTED):
+        logger.info("archiving disabled: no archive directory")
+    else:
+        logger.warning("archive directory rejected: %s", archive_status.reason)
 
     uvicorn.run(
         create_app(config, statuses),
@@ -862,6 +941,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_roots_check(args)
         if args.command == "roots" and args.roots_command == "list":
             return _cmd_roots_list(args)
+        if args.command == "archive" and args.archive_command == "check":
+            return _cmd_archive_check(args)
+        if args.command == "archive" and args.archive_command == "status":
+            return _cmd_archive_status(args)
         if args.command == "serve":
             return _cmd_serve(args)
         if args.command == "scan" and args.scan_command == "run":

@@ -4,6 +4,10 @@
 
 data_dir = "/data"
 
+# Verified archives (D-032). Only usable when compose.archive.yaml mounts a host
+# folder here, which the Makefile does when TREEAUDIT_ARCHIVE_PATH is set in .env.
+archive_dir = "/archives"
+
 # Listen on all interfaces of the container's own network namespace only.
 # compose.yaml publishes the port on 127.0.0.1 of the host (docs/DECISIONS.md D-010).
 bind_host = "0.0.0.0"

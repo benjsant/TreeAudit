@@ -129,7 +129,7 @@ class ValidationContext:
 def validate_root(path: str, ctx: ValidationContext, *, allow_system_volume: bool = False) -> None:
     """Raise RootRejectedError if ``path`` may not be used as an audit root."""
     _check_path_string(path)
-    if ctx.home is not None and _is_same_or_parent(path, os.path.normpath(ctx.home)):
+    if ctx.home is not None and is_same_or_parent(path, os.path.normpath(ctx.home)):
         raise RootRejectedError(RejectReason.HOME_DIRECTORY, path)
     if ctx.check_filesystem:
         _check_filesystem(path)
@@ -143,7 +143,7 @@ def check_data_dir_overlap(root_path: str, data_dir: str, *, resolve: bool = Tru
     normalize = os.path.realpath if resolve else os.path.normpath
     root_norm = normalize(root_path)
     data_norm = normalize(data_dir)
-    if _is_same_or_parent(root_norm, data_norm) or _is_same_or_parent(data_norm, root_norm):
+    if paths_overlap(root_norm, data_norm):
         raise RootRejectedError(RejectReason.DATA_DIR_OVERLAP, root_path)
 
 
@@ -153,10 +153,10 @@ def _check_path_string(path: str) -> None:
     # normpath keeps a leading "//" (POSIX allows it to be special), reject it too.
     if path.startswith("//") or os.path.normpath(path) != path:
         raise RootRejectedError(RejectReason.NOT_NORMALIZED, path)
-    if any(_is_same_or_parent(path, forbidden) for forbidden in FORBIDDEN_ROOTS):
+    if any(is_same_or_parent(path, forbidden) for forbidden in FORBIDDEN_ROOTS):
         raise RootRejectedError(RejectReason.FORBIDDEN_PATH, path)
-    if any(_is_within(path, tree) for tree in PSEUDO_TREES) and not any(
-        _is_within(path, exception) for exception in PSEUDO_TREE_EXCEPTIONS
+    if any(is_within(path, tree) for tree in PSEUDO_TREES) and not any(
+        is_within(path, exception) for exception in PSEUDO_TREE_EXCEPTIONS
     ):
         raise RootRejectedError(RejectReason.PSEUDO_FILESYSTEM_PATH, path)
 
@@ -200,12 +200,18 @@ def _check_mount(path: str, ctx: ValidationContext, *, allow_system_volume: bool
         raise RootRejectedError(RejectReason.SYSTEM_VOLUME, path)
 
 
-def _is_within(path: str, tree: str) -> bool:
+def is_within(path: str, tree: str) -> bool:
+    """True if ``path`` is ``tree`` or lies below it (normalized absolute paths)."""
     return path == tree or path.startswith(tree + "/")
 
 
-def _is_same_or_parent(candidate: str, other: str) -> bool:
+def is_same_or_parent(candidate: str, other: str) -> bool:
     """True if ``candidate`` is ``other`` or one of its ancestors."""
     if candidate == "/":
         return True
-    return _is_within(other, candidate)
+    return is_within(other, candidate)
+
+
+def paths_overlap(first: str, second: str) -> bool:
+    """True if one path is the other or one of its ancestors."""
+    return is_same_or_parent(first, second) or is_same_or_parent(second, first)

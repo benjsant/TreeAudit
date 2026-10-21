@@ -205,3 +205,34 @@ Objectif du mainteneur : fonctionner sans à-coups sur un disque externe 5 400 t
 - Images Docker en `python:3.14-slim` (épinglée par digest), comme la machine de développement. Mesuré sur 1 040 904 éléments : 21,2 s (3.13) → 20,7 s (3.14), soit −2,5 % seulement. L'hypothèse d'un gain important était fausse : l'écart restant avec le mode natif (17,3 s, base sur disque) tient au conteneur lui-même (filtrage des appels système, compilation de Python et de SQLite), pas à la version de Python.
 - Correction d'une mesure de D-030 : les 15,7 s natives avaient été mesurées avec la base dans `/tmp`, qui est en mémoire (tmpfs) sur la machine de test. Avec la base sur disque, l'analyse native prend 17,3 s.
 - Les résultats « à nettoyer » d'une analyse terminée sont mis en cache (évaluation des règles seulement ; filtrage, suppression des éléments inclus dans un dossier vert, tri et numérotation sont refaits à chaque fois). Les numéros affichés et ceux utilisés pour générer une commande restent donc strictement identiques au calcul direct ; un test le vérifie pour neuf seuils de confiance. Sur 1 000 000 d'éléments : 1,9 s → 0,003 s, et le cache est rempli dès la fin de l'analyse.
+
+## D-032 — Archivage vérifié : dossier de sortie et garde-fous (2026-10-21)
+Précise la mise en œuvre de D-024.
+- **Dossier d'archives optionnel** : `archive_dir` dans la configuration ; en Docker, `TREEAUDIT_ARCHIVE_PATH` dans `.env`. Sans lui, l'archivage est désactivé. C'est le seul dossier hors du dossier de données où TreeAudit peut écrire, et il n'y écrit que des archives.
+- **Validation**, sur le modèle des racines (D-009) :
+  - chemin absolu et normalisé ;
+  - jamais dans un dossier système : `/etc`, `/usr`, `/var`, `/tmp`, `/run` (sauf `/run/media`)…, ni `/`, `/home`, `/mnt`, `/media` eux-mêmes ;
+  - ni le dossier personnel entier ;
+  - dossier réel (sans lien symbolique sur le chemin) et accessible en écriture ;
+  - système de fichiers ni virtuel, ni en mémoire (`tmpfs`), ni monté en lecture seule ;
+  - **aucun chevauchement**, dans un sens comme dans l'autre, avec une racine ou avec le dossier de données (chemins réels).
+  - Le volume système est accepté : une archive dans `~/Archives` est légitime. En revanche, elle est signalée si elle est sur le même disque que l'original.
+- **En Docker** :
+  - `make check-root` valide le dossier sur l'hôte (existence, chemin réel, droit d'écriture, puis le service `check-archive`, sans réseau ni volume, qui lit la table de montage de l'hôte) ;
+  - ensuite seulement, le Makefile ajoute `compose.archive.yaml`, qui monte ce dossier en lecture-écriture sous `/archives`, dans le seul conteneur `app` ;
+  - dans le conteneur, `/archives` doit être un point de montage dédié et accessible en écriture, sinon l'archivage reste désactivé, pour ne jamais écrire dans le système de fichiers du conteneur ;
+  - défense en profondeur : deux montages qui exposent des dossiers qui se chevauchent sur le même périphérique (champ 4 de `mountinfo`) sont refusés.
+  - Les racines restent en lecture seule.
+- **Écriture** :
+  - format `.tar.gz` (gzip niveau 6, le niveau 9 étant trop lent pour une machine modeste), ou `.tar.xz` en option, avec `tarfile` (bibliothèque standard) ;
+  - la source est relue par descripteurs avec `O_NOFOLLOW`, sans se fier à l'index ; `tarfile.add(chemin)` n'est jamais utilisé ;
+  - les liens symboliques sont archivés comme des liens ; les fichiers spéciaux sont ignorés et signalés ;
+  - un fichier modifié pendant la lecture rend l'archive `incomplete`.
+- **Validation finale** :
+  - l'archive est d'abord écrite sous un nom temporaire `.<nom>.partial` ;
+  - elle est relue, et chaque entrée est comparée (nom, type, taille, SHA-256, cible des liens) à ce qui a été lu ;
+  - si tout concorde, `fsync` puis renommage sans écraser (`os.link` vers le nom final, puis retrait du nom temporaire).
+  - Statuts : `complete`, `incomplete`, `cancelled`, `failed`.
+- **Fichier temporaire après une annulation ou un échec** : TreeAudit le supprime lui-même. C'est la seule suppression du code. Elle ne vise que le fichier qu'il vient de créer, retiré relativement au descripteur du dossier d'archives, après vérification que l'inode est bien celui qu'il a créé. Elle ne peut jamais viser une donnée auditée.
+- **Espace disque** : vérifié avant de commencer (taille non compressée plus une marge) ; s'il ne suffit pas, l'archivage est refusé.
+- Mise en œuvre par étapes : (a) dossier d'archives et validation ; (b) moteur d'archivage et ligne de commande ; (c) interface web ; (d) revue de sécurité.

@@ -119,7 +119,7 @@ Aucun parcours de fichiers dans cette phase.
   Le dossier factice étant écrit d'un seul tenant, ses fichiers sont contigus : sur un disque de sauvegarde fragmenté, l'ordre physique devrait apporter davantage.
 
 ## Phase 6 bis — Archivage vérifié (D-024)
-- [ ] Dossier de sortie dédié, déclaré et validé comme le dossier de données.
+- [x] Dossier de sortie dédié, déclaré et validé (D-032) : natif, hôte (`make check-root`) et conteneur.
 - [ ] Archive `.tar.gz` / `.tar.xz` (bibliothèque standard) écrite sous un nom temporaire, renommée une fois terminée.
 - [ ] Vérification après écriture (taille et empreinte de chaque fichier) avant tout « feu vert ».
 - [ ] Espace disque vérifié avant de commencer ; liens archivés comme liens ; fichiers spéciaux signalés.

@@ -251,3 +251,42 @@ def test_search_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> N
     assert main(["--config", str(config), "search", "1", "--kind", "folder"]) == EXIT_ERROR
     assert main(["--config", str(config), "search", "1", "--min-size", "huge"]) == EXIT_ERROR
     assert main(["--config", str(config), "search", "9"]) == EXIT_ERROR
+
+
+def test_archive_check(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    mountinfo = write_mountinfo(tmp_path, tmp_path)
+    base = ["archive", "check", "--mountinfo", str(mountinfo), "--no-fs-checks", "--home", "/nope"]
+    assert main([*base, "/mnt/Archives"]) == EXIT_OK
+    assert capsys.readouterr().out.startswith("OK ")
+    assert main([*base, "/tmp/archives"]) == EXIT_REJECTED
+    assert "[system_volume]" not in (out := capsys.readouterr().out)
+    assert "[system_path]" in out
+    overlapping = [*base, "--root", "/mnt/Archives/old", "--data-dir", "/srv/ta", "/mnt/Archives"]
+    assert main(overlapping) == EXIT_REJECTED
+    assert "[root_overlap]" in capsys.readouterr().out
+
+
+def test_archive_check_reads_host_mountinfo_from_stdin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    content = (
+        b"1 0 259:3 / / rw - ext4 /dev/nvme0n1p3 rw\n2 1 8:1 / /mnt/Usb ro - ext4 /dev/sdb1 rw\n"
+    )
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(content)))
+    code = main(["archive", "check", "--mountinfo", "-", "--no-fs-checks", "/mnt/Usb/archives"])
+    assert code == EXIT_REJECTED
+    assert "[read_only_mount]" in capsys.readouterr().out
+
+
+def test_archive_status(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text(f'data_dir = "{tmp_path / "data"}"\n', encoding="utf-8")
+    assert main(["--config", str(config), "archive", "status"]) == EXIT_OK
+    assert "Archivage désactivé" in capsys.readouterr().out
+    config.write_text(
+        f'data_dir = "{tmp_path / "data"}"\narchive_dir = "/etc/nope"\n', encoding="utf-8"
+    )
+    assert main(["--config", str(config), "archive", "status"]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "Archivage désactivé (/etc/nope)" in out
+    assert "dossier système" in out

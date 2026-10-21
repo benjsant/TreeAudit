@@ -69,7 +69,7 @@ def volumes_of(service: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def test_expected_services() -> None:
-    assert set(SERVICES) == {"app", "gateway", "check", "dev"}
+    assert set(SERVICES) == {"app", "gateway", "check", "check-archive", "dev"}
 
 
 @pytest.mark.parametrize("name", sorted(SERVICES))
@@ -139,13 +139,45 @@ def test_app_writable_mounts_are_only_the_data_dir() -> None:
     assert writable == ["/data"]
 
 
-@pytest.mark.parametrize("name", ["check", "dev"])
+@pytest.mark.parametrize("name", ["check", "check-archive", "dev"])
 def test_tool_services_have_no_network(name: str) -> None:
     assert SERVICES[name].get("network_mode") == "none"
 
 
-def test_check_service_sees_no_host_files() -> None:
-    assert not SERVICES["check"].get("volumes")
+@pytest.mark.parametrize("name", ["check", "check-archive"])
+def test_check_services_see_no_host_files(name: str) -> None:
+    assert not SERVICES[name].get("volumes")
+    assert "--no-fs-checks" in SERVICES[name]["entrypoint"]
+
+
+ARCHIVE_OVERRIDE = load("compose.archive.yaml")
+
+
+def test_archive_override_only_adds_the_archive_mount_to_app() -> None:
+    """D-032: one writable host folder, mounted only in the app container."""
+    services = ARCHIVE_OVERRIDE["services"]
+    assert set(services) == {"app"}
+    app = services["app"]
+    assert set(app) == {"environment", "volumes"}
+    assert set(app["environment"]) == {"TREEAUDIT_ARCHIVE_DISPLAY_PATH"}
+    assert len(app["volumes"]) == 1
+    volume = app["volumes"][0]
+    assert volume["type"] == "bind"
+    assert volume["target"] == "/archives"
+    assert volume["source"].startswith("${TREEAUDIT_ARCHIVE_PATH:?")
+    assert volume["bind"] == {"create_host_path": False}, "no ':z'/':Z' (D-011)"
+    assert not volume.get("read_only", False)
+
+
+def test_archive_mount_never_targets_a_root_or_the_data_dir() -> None:
+    targets = {v["target"] for v in volumes_of(SERVICES["app"])}
+    assert "/archives" not in targets
+    assert not any(t.startswith("/archives") for t in targets)
+
+
+def test_docker_config_declares_the_archive_mount_point() -> None:
+    text = (REPO / "docker" / "config.toml").read_text(encoding="utf-8")
+    assert 'archive_dir = "/archives"' in text
 
 
 def test_selinux_override_only_disables_labels() -> None:

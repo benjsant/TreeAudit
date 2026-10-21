@@ -8,6 +8,7 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 | Actif | Menace | Protection principale |
 |---|---|---|
 | Données auditées | Modification ou suppression accidentelle | Aucun code d'écriture vers les cibles ; montage `:ro` ; test statique |
+| Dossier d'archives | Écriture hors de ce dossier, archive incomplète présentée comme bonne | Validation (D-032) ; nom temporaire ; vérification avant validation |
 | Reste du disque | Lecture hors périmètre (lien symbolique, `..`, course) | Racines déclarées ; parcours par descripteurs `O_NOFOLLOW` |
 | Système hôte | Accès à `/proc`, `/sys`, socket Docker… | Refus de ces racines ; aucun montage global ; conteneur non privilégié |
 | Index et rapports | Fuite des chemins (données personnelles) | Stockage local `0700/0600`, aucun envoi distant |
@@ -25,6 +26,9 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Aucun scan automatique de tous les volumes.
 - Le volume système est refusé par défaut (D-009). Un disque externe contenant une ancienne installation système peut être audité en lecture seule.
 - Le dossier de données (index, rapports) doit être hors de toute racine auditée ; l'application refuse de démarrer sinon.
+- Le dossier d'archives, optionnel, est le seul autre endroit où TreeAudit peut écrire, et seulement des archives vérifiées (D-032).
+  - Il ne doit chevaucher ni une racine ni le dossier de données, et ne peut être ni un dossier système, ni le dossier personnel entier, ni un système de fichiers en mémoire ou en lecture seule ; sinon, l'archivage est désactivé.
+  - En Docker, il est validé sur l'hôte avant d'être monté, en écriture, sous `/archives`, dans le seul conteneur `app`.
 
 ## Traversée des chemins
 - Les liens symboliques ne sont jamais suivis ; leur cible est enregistrée comme texte, jamais résolue (D-013).

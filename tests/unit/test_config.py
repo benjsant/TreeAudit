@@ -168,3 +168,27 @@ def test_display_path_must_be_absolute(tmp_path: Path) -> None:
     path.write_text('data_dir = "/srv/t"\n[[roots]]\nid = "main"\npath = "/x"\n', "utf-8")
     with pytest.raises(ConfigError, match="absolute"):
         load_config(path, environ={"TREEAUDIT_DISPLAY_PATH_MAIN": "relative"})
+
+
+def test_archive_dir_is_optional_and_absolute() -> None:
+    assert parse_config(minimal()).archive_dir is None
+    config = parse_config(minimal(archive_dir="/mnt/Archives"))
+    assert config.archive_dir == "/mnt/Archives"
+    assert config.shown_archive_dir == "/mnt/Archives"
+    for bad in ("relative/dir", "", 3, "/mnt/\x00x"):
+        with pytest.raises(ConfigError, match="archive_dir"):
+            parse_config(minimal(archive_dir=bad))
+
+
+def test_archive_display_path_comes_from_the_environment(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('data_dir = "/data"\narchive_dir = "/archives"\n', encoding="utf-8")
+    env = {"TREEAUDIT_ARCHIVE_DISPLAY_PATH": "/run/media/me/USB/archives"}
+    config = load_config(path, container_mode=True, environ=env)
+    assert config.archive_dir == "/archives"
+    assert config.shown_archive_dir == "/run/media/me/USB/archives"
+    with pytest.raises(ConfigError, match="TREEAUDIT_ARCHIVE_DISPLAY_PATH"):
+        load_config(path, environ={"TREEAUDIT_ARCHIVE_DISPLAY_PATH": "relative"})
+    # Without an archive directory, a display path is meaningless and ignored.
+    path.write_text('data_dir = "/data"\n', encoding="utf-8")
+    assert load_config(path, environ=env).shown_archive_dir is None

@@ -42,6 +42,7 @@ Fichier TOML lu avec `tomllib` (bibliothèque standard) :
 
 ```toml
 data_dir = "/home/user/.local/share/treeaudit"
+# archive_dir = "/mnt/Archives/treeaudit"   (optionnel, D-032)
 
 [[roots]]
 id = "backup-2019"
@@ -50,7 +51,7 @@ path = "/mnt/Data/Backup2019"
 # cross_mounts = false          (défaut)
 ```
 
-En Docker, `path` vaut `/audit/roots/<id>` et `data_dir` vaut `/data`.
+En Docker, `path` vaut `/audit/roots/<id>`, `data_dir` vaut `/data` et `archive_dir` vaut `/archives` (monté seulement si `TREEAUDIT_ARCHIVE_PATH` est défini).
 
 ## Flux d'un scan
 1. L'utilisateur demande un scan d'une racine par son identifiant (CLI ou API).
