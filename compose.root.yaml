@@ -1,0 +1,17 @@
+# Mounts the folder of TREEAUDIT_ROOT_PATH, read-only (docs/DECISIONS.md D-008).
+#
+# The Makefile adds this file only when TREEAUDIT_ROOT_PATH is set in .env, after
+# `make check-root` validated it on the host. Never add ':z' or ':Z'.
+
+services:
+  app:
+    environment:
+      # Host path of the root, used only to display copy-pasteable commands (D-025).
+      TREEAUDIT_DISPLAY_PATH_MAIN: "${TREEAUDIT_ROOT_PATH:?set TREEAUDIT_ROOT_PATH in .env}"
+    volumes:
+      - type: bind
+        source: "${TREEAUDIT_ROOT_PATH:?set TREEAUDIT_ROOT_PATH in .env}"
+        target: /audit/roots/main
+        read_only: true
+        bind:
+          create_host_path: false

@@ -66,6 +66,8 @@ class RejectReason(StrEnum):
     SYSTEM_VOLUME = "system_volume"
     NOT_READ_ONLY = "not_read_only"
     DATA_DIR_OVERLAP = "data_dir_overlap"
+    NOT_MOUNTED = "not_mounted"
+    NOT_EXTERNAL_DISK = "not_external_disk"
 
 
 # User-facing explanations (French, see docs/DECISIONS.md D-016).
@@ -99,6 +101,10 @@ REASON_MESSAGES: dict[RejectReason, str] = {
     RejectReason.DATA_DIR_OVERLAP: (
         "la racine et le dossier de données de TreeAudit ne doivent pas se chevaucher"
     ),
+    RejectReason.NOT_MOUNTED: "ce dossier n'est pas monté dans le conteneur",
+    RejectReason.NOT_EXTERNAL_DISK: (
+        "ce disque n'a pas pu être confirmé comme disque externe (voir la liste des disques)"
+    ),
 }
 
 
@@ -131,6 +137,12 @@ def validate_root(path: str, ctx: ValidationContext, *, allow_system_volume: boo
     _check_path_string(path)
     if ctx.home is not None and is_same_or_parent(path, os.path.normpath(ctx.home)):
         raise RootRejectedError(RejectReason.HOME_DIRECTORY, path)
+    if ctx.require_read_only_mount:
+        # In the container a root is always its own bind mount: anything else
+        # would be the container's own filesystem (root not mounted).
+        target = ctx.mounts.mount_for(path)
+        if target is None or target.mount_point != path:
+            raise RootRejectedError(RejectReason.NOT_MOUNTED, path)
     if ctx.check_filesystem:
         _check_filesystem(path)
     _check_mount(path, ctx, allow_system_volume=allow_system_volume)

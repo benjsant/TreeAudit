@@ -5,6 +5,10 @@
 # Index and reports. Must not overlap any root. Created with mode 700.
 data_dir = "/home/me/.local/share/treeaudit"
 
+# Optional: offer the external disks mounted at startup below /run/media/<user>,
+# /media/<user>, /media or /mnt as roots; never a disk holding the system (D-033).
+# external_disks = false
+
 # Optional: folder where verified archives may be written (D-032). It must exist,
 # be writable and overlap neither a root nor data_dir. Without it, archiving is off.
 # archive_dir = "/mnt/Archives/treeaudit"

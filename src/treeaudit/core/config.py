@@ -29,7 +29,9 @@ CONTAINER_BIND_HOST = "0.0.0.0"  # noqa: S104
 
 ROOT_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{0,62}")
 
-_TOP_LEVEL_KEYS = frozenset({"data_dir", "archive_dir", "bind_host", "port", "roots"})
+_TOP_LEVEL_KEYS = frozenset(
+    {"data_dir", "archive_dir", "external_disks", "bind_host", "port", "roots"}
+)
 _ROOT_KEYS = frozenset(
     {"id", "path", "label", "allow_system_volume", "cross_mounts", "display_path"}
 )
@@ -51,6 +53,8 @@ class RootConfig:
     cross_mounts: bool = False
     display_path: str | None = None
     """Path shown to the user (the host path in Docker). Display only."""
+    external: bool = False
+    """Detected external disk (D-033), not declared in the configuration."""
 
     @property
     def shown_path(self) -> str:
@@ -70,6 +74,13 @@ class AppConfig:
     """Where verified archives may be written (D-032). None: archiving disabled."""
     archive_display_path: str | None = None
     """Path of the archive directory shown to the user (the host path in Docker)."""
+    external_disks: bool = False
+    """Offer the external disks detected at startup as roots (D-033)."""
+
+    @property
+    def declared_roots(self) -> tuple[RootConfig, ...]:
+        """Roots written in the configuration, without detected disks."""
+        return tuple(root for root in self.roots if not root.external)
 
     @property
     def shown_archive_dir(self) -> str | None:
@@ -148,6 +159,9 @@ def parse_config(raw: Mapping[str, Any], *, container_mode: bool = False) -> App
     archive_dir = raw.get("archive_dir")
     if archive_dir is not None:
         archive_dir = _require_absolute(archive_dir, "archive_dir")
+    external_disks = raw.get("external_disks", False)
+    if not isinstance(external_disks, bool):
+        raise ConfigError("external_disks must be true or false")
 
     default_host = CONTAINER_BIND_HOST if container_mode else "127.0.0.1"
     bind_host = raw.get("bind_host", default_host)
@@ -177,6 +191,7 @@ def parse_config(raw: Mapping[str, Any], *, container_mode: bool = False) -> App
         port=port,
         container_mode=container_mode,
         archive_dir=archive_dir,
+        external_disks=external_disks,
     )
 
 
@@ -199,6 +214,8 @@ def _parse_root(item: Any, index: int) -> RootConfig:
     _reject_unknown_keys(item, _ROOT_KEYS, where)
 
     root_id = item.get("id")
+    if isinstance(root_id, str) and root_id.startswith("ext-"):
+        raise ConfigError(f"{where}.id must not start with 'ext-' (reserved for detected disks)")
     if not isinstance(root_id, str) or not ROOT_ID_PATTERN.fullmatch(root_id):
         raise ConfigError(
             f"{where}.id must match {ROOT_ID_PATTERN.pattern} "

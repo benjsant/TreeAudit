@@ -8,7 +8,7 @@ in the proposed commands (D-025) and the archive directory the user chose (D-032
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -23,6 +23,7 @@ from treeaudit import __version__
 from treeaudit.archive.destination import evaluate_archive_dir
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig
 from treeaudit.core.datadir import prepare_data_dir
+from treeaudit.roots.external import ExternalDisk
 from treeaudit.roots.mountinfo import MountTable, read_mountinfo
 from treeaudit.roots.registry import RootStatus, current_home
 from treeaudit.roots.validation import REASON_MESSAGES
@@ -69,6 +70,8 @@ def create_app(
     *,
     mounts: Callable[[], MountTable] = read_mountinfo,
     home: Callable[[], str | None] = current_home,
+    external_disks: Sequence[ExternalDisk] = (),
+    external_enabled: bool = False,
 ) -> FastAPI:
     """Build the application for the given, already validated, roots."""
     prepare_data_dir(config.data_dir)
@@ -86,6 +89,9 @@ def create_app(
 
     app.state.config = config
     app.state.statuses = {status.root.id: status for status in statuses}
+    # Every detected disk, refused ones included, to explain the choices (D-033).
+    app.state.external_disks = tuple(external_disks)
+    app.state.external_enabled = external_enabled or bool(external_disks)
     app.state.jobs = JobManager(config, mounts=mounts, home=home)
     # Shown on the pages; execute_archive validates the directory again before writing.
     app.state.archive_status = (

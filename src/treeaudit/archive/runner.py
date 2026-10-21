@@ -190,7 +190,7 @@ def execute_archive(
             mounts=mounts,
             home=home,
             data_dir=config.data_dir,
-            root_paths=tuple(root.path for root in config.roots),
+            root_paths=tuple(root.path for root in config.declared_roots),
             container_mode=config.container_mode,
         ),
     )
@@ -320,7 +320,13 @@ class _ArchiveJob:
         return self.outcome
 
     def _measure(self) -> bool:
-        """First walk (metadata only): number of entries and bytes to archive."""
+        """First walk (metadata only): number of entries and bytes to archive.
+
+        Also refuses, before anything is written, a folder that contains the
+        archive directory (possible when it is on a detected external disk).
+        """
+        archive_stat = os.stat(self.archive_dir)
+        archive_id = (archive_stat.st_dev, archive_stat.st_ino)
         events = walk(self.options, self.subpath)
         try:
             for event in events:
@@ -333,6 +339,12 @@ class _ArchiveJob:
                         self.outcome.failure = (
                             "ce dossier n'est plus celui de l'analyse (le dossier analysé a "
                             "changé ou a été remplacé) : relance une analyse"
+                        )
+                        return False
+                    if event.kind is EntryKind.DIR and (event.dev, event.ino) == archive_id:
+                        self.outcome.failure = (
+                            "ce dossier contient le dossier d'archives : choisir un dossier "
+                            "qui ne le contient pas"
                         )
                         return False
                     self.progress.entries_total += 1

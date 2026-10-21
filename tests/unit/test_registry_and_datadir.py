@@ -45,10 +45,13 @@ def test_container_mode_requires_read_only_mounts(
     config = config_for(
         tmp_path / "data", RootConfig(id="r", path=str(root), label="r"), container_mode=True
     )
-    rw = evaluate_roots(config, data_disk_table(str(tmp_path), options="rw"), home=None)
-    ro = evaluate_roots(config, data_disk_table(str(tmp_path), options="ro"), home=None)
+    rw = evaluate_roots(config, data_disk_table(str(root), options="rw"), home=None)
+    ro = evaluate_roots(config, data_disk_table(str(root), options="ro"), home=None)
     assert rw[0].reason is RejectReason.NOT_READ_ONLY
     assert ro[0].accepted
+    # A root must be its own bind mount: otherwise it is the container's own files.
+    parent = evaluate_roots(config, data_disk_table(str(tmp_path), options="ro"), home=None)
+    assert parent[0].reason is RejectReason.NOT_MOUNTED
 
 
 def test_data_dir_inside_a_root_prevents_startup(tmp_path: Path) -> None:

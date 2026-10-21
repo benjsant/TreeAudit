@@ -69,7 +69,7 @@ def volumes_of(service: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def test_expected_services() -> None:
-    assert set(SERVICES) == {"app", "gateway", "check", "check-archive", "dev"}
+    assert set(SERVICES) == {"app", "gateway", "check", "check-archive", "check-disks", "dev"}
 
 
 @pytest.mark.parametrize("name", sorted(SERVICES))
@@ -126,12 +126,24 @@ def test_gateway_sees_no_data() -> None:
     assert gateway["command"][gateway["command"].index("--upstream-host") + 1] == "app"
 
 
-def test_audited_roots_are_read_only() -> None:
-    roots = [v for v in volumes_of(SERVICES["app"]) if str(v["target"]).startswith("/audit/")]
-    assert roots, "the app service must mount at least one audited root"
-    for volume in roots:
-        assert volume["read_only"] is True, volume
-        assert str(volume["target"]).startswith("/audit/roots/")
+def test_base_compose_mounts_no_audited_folder() -> None:
+    """Audited folders are mounted only by overrides, once validated on the host."""
+    targets = [str(v["target"]) for v in volumes_of(SERVICES["app"])]
+    assert targets == ["/data"]
+
+
+ROOT_OVERRIDE = load("compose.root.yaml")
+
+
+def test_root_override_mounts_the_root_read_only() -> None:
+    services = ROOT_OVERRIDE["services"]
+    assert set(services) == {"app"}
+    [volume] = volumes_of(services["app"])
+    assert volume["read_only"] is True
+    assert volume["target"] == "/audit/roots/main"
+    assert volume["selinux"] is None
+    assert str(volume["source"]).startswith("${TREEAUDIT_ROOT_PATH:?")
+    assert set(services["app"]["environment"]) == {"TREEAUDIT_DISPLAY_PATH_MAIN"}
 
 
 def test_app_writable_mounts_are_only_the_data_dir() -> None:
@@ -139,15 +151,17 @@ def test_app_writable_mounts_are_only_the_data_dir() -> None:
     assert writable == ["/data"]
 
 
-@pytest.mark.parametrize("name", ["check", "check-archive", "dev"])
+@pytest.mark.parametrize("name", ["check", "check-archive", "check-disks", "dev"])
 def test_tool_services_have_no_network(name: str) -> None:
     assert SERVICES[name].get("network_mode") == "none"
 
 
-@pytest.mark.parametrize("name", ["check", "check-archive"])
+@pytest.mark.parametrize("name", ["check", "check-archive", "check-disks"])
 def test_check_services_see_no_host_files(name: str) -> None:
     assert not SERVICES[name].get("volumes")
-    assert "--no-fs-checks" in SERVICES[name]["entrypoint"]
+    entrypoint = SERVICES[name]["entrypoint"]
+    # Path checks never touch the host's files; disk detection only reads sysfs.
+    assert "--no-fs-checks" in entrypoint or entrypoint[1:3] == ["disks", "detect"]
 
 
 ARCHIVE_OVERRIDE = load("compose.archive.yaml")
@@ -199,5 +213,14 @@ def test_dockerfile_final_stage_is_not_root() -> None:
 
 def test_dockerignore_excludes_local_data() -> None:
     entries = (REPO / ".dockerignore").read_text(encoding="utf-8").splitlines()
-    for required in (".env", "data/", ".git"):
+    for required in (".env", "data/", ".git", ".treeaudit-disks.json"):
         assert required in entries
+
+
+def test_generated_disks_file_is_ignored_and_outside_the_data_dir() -> None:
+    """The container can write to data/: a compose file there could be turned into
+    a read-write mount of anything at the next start (D-033)."""
+    assert ".treeaudit-disks.json" in (REPO / ".gitignore").read_text(encoding="utf-8")
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+    assert "DISKS_FILE := .treeaudit-disks.json" in makefile
+    assert "data/" not in makefile.split("DISKS_FILE := ")[1].splitlines()[0]

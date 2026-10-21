@@ -7,7 +7,7 @@ Construire TreeAudit, une application locale d'audit de fichiers et d'arborescen
 1. **Jamais de suppression, déplacement, renommage, fusion ou modification d'une donnée auditée** (D-024). TreeAudit propose des commandes de nettoyage que l'utilisateur lance lui-même ; il ne les exécute jamais (D-025). Seule écriture hors du dossier de données : des archives vérifiées, dans le dossier d'archives déclaré (D-032).
 2. Ne jamais utiliser `sudo`, `subprocess`, `os.system`, `rm`, `shutil.rmtree`, des commandes shell destructrices ou des commandes fournies par l'utilisateur ou un LLM.
 3. Ne jamais monter `/`, `/home` entier, `/dev`, `/proc`, `/sys`, le socket Docker ou un volume hôte général. Jamais d'option `:z`/`:Z` sur une cible (D-011).
-4. Les racines sont déclarées dans la configuration et validées (D-008, D-009). En Docker, chacune est montée en lecture seule sous `/audit/roots/<id>`.
+4. Les racines sont déclarées dans la configuration et validées (D-008, D-009). En Docker, chacune est montée en lecture seule sous `/audit/roots/<id>`. Seule exception, en option : les disques externes détectés (D-033). Ils sont validés sur l'hôte (jamais un disque physique du système, en cas de doute refusés), puis montés un par un en lecture seule sous `/audit/disks/<id>`, et revérifiés dans le conteneur.
 5. Le serveur n'est joignable que depuis `127.0.0.1` : écoute sur `127.0.0.1` en natif ; en Docker, écoute sur `0.0.0.0` dans le conteneur mais port publié uniquement sur `127.0.0.1` (D-010). Toute autre exposition exige une décision documentée et des tests.
 6. Aucun conteneur privilégié, aucune capacité Linux ajoutée (`cap_drop: [ALL]`), aucun accès au socket Docker.
 7. Le conteneur s'exécute avec un utilisateur non-root (UID/GID de l'utilisateur hôte).

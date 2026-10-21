@@ -487,13 +487,29 @@ def test_insufficient_space_is_refused_before_writing(
     assert os.listdir(archives) == []
 
 
-def test_archive_dir_inside_the_folder_is_caught_while_writing(
+def test_archive_dir_inside_the_folder_is_refused_before_writing(
     tmp_path: Path, source: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Defense in depth, should validation ever miss an overlap."""
+    """Possible when the archive directory is on a detected external disk (D-033)."""
     inside = source / "docs" / "archives"
     inside.mkdir()
     monkeypatch.setattr(runner, "validate_archive_dir", lambda path, ctx: None)
+    outcome = run(tmp_path, source, inside)
+    assert outcome.status is ArchiveStatus.FAILED
+    assert outcome.failure is not None and "contient le dossier d'archives" in outcome.failure
+    assert os.listdir(inside) == []
+    # Archiving a sibling folder of the same disk is fine.
+    assert run(tmp_path, source, inside, subpath="docs/old").status is ArchiveStatus.COMPLETE
+
+
+def test_archive_dir_inside_the_folder_is_caught_while_writing(
+    tmp_path: Path, source: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Defense in depth, should both earlier checks ever miss an overlap."""
+    inside = source / "docs" / "archives"
+    inside.mkdir()
+    monkeypatch.setattr(runner, "validate_archive_dir", lambda path, ctx: None)
+    monkeypatch.setattr(runner._ArchiveJob, "_measure", lambda self: True)
     outcome = run(tmp_path, source, inside)
     assert outcome.status is ArchiveStatus.FAILED
     assert outcome.failure is not None and "inside the archived folder" in outcome.failure

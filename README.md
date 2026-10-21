@@ -57,6 +57,12 @@ make up       # vérifie le dossier, puis démarre TreeAudit
 
 Ouvre **http://127.0.0.1:8765** dans ton navigateur. `Ctrl+C` ou `make down` arrête tout.
 
+**Ou bien, pour trier plusieurs disques externes**, mets `TREEAUDIT_EXTERNAL_DISKS=1` dans `.env` (le dossier `TREEAUDIT_ROOT_PATH` devient alors facultatif). Branche tes disques, lance `make up`, et choisis le disque dans le navigateur. `make disks` affiche la liste. Les règles :
+
+- **Le disque du système n'est jamais proposé**, ni aucune de ses partitions : TreeAudit remonte jusqu'au disque physique. En cas de doute sur un disque (disque réseau, image ISO…), il ne le propose pas, et l'interface dit pourquoi.
+- Chaque disque proposé est monté **en lecture seule**.
+- Un disque branché après le démarrage n'apparaît qu'après avoir relancé `make up`.
+
 Le dossier est monté **en lecture seule** dans le conteneur : même en cas de bug, TreeAudit ne peut pas le modifier. Par défaut, un dossier situé sur le disque du système (par exemple dans ton dossier personnel) est refusé ; pour l'autoriser volontairement, mets `TREEAUDIT_ALLOW_SYSTEM_VOLUME=1` dans `.env` (voir D-009 dans [docs/DECISIONS.md](docs/DECISIONS.md)). Les dossiers système (`/`, `/etc`, `/home` entier…) restent toujours refusés. Sous SELinux en mode enforcing : `make up COMPOSE_SELINUX=1`.
 
 ## Utilisation
@@ -72,7 +78,8 @@ Le dossier est monté **en lecture seule** dans le conteneur : même en cas de b
 
 | Commande | Effet |
 |---|---|
-| `make scan` | Analyse le dossier de `.env` (`SUBPATH=sous/dossier` pour une partie seulement) |
+| `make scan` | Analyse le dossier de `.env` (`SUBPATH=sous/dossier` pour une partie seulement ; `ROOT=ext-…` pour un disque externe) |
+| `make disks` | Disques externes proposés ou refusés, et pourquoi |
 | `make scans` | Liste les analyses enregistrées |
 | `make parasites` | Dossiers à nettoyer ; `SELECT=green` produit une commande « corbeille » |
 | `make dupes` / `make micro` | Doublons (≥ 1 Kio) / petits fichiers en double et fichiers vides |

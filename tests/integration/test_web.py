@@ -533,3 +533,77 @@ def test_archive_refuses_a_folder_replaced_since_the_analysis(
     assert snapshot["status"] == "failed"
     assert "n'est plus celui de l'analyse" in str(snapshot["archive"]["failure"])  # type: ignore[index]
     assert archive_names(archive_client) == []
+
+
+# --- external disks (D-033) ---------------------------------------------------------------
+
+
+def test_picker_suggests_enabling_external_disks(client: TestClient) -> None:
+    page = client.get("/scan/new")
+    assert "TREEAUDIT_EXTERNAL_DISKS=1" in page.text
+
+
+@pytest.fixture
+def disks_client(
+    tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
+) -> Iterator[TestClient]:
+    from treeaudit.roots.external import DiskReason, ExternalDisk, disk_root_id
+    from treeaudit.roots.registry import RootStatus
+    from treeaudit.roots.validation import RejectReason
+
+    disk = RootConfig(
+        id=disk_root_id("/run/media/me/USB"),
+        path=str(root),
+        label=XSS_DIR,
+        display_path="/run/media/me/USB",
+        external=True,
+    )
+    unmounted = RootConfig(id="main", path="/audit/roots/main", label="Racine principale")
+    config = AppConfig(data_dir=str(tmp_path / "data"), roots=(unmounted, disk))
+    statuses = (
+        RootStatus(root=unmounted, reason=RejectReason.NOT_MOUNTED),
+        RootStatus(root=disk),
+    )
+    detected = [
+        ExternalDisk("USB", "/run/media/me/USB", disk.id, "exfat"),
+        ExternalDisk(
+            "Data", "/mnt/Data", disk_root_id("/mnt/Data"), "ext4", DiskReason.SYSTEM_DISK
+        ),
+    ]
+    mounts = data_disk_table(str(tmp_path))
+    app = create_app(
+        config, statuses, mounts=lambda: mounts, home=lambda: None, external_disks=detected
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as test_client:
+        yield test_client
+    app.state.jobs.cancel()
+    app.state.jobs.wait()
+
+
+def test_picker_lists_external_disks(disks_client: TestClient) -> None:
+    page = disks_client.get("/scan/new")
+    assert page.status_code == 200
+    assert "Disques externes" in page.text
+    assert "/run/media/me/USB" in page.text
+    assert "utilisés sur" in page.text
+    assert "Disques non proposés (1)" in page.text
+    assert "Data : ce disque contient le système" in page.text
+    assert "TREEAUDIT_EXTERNAL_DISKS=1" not in page.text
+    assert_safe_html(page.text)  # the disk label is a hostile name here
+
+    home = disks_client.get("/")
+    assert "Analyser un dossier" in home.text
+    assert "refusés par la configuration" not in home.text  # not mounted = not configured
+
+
+def test_external_disk_can_be_scanned(disks_client: TestClient) -> None:
+    from treeaudit.roots.external import disk_root_id
+
+    root_id = disk_root_id("/run/media/me/USB")
+    page = disks_client.get(f"/scan/new?root={root_id}")
+    assert page.status_code == 200
+    assert "data-start-scan" in page.text
+    snapshot = run_job(disks_client, "/api/scans", {"root_id": root_id, "subpath": "photos"})
+    assert snapshot["status"] == "complete"
+    response = disks_client.post("/api/scans", json={"root_id": "main"}, headers=CSRF)
+    assert response.status_code == 409  # not mounted: refused

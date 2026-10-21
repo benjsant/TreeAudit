@@ -24,7 +24,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from treeaudit import __version__
-from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig
+from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig, RootConfig
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
@@ -35,7 +35,7 @@ from treeaudit.parasites.commands import recreate_command
 from treeaudit.parasites.detect import Band
 from treeaudit.parasites.report import human_size
 from treeaudit.roots.registry import RootStatus
-from treeaudit.roots.validation import REASON_MESSAGES
+from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
 from treeaudit.scanner.browse import list_folders
 from treeaudit.scanner.walker import SubpathError, parse_subpath
 from treeaudit.web import queries, summaries
@@ -111,6 +111,7 @@ def render(request: Request, name: str, status_code: int = 200, **context: Any) 
     jobs = request.app.state.jobs
     job = jobs.current
     context.setdefault("running_job", job.snapshot() if job is not None and job.running else None)
+    context.setdefault("external_enabled", request.app.state.external_enabled)
     archive = request.app.state.archive_status
     context.setdefault(
         "archive",
@@ -151,7 +152,8 @@ def index(request: Request, conn: Db, config: Config) -> Response:
     refused = [
         {"label": s.root.label, "message": REASON_MESSAGES[s.reason]}
         for s in statuses.values()
-        if s.reason is not None
+        # Not mounted in the container = not configured in .env: nothing to report.
+        if s.reason is not None and s.reason is not RejectReason.NOT_MOUNTED and not s.root.external
     ]
     analyses = [
         {"scan": scan, "title": analysis_title(config, scan)}
@@ -162,7 +164,8 @@ def index(request: Request, conn: Db, config: Config) -> Response:
         "index.html",
         analyses=analyses,
         refused=refused,
-        can_analyse=any(s.accepted for s in statuses.values()),
+        can_analyse=any(s.accepted for s in statuses.values())
+        or request.app.state.external_enabled,
     )
 
 
@@ -174,11 +177,20 @@ def new_scan(
 ) -> Response:
     statuses: dict[str, RootStatus] = request.app.state.statuses
     accepted = [s for s in statuses.values() if s.accepted]
+    external_enabled: bool = request.app.state.external_enabled
     if root is None:
-        if len(accepted) == 1:
+        if len(accepted) == 1 and not external_enabled:
             root = accepted[0].root.id
         else:
-            return render(request, "scan_new.html", roots=accepted, root=None)
+            return render(
+                request,
+                "scan_new.html",
+                roots=[s for s in accepted if not s.root.external],
+                disks=[_disk_card(s.root) for s in accepted if s.root.external],
+                refused_disks=_refused_disks(request, statuses),
+                external_enabled=external_enabled,
+                root=None,
+            )
     status = statuses.get(root)
     if status is None or not status.accepted:
         raise HTTPException(404, "Ce dossier n'est pas autorisé.")
@@ -202,6 +214,33 @@ def new_scan(
         current_name=parts[-1] if parts else root_name,
         parent="/".join(parts[:-1]) if parts else None,
     )
+
+
+def _disk_card(root: RootConfig) -> dict[str, Any]:
+    """An accepted external disk with its usage (statvfs, metadata only)."""
+    try:
+        st = os.statvfs(root.path)
+    except OSError:
+        total = used = None
+    else:
+        total = st.f_blocks * st.f_frsize
+        used = total - st.f_bfree * st.f_frsize
+    return {"root": root, "total": total, "used": used}
+
+
+def _refused_disks(request: Request, statuses: dict[str, RootStatus]) -> list[dict[str, str]]:
+    """Disks not offered, and why: refused on the host, or again in the container."""
+    refused = [
+        {"name": disk.name, "message": disk.message or ""}
+        for disk in request.app.state.external_disks
+        if not disk.accepted
+    ]
+    refused += [
+        {"name": s.root.label, "message": REASON_MESSAGES[s.reason]}
+        for s in statuses.values()
+        if s.root.external and s.reason is not None
+    ]
+    return refused
 
 
 @router.get("/jobs/current")

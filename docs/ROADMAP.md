@@ -118,6 +118,13 @@ Aucun parcours de fichiers dans cette phase.
   - mémoire maximale : 31 → 75 Mio (cache SQLite plus grand).
   Le dossier factice étant écrit d'un seul tenant, ses fichiers sont contigus : sur un disque de sauvegarde fragmenté, l'ordre physique devrait apporter davantage.
 
+## Phase 6 quater — Disques externes (D-033)
+- [x] Détection des disques montés sous `/run/media/<utilisateur>`, `/media/<utilisateur>`, `/media` et `/mnt`. Exclusion par disque physique via sysfs (partitions, LUKS, LVM, RAID), refus en cas de doute.
+- [x] Docker : détection sur l'hôte, montage individuel en lecture seule récursive des seuls disques acceptés, nouvelle vérification dans le conteneur ; dossier de `.env` devenu facultatif.
+- [x] Interface : choix d'un disque avec son occupation, et liste des disques non proposés avec la raison.
+- [x] Essais réels : `/mnt/Data` (partition du NVMe système) refusé ; un disque forgé sur le NVMe système refusé dans le conteneur ; le mode « un dossier » est inchangé.
+- [ ] Essai avec un vrai disque USB (mainteneur).
+
 ## Phase 6 bis — Archivage vérifié (D-024)
 - [x] Dossier de sortie dédié, déclaré et validé (D-032) : natif, hôte (`make check-root`) et conteneur.
 - [x] Archive `.tar.gz` / `.tar.xz` (bibliothèque standard) écrite sous un nom temporaire, publiée sans jamais écraser, fichier temporaire retiré en cas d'échec ou d'annulation (`make archive`).

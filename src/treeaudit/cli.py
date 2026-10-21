@@ -9,11 +9,13 @@ import argparse
 import contextlib
 import json
 import logging
+import os
 import sqlite3
 import sys
 import threading
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 from treeaudit import __version__
 from treeaudit.archive.destination import (
@@ -38,8 +40,18 @@ from treeaudit.filters.spec import FilterSpec
 from treeaudit.parasites.commands import Action
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
 from treeaudit.parasites.report import human_size
+from treeaudit.roots.external import (
+    DISKS_ENV_VAR,
+    ExternalDisk,
+    compose_override,
+    default_media_dirs,
+    find_external_disks,
+    format_device_specs,
+    system_device_specs,
+    system_disks,
+)
 from treeaudit.roots.mountinfo import MountInfoError, MountTable, parse_mountinfo, read_mountinfo
-from treeaudit.roots.registry import current_home, evaluate_roots
+from treeaudit.roots.registry import current_home, evaluate_roots, with_external_disks
 from treeaudit.roots.validation import (
     REASON_MESSAGES,
     RootRejectedError,
@@ -141,6 +153,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="ne pas accéder au chemin (existence, type, liens, droits) : à utiliser seulement "
         "quand ces vérifications ont déjà été faites sur la machine qui possède le chemin",
+    )
+
+    disks = commands.add_parser("disks", help="disques externes (D-033)")
+    disks_commands = disks.add_subparsers(dest="disks_command", required=True)
+    disks_commands.add_parser("list", help="disques externes proposés ou refusés, et pourquoi")
+    detect = disks_commands.add_parser(
+        "detect",
+        help="détecter les disques externes de l'hôte et écrire le fichier Compose qui les "
+        "monte en lecture seule (utilisé par make)",
+    )
+    detect.add_argument(
+        "--mountinfo", default=None, help="mountinfo de l'hôte ('-' pour l'entrée standard)"
+    )
+    detect.add_argument("--user", default=None, help="utilisateur de l'hôte (/run/media/<user>)")
+    detect.add_argument(
+        "--data-dir",
+        default=None,
+        help="dossier de données TreeAudit (disque refusé s'il le contient)",
     )
 
     scan = commands.add_parser("scan", help="inventaire d'une racine")
@@ -251,9 +281,52 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _load(args: argparse.Namespace) -> AppConfig:
+def _load_with_disks(args: argparse.Namespace) -> tuple[AppConfig, list[ExternalDisk]]:
+    """Configuration, with the external disks detected at startup added as roots."""
     path = args.config if args.config is not None else default_config_path()
-    return load_config(path, container_mode=is_container_mode())
+    config = load_config(path, container_mode=is_container_mode())
+    native_detection = config.external_disks and not config.container_mode
+    return with_external_disks(config, read_mountinfo() if native_detection else None, os.environ)
+
+
+def _load(args: argparse.Namespace) -> AppConfig:
+    return _load_with_disks(args)[0]
+
+
+def _cmd_disks_detect(args: argparse.Namespace) -> int:
+    """Run on the host's data (its mountinfo on stdin, its sysfs): only the disks
+    accepted here are then mounted in the container, one by one, read-only."""
+    mounts = _read_mounts(args.mountinfo)
+    specs = system_device_specs(mounts)
+    system = system_disks(specs)
+    disks = find_external_disks(
+        default_media_dirs(args.user), mounts, system, data_dir=args.data_dir
+    )
+    _print_disks(disks, file=sys.stderr)
+    print(compose_override(disks, format_device_specs(specs)), end="")
+    return EXIT_OK
+
+
+def _print_disks(disks: Sequence[ExternalDisk], *, file: Any = None) -> None:
+    out = sys.stdout if file is None else file
+    if not disks:
+        print("Aucun disque externe détecté.", file=out)
+    for disk in disks:
+        if disk.accepted:
+            print(
+                f"✔ disque proposé : {disk.mount_point} ({disk.fs_type}) [{disk.root_id}]", file=out
+            )
+        else:
+            print(f"✘ non proposé : {disk.mount_point} : {disk.message}", file=out)
+
+
+def _cmd_disks_list(args: argparse.Namespace) -> int:
+    config, disks = _load_with_disks(args)
+    if not config.external_disks and not config.container_mode:
+        print("Détection des disques externes désactivée (external_disks = false).")
+        return EXIT_OK
+    _print_disks(disks)
+    return EXIT_OK
 
 
 def _cmd_roots_check(args: argparse.Namespace) -> int:
@@ -448,7 +521,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
     from treeaudit.web.app import create_app
 
-    config = _load(args)
+    config, disks = _load_with_disks(args)
     prepare_data_dir(config.data_dir)
     statuses = evaluate_roots(config, read_mountinfo(), current_home())
     for status in statuses:
@@ -465,7 +538,12 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         logger.warning("archive directory rejected: %s", archive_status.reason)
 
     uvicorn.run(
-        create_app(config, statuses),
+        create_app(
+            config,
+            statuses,
+            external_disks=disks,
+            external_enabled=config.external_disks or DISKS_ENV_VAR in os.environ,
+        ),
         host=config.bind_host,
         port=config.port,
         server_header=False,
@@ -1070,6 +1148,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_archive_status(args)
         if args.command == "archive" and args.archive_command == "run":
             return _cmd_archive_run(args)
+        if args.command == "disks" and args.disks_command == "detect":
+            return _cmd_disks_detect(args)
+        if args.command == "disks" and args.disks_command == "list":
+            return _cmd_disks_list(args)
         if args.command == "serve":
             return _cmd_serve(args)
         if args.command == "scan" and args.scan_command == "run":

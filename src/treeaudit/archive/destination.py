@@ -183,7 +183,9 @@ def evaluate_archive_dir(
         mounts=mounts,
         home=home,
         data_dir=config.data_dir,
-        root_paths=tuple(root.path for root in config.roots),
+        # Declared roots only: an archive directory on a detected external disk is
+        # fine; archiving a folder that contains it is refused by the runner.
+        root_paths=tuple(root.path for root in config.declared_roots),
         check_filesystem=True,
         container_mode=config.container_mode,
     )

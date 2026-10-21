@@ -69,6 +69,14 @@
 - Web : bouton absent et route refusée (409) sans dossier d'archives ; en-tête CSRF exigé ; chemins hors racine refusés ; archive depuis le choix du dossier et depuis une analyse (nom piégé, nom non UTF-8) ; un fichier n'est pas archivable ; message clair en cas d'espace insuffisant ; pages sans code en ligne.
 - Manuel : extraction par GNU tar et comparaison avec l'original (contenu, droits, dates, liens) ; archivage et annulation par la passerelle Docker.
 
+## Disques externes (phase 6 quater, D-033)
+- Faux sysfs : disque système (y compris une autre partition et un volume LUKS du système), clé USB, disque entier sans partition, LUKS externe, btrfs (numéro anonyme, résolu par la source), image ISO (`loop`), système de fichiers réseau, montage imbriqué, système de fichiers virtuel.
+- Disque système impossible à identifier : aucun disque proposé. Disque contenant le dossier de données, nom contenant des caractères de contrôle : refusés.
+- Transmission au conteneur : aller-retour JSON ; identifiant forgé rejeté ; fichier Compose avec uniquement les disques acceptés, en lecture seule récursive, `$` doublé.
+- Conteneur : disque non monté, monté en écriture, ou devenu disque système : refusé. Racine non montée : `not_mounted`, masquée à l'accueil.
+- Web : liste des disques avec leur occupation, liste des disques non proposés, nom piégé, analyse d'un disque, conseil d'activation quand l'option est désactivée.
+- Réel : détection par Docker (`/mnt/Data` refusé), disque forgé refusé dans le conteneur, mode « un dossier » inchangé.
+
 ## Sécurité
 - Aucun accès hors de la racine autorisée, y compris par substitution de lien pendant le scan.
 - Liens symboliques extérieurs non suivis.

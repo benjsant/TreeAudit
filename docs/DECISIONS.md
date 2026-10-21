@@ -257,3 +257,23 @@ Précise la mise en œuvre de D-024.
     
     Les risques résiduels sont listés dans `SECURITY.md`.
   - **Mesures** (SSD, 1 040 903 éléments, 1,3 Gio, dans Docker) : 168 s → 97 s, vérification comprise, et moins de 55 Mio de mémoire. À titre de comparaison, `tar czf` met 10 s, mais sans parcours sécurisé ni vérification. Le coût restant vient surtout de `tarfile`, en Python pur, entrée par entrée ; écrire soi-même les en-têtes tar ne vaut pas le risque.
+
+## D-033 — Choisir un disque externe dans l'interface, jamais le disque du système (2026-10-21)
+- **Besoin** : trier plusieurs vieux disques sans modifier `.env` à chaque fois. Option désactivée par défaut : `TREEAUDIT_EXTERNAL_DISKS=1` en Docker, `external_disks = true` en natif. Le mode « un dossier déclaré » reste disponible et inchangé, avec l'exposition la plus faible.
+- **Candidats** : chaque système de fichiers monté directement sous `/run/media/<utilisateur>`, `/media/<utilisateur>`, `/media` ou `/mnt`. Ces dossiers ne servent qu'à savoir où chercher : la décision repose sur le disque physique.
+- **Disque physique** : il est déterminé par sysfs, en lecture seule. On part du numéro de périphérique (ou de la source `/dev/…` pour btrfs et FUSE), on traverse les couches LUKS, LVM et RAID (`slaves/`), puis les partitions (`partition`), jusqu'aux disques entiers. Sont refusés :
+  - tout disque physique qui porte `/`, `/boot`, `/boot/efi`, `/efi`, `/home`, `/usr` ou `/var`. Une autre partition du disque système est donc refusée ; par exemple, `/mnt/Data` sur la machine de développement ;
+  - **dans le doute, tout le reste** : disque physique introuvable (réseau, FUSE sans périphérique), image disque (`loop`), disque système impossible à identifier (aucun disque proposé dans ce cas), nom contenant des caractères de contrôle, disque contenant le dossier de données.
+- **Docker** :
+  - **sur l'hôte**, avant tout montage (même logique que D-008), le service `check-disks` (sans réseau ni volume) lit la table de montage de l'hôte et le sysfs ;
+  - il produit un fichier Compose qui monte **un par un, en lecture seule récursive** (`bind.recursive: readonly`), **les seuls disques acceptés**, sous `/audit/disks/<id>`. Le conteneur ne voit donc jamais le disque système, ni un disque refusé ;
+  - ce fichier est généré avant chaque utilisation, **hors de `data/`** : le conteneur peut écrire dans `data/`, et un fichier Compose qui s'y trouverait pourrait devenir, au démarrage suivant, un montage en écriture de n'importe quel dossier. Toutes les valeurs sont échappées en JSON, et `$` est doublé pour que Compose n'interprète jamais un nom de disque comme une variable ;
+  - **dans le conteneur**, chaque disque est revérifié : montage dédié, lecture seule, et toujours pas sur un disque du système, d'après les périphériques système mesurés sur l'hôte. Sinon il est refusé. C'est vérifié en réel : un disque forgé situé sur le NVMe système est refusé.
+- **Propagation des montages écartée** : elle aurait fait apparaître sans redémarrage les disques branchés plus tard, mais ces disques arriveraient **en écriture**, même sous un montage en lecture seule. Un disque branché après le démarrage demande donc de relancer `make up`.
+- **Racines** : un disque reçoit l'identifiant stable `ext-<nom>-<empreinte du chemin>`, et ses analyses restent regroupées d'une fois sur l'autre. Le préfixe `ext-` est réservé.
+  - En Docker, toute racine doit être son propre point de montage (`not_mounted` sinon). La racine `main` peut donc être absente quand seuls les disques externes sont utilisés ; `compose.root.yaml` ne la monte que si `TREEAUDIT_ROOT_PATH` est défini.
+- **Archives** : le chevauchement du dossier d'archives n'est vérifié qu'avec les dossiers déclarés, ce qui permet de le placer sur un disque externe. Archiver un dossier qui le contient est refusé avant toute écriture.
+- **Limites** :
+  - tout disque interne secondaire est proposé, au même titre qu'un disque USB ;
+  - le conteneur voit tous les disques acceptés, et non le seul disque choisi : c'est l'élargissement accepté pour cette option.
+- Amende la règle 4 de `CLAUDE.md`.

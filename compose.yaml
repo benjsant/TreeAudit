@@ -27,17 +27,12 @@ services:
     # published port (D-020). It is reached through the gateway.
     networks: [internal]
     environment:
-      # Host path of the root, used only to display copy-pasteable commands (D-025).
-      TREEAUDIT_DISPLAY_PATH_MAIN: "${TREEAUDIT_ROOT_PATH:-}"
       # Host time zone, for the local time in archive names (D-032).
       TZ: "${TREEAUDIT_TZ:-UTC}"
+    # The audited folders are mounted by overrides, read-only, after validation
+    # on the host: compose.root.yaml (TREEAUDIT_ROOT_PATH) and the generated
+    # .treeaudit-disks.json (external disks, D-033).
     volumes:
-      - type: bind
-        source: "${TREEAUDIT_ROOT_PATH:-/TREEAUDIT_ROOT_PATH_is_not_set}"
-        target: /audit/roots/main
-        read_only: true
-        bind:
-          create_host_path: false
       - type: bind
         source: ./data
         target: /data
@@ -65,6 +60,16 @@ services:
     profiles: [tools]
     network_mode: none
     entrypoint: ["treeaudit", "roots", "check", "--no-fs-checks", "--mountinfo", "-"]
+
+  # Detects the host's external disks from its mount table (stdin) and sysfs,
+  # and prints the compose file mounting the accepted ones read-only (D-033).
+  # No network, no volume.
+  check-disks:
+    <<: *hardening
+    image: treeaudit-app:local
+    profiles: [tools]
+    network_mode: none
+    entrypoint: ["treeaudit", "disks", "detect", "--mountinfo", "-"]
 
   # Same, for the archive directory (D-032).
   check-archive:
