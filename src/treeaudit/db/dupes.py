@@ -94,6 +94,19 @@ def finish_run(
     )
 
 
+# The join order is forced (CROSS JOIN, INDEXED BY): left to itself, SQLite read
+# the whole file_hash table for every candidate. Measured on an index of 2.4
+# million entries, 35 584 candidates took about 17 minutes instead of 0.2 s.
+KNOWN_DIGESTS_SQL = (
+    "SELECT h.partial, h.tail, h.full, json_extract(r.options, '$.edge_size') AS edge "
+    "FROM entry e INDEXED BY entry_by_identity "
+    "CROSS JOIN dup_run r ON r.scan_id = e.scan_id AND r.status IN ('complete', 'incomplete') "
+    "CROSS JOIN file_hash h ON h.run_id = r.id AND h.entry_id = e.entry_id "
+    "WHERE e.dev = ? AND e.ino = ? AND e.size = ? AND e.mtime_ns = ? "
+    "ORDER BY r.id DESC LIMIT 1"
+)
+
+
 def known_digests(
     conn: sqlite3.Connection, candidates: list[Candidate], *, edge_size: int
 ) -> dict[int, KnownDigests]:
@@ -107,12 +120,7 @@ def known_digests(
     known: dict[int, KnownDigests] = {}
     for candidate in candidates:
         row = conn.execute(
-            "SELECT h.partial, h.tail, h.full, "
-            "json_extract(r.options, '$.edge_size') AS edge FROM entry e "
-            "JOIN dup_run r ON r.scan_id = e.scan_id AND r.status IN ('complete', 'incomplete') "
-            "JOIN file_hash h ON h.run_id = r.id AND h.entry_id = e.entry_id "
-            "WHERE e.dev = ? AND e.ino = ? AND e.size = ? AND e.mtime_ns = ? "
-            "ORDER BY r.id DESC LIMIT 1",
+            KNOWN_DIGESTS_SQL,
             (
                 to_sqlite_int(candidate.dev),
                 to_sqlite_int(candidate.ino),

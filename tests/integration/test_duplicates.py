@@ -586,3 +586,19 @@ def test_invalid_group_selection(text: str, root: Path, harness: Harness) -> Non
     _, report = harness.groups()
     with pytest.raises(SelectionError):
         parse_groups(text, report.groups)
+
+
+def test_known_digests_lookup_starts_from_the_inode_index() -> None:
+    """Regression: SQLite chose to read the whole file_hash table per candidate."""
+    memory = connect_memory()
+    try:
+        plan = [
+            row["detail"]
+            for row in memory.execute(
+                "EXPLAIN QUERY PLAN " + dupes_db.KNOWN_DIGESTS_SQL, (1, 1, 1, 1)
+            )
+        ]
+    finally:
+        memory.close()
+    assert plan[0].startswith("SEARCH e USING INDEX entry_by_identity")
+    assert not any(step.startswith("SCAN h") for step in plan), plan
