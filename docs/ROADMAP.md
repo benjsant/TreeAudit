@@ -108,6 +108,9 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Empreintes réutilisées entre analyses (début, fin, complète).
 - [x] Résumés du bilan mis en cache.
 - [x] Base allégée (−24 %), cache SQLite et lots plus grands.
+- [x] Résultats « à nettoyer » mis en cache (1,9 s → 0,003 s sur 1 000 000 d'éléments), numérotation identique au calcul direct (D-031).
+- [x] Images en Python 3.14 (−2,5 % seulement : l'écart Docker / natif vient du conteneur, D-031).
+- [ ] Plus tard, si utile : alléger le code Python de l'analyse (~20 % sur SSD, presque rien sur disque mécanique) ; ne plus stocker deux fois les chemins (base ~25 % plus petite).
 - [x] Mesure sur un vrai disque 5 400 tours, à froid (2026-10-20) : disque USB 2,5 pouces ST1000LM025, ext4, dossier factice de 153 316 éléments et 527 Mo, cache du noyau vidé avant chaque mesure, une mesure par cas :
   - analyse : 8,0 s → **4,3 s (−46 %)** ;
   - doublons : 9,3 s → **7,0 s (−25 %)**, 338 → 307 Mio lus ;

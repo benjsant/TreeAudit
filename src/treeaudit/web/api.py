@@ -21,8 +21,7 @@ from treeaudit.db import scans as scans_db
 from treeaudit.db.connection import connect
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.duplicates.report import SelectionError, override_keep
-from treeaudit.parasites.detect import find_parasites
-from treeaudit.parasites.rules import load_default_rules
+from treeaudit.parasites.cached import parasite_findings
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES
 from treeaudit.scanner.browse import list_folders
@@ -151,9 +150,7 @@ def parasite_command(
     scan = scans_db.get_scan(conn, scan_id)
     if scan is None:
         raise HTTPException(404, "scan inconnu")
-    findings = find_parasites(
-        conn, scan_id, load_default_rules(), min_confidence=body.min_confidence
-    )
+    findings = parasite_findings(conn, scan_id, min_confidence=body.min_confidence)
     by_number = {f.number: f for f in findings}
     unknown = sorted(set(body.numbers) - set(by_number))
     if unknown:

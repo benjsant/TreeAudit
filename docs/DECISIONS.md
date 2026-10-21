@@ -92,7 +92,7 @@ Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers
 
 ## D-017 — Python et verrouillage des dépendances (2026-10-19)
 - `requires-python = ">=3.12"` (Python de Linux Mint 22 ; Nobara fournit 3.14). L'intégration continue teste 3.12 et la dernière version stable.
-- Image Docker : `python:3.13-slim`, épinglée par digest.
+- Image Docker : `python:3.13-slim`, épinglée par digest (remplacée par `python:3.14-slim`, voir D-031).
 
 *Amendement 2026-10-19* : le verrouillage utilise **uv** (`uv.lock`, avec empreintes) au lieu de pip-tools. uv n'est utilisé **que dans les images Docker** : il est copié depuis l'image officielle `ghcr.io/astral-sh/uv`, épinglée par version et digest, et n'est pas présent dans l'image finale de l'application.
 - *Motif* : un seul outil pour les dépendances et le verrouillage, résolution multiplateforme, reconstructions d'images rapides, aucune installation sur l'hôte (D-019).
@@ -199,4 +199,9 @@ Objectif du mainteneur : fonctionner sans à-coups sur un disque externe 5 400 t
 - **Empreintes réutilisées** d'une analyse à l'autre pour un fichier inchangé (même périphérique, inode, taille et date de modification à la nanoseconde, le critère de rsync). Une deuxième recherche ne relit rien. Option `reuse_digests=False` pour tout relire. Limite : un fichier modifié sans changer de taille avec une date remise à l'identique ne serait pas relu.
 - **Résumés mis en cache** pour les analyses terminées (immuables), avec une clé incluant l'empreinte du catalogue de règles ; calculés dès la fin de l'analyse.
 - **Base plus légère** (schéma v4) : index des chemins et des extensions supprimés (−24 % de taille, analyse plus rapide) ; les indices « dans le dossier » suivent les liens parent-enfant. Cache SQLite de 32 Mio et lots de 10 000 écritures.
-- Mesures (SSD, cache chaud, 1 040 904 éléments) : analyse 20,3 → 15,7 s en natif, mémoire < 80 Mio ; base 420 → 325 Mo ; doublons 0,9 → 0,5 s ; seconde recherche 0 octet lu ; détection des parasites 4,9 → 1,8 s puis instantanée. Sur un vrai disque 5 400 tours à froid : analyse −46 %, doublons −25 %, seconde recherche quasi instantanée (détails dans `ROADMAP.md`).
+- Mesures (SSD, cache chaud, 1 040 904 éléments) : analyse 20,3 → 15,7 s en natif avec la base en mémoire (17,3 s avec la base sur disque, voir D-031), mémoire < 80 Mio ; base 420 → 325 Mo ; doublons 0,9 → 0,5 s ; seconde recherche 0 octet lu ; détection des parasites 4,9 → 1,8 s puis instantanée. Sur un vrai disque 5 400 tours à froid : analyse −46 %, doublons −25 %, seconde recherche quasi instantanée (détails dans `ROADMAP.md`).
+
+## D-031 — Python 3.14 dans les images, résultats « à nettoyer » mis en cache (2026-10-21)
+- Images Docker en `python:3.14-slim` (épinglée par digest), comme la machine de développement. Mesuré sur 1 040 904 éléments : 21,2 s (3.13) → 20,7 s (3.14), soit −2,5 % seulement. L'hypothèse d'un gain important était fausse : l'écart restant avec le mode natif (17,3 s, base sur disque) tient au conteneur lui-même (filtrage des appels système, compilation de Python et de SQLite), pas à la version de Python.
+- Correction d'une mesure de D-030 : les 15,7 s natives avaient été mesurées avec la base dans `/tmp`, qui est en mémoire (tmpfs) sur la machine de test. Avec la base sur disque, l'analyse native prend 17,3 s.
+- Les résultats « à nettoyer » d'une analyse terminée sont mis en cache (évaluation des règles seulement ; filtrage, suppression des éléments inclus dans un dossier vert, tri et numérotation sont refaits à chaque fois). Les numéros affichés et ceux utilisés pour générer une commande restent donc strictement identiques au calcul direct ; un test le vérifie pour neuf seuils de confiance. Sur 1 000 000 d'éléments : 1,9 s → 0,003 s, et le cache est rempli dès la fin de l'analyse.

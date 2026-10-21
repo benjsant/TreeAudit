@@ -30,10 +30,10 @@ from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.filters.search import Sort, search
 from treeaudit.filters.spec import FilterError, compile_filter, describe
+from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.commands import recreate_command
-from treeaudit.parasites.detect import Band, find_parasites
+from treeaudit.parasites.detect import Band
 from treeaudit.parasites.report import human_size
-from treeaudit.parasites.rules import load_default_rules
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES
 from treeaudit.scanner.browse import list_folders
@@ -276,7 +276,7 @@ def parasites_page(
 ) -> Response:
     scan = _scan_or_404(conn, scan_id)
     display = root_display(config, scan)
-    findings = find_parasites(conn, scan_id, load_default_rules(), min_confidence=min_confidence)
+    findings = parasite_findings(conn, scan_id, min_confidence=min_confidence)
     rows: list[dict[str, Any]] = [
         {"finding": f, "recreate": recreate_command(f, display)} for f in findings
     ]

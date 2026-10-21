@@ -97,7 +97,7 @@ Pensé pour tourner sans à-coups sur une machine modeste (8 Go de RAM) et des d
 
 | Mesure | Résultat |
 |---|---|
-| 1 million d'éléments (SSD) | analyse en 16 s (natif) à 23 s (Docker), moins de 80 Mio de mémoire |
+| 1 million d'éléments (SSD) | analyse en 17 s (natif) à 21 s (Docker), moins de 80 Mio de mémoire |
 | Disque USB 5 400 tours, à froid, 153 000 éléments | analyse 4,3 s, doublons 7,0 s |
 | Deuxième recherche de doublons | quasi instantanée, aucun fichier relu |
 

@@ -23,8 +23,7 @@ from treeaudit.db.connection import connect
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.filters.search import Sort, search
 from treeaudit.filters.spec import FilterError, compile_filter, describe
-from treeaudit.parasites.detect import find_parasites
-from treeaudit.parasites.rules import load_default_rules
+from treeaudit.parasites.cached import parasite_findings
 from treeaudit.web.api import Config, Db
 from treeaudit.web.search_form import SearchForm, spec_from_form
 
@@ -140,7 +139,7 @@ def entries_csv(scan_id: int, conn: Db, config: Config) -> Response:
 
 def _parasites(conn: Any, scan_id: int, min_confidence: int) -> list[Any]:
     _scan(conn, scan_id)
-    return find_parasites(conn, scan_id, load_default_rules(), min_confidence=min_confidence)
+    return parasite_findings(conn, scan_id, min_confidence=min_confidence)
 
 
 @router.get("/scans/{scan_id}/parasites.csv")

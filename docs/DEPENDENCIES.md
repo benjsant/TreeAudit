@@ -5,7 +5,7 @@ Commencer par le minimum, verrouiller les versions avec empreintes (`uv.lock`, D
 ## Outils (images Docker uniquement)
 | Outil | Usage | Remarque |
 |---|---|---|
-| `python:3.13-slim` | Image de base | Épinglée par digest |
+| `python:3.14-slim` | Image de base | Épinglée par digest (D-031) |
 | `ghcr.io/astral-sh/uv` | Résolution, verrouillage et installation des dépendances | Épinglée par version et digest ; absente de l'image finale |
 
 ## Bibliothèque standard — priorité

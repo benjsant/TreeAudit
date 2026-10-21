@@ -9,8 +9,9 @@ from treeaudit.db import cache
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
-from treeaudit.parasites.detect import Band, find_parasites
-from treeaudit.parasites.rules import load_default_rules, rules_fingerprint
+from treeaudit.parasites.cached import parasite_findings
+from treeaudit.parasites.detect import Band
+from treeaudit.parasites.rules import rules_fingerprint
 from treeaudit.scanner.models import ScanStatus
 
 GROUPS_VERSION = "1"
@@ -29,7 +30,7 @@ def parasites_summary(conn: sqlite3.Connection, scan_id: int) -> dict[str, Any]:
         cached = cache.get(conn, key)
         if cached is not None:
             return cached
-    findings = find_parasites(conn, scan_id, load_default_rules())
+    findings = parasite_findings(conn, scan_id)
     safe = [f for f in findings if f.band is Band.GREEN]
     check = [f for f in findings if f.band is not Band.GREEN]
     summary = {

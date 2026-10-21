@@ -226,18 +226,13 @@ def _has_ancestor_in(rel_path: bytes, ancestors: set[bytes]) -> bool:
     return any(b"/".join(parts[:i]) in ancestors for i in range(1, len(parts)))
 
 
-def find_parasites(
-    conn: sqlite3.Connection,
-    scan_id: int,
-    rules: Sequence[Rule],
-    *,
-    min_confidence: int = DEFAULT_MIN_CONFIDENCE,
+def evaluate_candidates(
+    conn: sqlite3.Connection, scan_id: int, rules: Sequence[Rule]
 ) -> list[Finding]:
-    """Evaluate every rule on a scan and return numbered findings, best first.
+    """Evaluate every rule: the best (most confident) finding per entry, unnumbered.
 
-    When several rules match the same entry, the most confident one is kept.
-    Entries inside a green finding are not reported again (deleting the
-    ancestor already covers them).
+    This is the costly part (queries on the index); select_findings() then
+    filters, removes entries inside green folders, sorts and numbers.
     """
     evaluator = _Evaluator(conn, scan_id, rules)
     best: dict[int, Finding] = {}
@@ -247,10 +242,17 @@ def find_parasites(
             current = best.get(finding.entry_id)
             if current is None or finding.confidence > current.confidence:
                 best[finding.entry_id] = finding
+    return list(best.values())
 
+
+def select_findings(
+    candidates: Sequence[Finding], *, min_confidence: int = DEFAULT_MIN_CONFIDENCE
+) -> list[Finding]:
+    """Numbered findings, best first. Entries inside a green finding are not
+    reported again (deleting the ancestor already covers them)."""
     kept: list[Finding] = []
     green_dirs: set[bytes] = set()
-    for finding in sorted(best.values(), key=lambda f: (f.depth, f.rel_path)):
+    for finding in sorted(candidates, key=lambda f: (f.depth, f.rel_path)):
         if _has_ancestor_in(finding.rel_path, green_dirs):
             continue
         if finding.confidence < min_confidence:
@@ -261,3 +263,17 @@ def find_parasites(
 
     kept.sort(key=lambda f: (_BAND_ORDER[f.band], -(f.allocated_size or 0), f.rel_path))
     return [dataclasses.replace(f, number=index) for index, f in enumerate(kept, start=1)]
+
+
+def find_parasites(
+    conn: sqlite3.Connection,
+    scan_id: int,
+    rules: Sequence[Rule],
+    *,
+    min_confidence: int = DEFAULT_MIN_CONFIDENCE,
+) -> list[Finding]:
+    """Evaluate every rule on a scan and return numbered findings, best first.
+
+    When several rules match the same entry, the most confident one is kept.
+    """
+    return select_findings(evaluate_candidates(conn, scan_id, rules), min_confidence=min_confidence)

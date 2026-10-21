@@ -16,3 +16,4 @@ docs/
 tests/
 dummy_folder/
 big_dummy_folder/
+.bench-data*/
