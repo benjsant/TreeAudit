@@ -118,6 +118,10 @@ Aucun parcours de fichiers dans cette phase.
   - mémoire maximale : 31 → 75 Mio (cache SQLite plus grand).
   Le dossier factice étant écrit d'un seul tenant, ses fichiers sont contigus : sur un disque de sauvegarde fragmenté, l'ordre physique devrait apporter davantage.
 
+## Phase 6 sexies — Sans make (D-035)
+- [x] Lanceur `./treeaudit` (bash) à la place du `Makefile`, mêmes validations avant montage.
+- [x] `.env` lu comme des données (jamais exécuté), testé ; SELinux détecté.
+
 ## Phase 6 quinquies — Tout par l'interface (D-034)
 - [x] `make up` suffit : aucun fichier de configuration ; disques externes activés et archives dans `archives/` par défaut.
 - [x] Page « Mes archives ».

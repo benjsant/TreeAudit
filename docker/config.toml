@@ -5,7 +5,7 @@
 data_dir = "/data"
 
 # Verified archives (D-032). Only usable when compose.archive.yaml mounts a host
-# folder here, which the Makefile does when TREEAUDIT_ARCHIVE_PATH is set in .env.
+# folder here, which ./treeaudit does when TREEAUDIT_ARCHIVE_PATH is set in .env.
 archive_dir = "/archives"
 
 # Listen on all interfaces of the container's own network namespace only.

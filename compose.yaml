@@ -1,13 +1,13 @@
 # TreeAudit — Docker Compose.
 #
-# Use the Makefile (`make up`): it validates the audited folder on the host before
+# Start it with ./treeaudit: it validates the audited folder on the host before
 # mounting it (docs/DECISIONS.md D-008). Security rules: docs/SECURITY.md.
 # Never add ':z' or ':Z' to a mount, nor privileged mode, nor the Docker socket.
 
 name: treeaudit
 
 x-hardening: &hardening
-  user: "${TREEAUDIT_UID:?start TreeAudit with make (it passes your user id)}:${TREEAUDIT_GID:?start TreeAudit with make}"
+  user: "${TREEAUDIT_UID:?start TreeAudit with ./treeaudit (it passes your user id)}:${TREEAUDIT_GID:?start TreeAudit with ./treeaudit}"
   read_only: true
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]

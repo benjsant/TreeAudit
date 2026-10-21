@@ -221,6 +221,5 @@ def test_generated_disks_file_is_ignored_and_outside_the_data_dir() -> None:
     """The container can write to data/: a compose file there could be turned into
     a read-write mount of anything at the next start (D-033)."""
     assert ".treeaudit-disks.json" in (REPO / ".gitignore").read_text(encoding="utf-8")
-    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
-    assert "DISKS_FILE := .treeaudit-disks.json" in makefile
-    assert "data/" not in makefile.split("DISKS_FILE := ")[1].splitlines()[0]
+    launcher = (REPO / "treeaudit").read_text(encoding="utf-8")
+    assert "\nDISKS_FILE=.treeaudit-disks.json\n" in launcher

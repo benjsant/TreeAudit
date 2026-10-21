@@ -52,7 +52,7 @@ Ce sont des filtres de recherche, pas des règles de suppression.
 - **Limites** : longueur de motif maximale (1 000 caractères) ; évaluation annulable (voir [SECURITY.md](SECURITY.md)).
 
 ## Implémentation (phase 5)
-Commande : `treeaudit search <id-scan> [critères]`, ou `make search ARGS="..."` sur le dernier scan. Tous les critères donnés doivent être vrais (ET).
+Commande : `treeaudit search <id-scan> [critères]`, ou `./treeaudit cli search <id-scan> [critères]` en Docker. Tous les critères donnés doivent être vrais (ET).
 
 | Option | Critère |
 |---|---|

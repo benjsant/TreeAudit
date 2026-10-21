@@ -161,7 +161,7 @@ def build_parser() -> argparse.ArgumentParser:
     detect = disks_commands.add_parser(
         "detect",
         help="détecter les disques externes de l'hôte et écrire le fichier Compose qui les "
-        "monte en lecture seule (utilisé par make)",
+        "monte en lecture seule (utilisé par ./treeaudit)",
     )
     detect.add_argument(
         "--mountinfo", default=None, help="mountinfo de l'hôte ('-' pour l'entrée standard)"

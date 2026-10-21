@@ -77,7 +77,7 @@ DISK_MESSAGES: dict[DiskReason, str] = {
     DiskReason.UNSAFE_NAME: (
         "son nom contient des caractères de contrôle : il ne peut pas être affiché sans ambiguïté"
     ),
-    DiskReason.NOT_MOUNTED: "il n'est plus monté (débranché ?) : relancer make up",
+    DiskReason.NOT_MOUNTED: "il n'est plus monté (débranché ?) : relancer ./treeaudit",
     DiskReason.NOT_READ_ONLY: "il n'est pas en lecture seule dans le conteneur",
 }
 

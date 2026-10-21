@@ -32,9 +32,9 @@ Le moteur fonctionne **en natif** (tests, CLI, usage direct) et **en Docker** (d
 Les racines sont déclarées dans un fichier de configuration (identifiant + chemin), pas choisies librement depuis l'interface web.
 - L'API et l'interface désignent une racine par son **identifiant** ; aucun chemin absolu n'est accepté en paramètre.
 - En Docker, chaque racine est montée sous `/audit/roots/<id>` en `:ro`. La validation se fait en deux temps :
-  1. **Avant le montage, côté hôte** (`make check-root`, lancé automatiquement par `make up`) : le shell vérifie que le chemin existe, est un dossier et ne passe par aucun lien symbolique ; puis le contenu de `/proc/self/mountinfo` de l'hôte est transmis sur l'entrée standard à un conteneur **sans réseau ni volume**, qui applique les règles de D-009 (`treeaudit roots check --no-fs-checks --mountinfo -`).
+  1. **Avant le montage, côté hôte** (par le lanceur `./treeaudit` avant chaque démarrage, D-035) : le shell vérifie que le chemin existe, est un dossier et ne passe par aucun lien symbolique ; puis le contenu de `/proc/self/mountinfo` de l'hôte est transmis sur l'entrée standard à un conteneur **sans réseau ni volume**, qui applique les règles de D-009 (`treeaudit roots check --no-fs-checks --mountinfo -`).
   2. **Au démarrage du conteneur** : chaque racine doit être un dossier, sur un système de fichiers non virtuel, et son montage doit être **en lecture seule** d'après le `mountinfo` du conteneur ; sinon elle est marquée refusée.
-- *Limite* : lancer `docker compose up` directement saute l'étape 1. L'étape 2 garantit tout de même la lecture seule. La documentation impose `make up`.
+- *Limite* : lancer `docker compose up` directement saute l'étape 1. L'étape 2 garantit tout de même la lecture seule. La documentation impose `./treeaudit`.
 - *Motif* : un conteneur ne peut voir que ce qui a été monté à son démarrage ; une sélection libre depuis le navigateur supposerait un accès large au disque.
 
 ## D-009 — Validation des racines et volume système (2026-10-19)
@@ -102,7 +102,7 @@ Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers
 - Un seul `docker/Dockerfile` multi-étapes produit deux images :
   - `dev` : outils de test et de qualité (pytest, ruff, mypy) ; le dépôt est monté en lecture-écriture dans `/app` ; aucune racine d'audit montée ; aucun accès réseau ;
   - `app` : image d'exécution minimale et durcie, sans uv ni dépendances de développement.
-- Les commandes courantes passent par un `Makefile` (`make test`, `make lint`, `make up`…), qui appelle `docker compose`.
+- Les commandes courantes passent par un `Makefile` (`make test`, `make lint`, `make up`…), qui appelle `docker compose`. Remplacé par le script `./treeaudit` (D-035).
 - Le mode natif (D-007) reste supporté par le code et testé, mais n'est pas installé sur la machine du développeur pour l'instant.
 - *Conséquence* : sans extension *Dev Containers*, l'éditeur n'a pas d'interpréteur Python local ; ruff et mypy s'exécutent dans le conteneur.
 
@@ -218,8 +218,8 @@ Précise la mise en œuvre de D-024.
   - **aucun chevauchement**, dans un sens comme dans l'autre, avec une racine ou avec le dossier de données (chemins réels).
   - Le volume système est accepté : une archive dans `~/Archives` est légitime. En revanche, elle est signalée si elle est sur le même disque que l'original.
 - **En Docker** :
-  - `make check-root` valide le dossier sur l'hôte (existence, chemin réel, droit d'écriture, puis le service `check-archive`, sans réseau ni volume, qui lit la table de montage de l'hôte) ;
-  - ensuite seulement, le Makefile ajoute `compose.archive.yaml`, qui monte ce dossier en lecture-écriture sous `/archives`, dans le seul conteneur `app` ;
+  - le lanceur `./treeaudit` valide le dossier sur l'hôte (existence, chemin réel, droit d'écriture, puis le service `check-archive`, sans réseau ni volume, qui lit la table de montage de l'hôte) ;
+  - ensuite seulement, le lanceur ajoute `compose.archive.yaml`, qui monte ce dossier en lecture-écriture sous `/archives`, dans le seul conteneur `app` ;
   - dans le conteneur, `/archives` doit être un point de montage dédié et accessible en écriture, sinon l'archivage reste désactivé, pour ne jamais écrire dans le système de fichiers du conteneur ;
   - défense en profondeur : deux montages qui exposent des dossiers qui se chevauchent sur le même périphérique (champ 4 de `mountinfo`) sont refusés.
   - Les racines restent en lecture seule.
@@ -243,7 +243,7 @@ Précise la mise en œuvre de D-024.
   - **Manifeste** : 16 octets par entrée (type, nom, droits, taille, cible du lien, SHA-256 du contenu), soit 16 Mo par million d'entrées.
   - **Fichiers qui changent pendant la lecture** : si un fichier rétrécit ou si une lecture échoue (secteur défectueux), les octets manquants sont remplacés par des zéros, pour que l'archive reste lisible, et le fichier est signalé. Un fichier modifié pendant sa lecture est aussi signalé (`fstat` avant et après). Dans les deux cas, l'archive est `incomplete`.
   - **Archive incomplète** : un fichier spécial, un fichier illisible ou un disque monté à l'intérieur rendent l'archive `incomplete`. Elle est vérifiée et conservée, avec `-INCOMPLET` dans son nom, mais TreeAudit dit explicitement de ne pas s'y fier pour supprimer l'original.
-  - **Nom** : `<dossier>-AAAAMMJJ-HHMMSS.tar.gz`. Seuls les caractères `A-Z a-z 0-9 . _ -` sont gardés, sans point ni tiret en tête. L'heure est locale : le Makefile transmet le fuseau de l'hôte, lu dans `/etc/localtime`, au seul conteneur `app`. Les droits sont `0600`.
+  - **Nom** : `<dossier>-AAAAMMJJ-HHMMSS.tar.gz`. Seuls les caractères `A-Z a-z 0-9 . _ -` sont gardés, sans point ni tiret en tête. L'heure est locale : le lanceur transmet le fuseau de l'hôte, lu dans `/etc/localtime`, au seul conteneur `app`. Les droits sont `0600`.
   - **Publication** : par `link(2)`, qui échoue si le nom existe. Sur les systèmes sans liens physiques (FAT, exFAT), TreeAudit vérifie que le nom est libre, puis renomme. Une course avec un autre programme du même utilisateur reste théoriquement possible ; c'est une limite documentée, hors du modèle de menace.
   - **Garde-fou supplémentaire** : si le parcours rencontre le dossier d'archives (même périphérique et même inode), l'archivage échoue.
   - **Liens physiques** : chaque nom est archivé comme un fichier complet (simple et toujours restaurable, mais plus volumineux). **Fichiers creux** : archivés à leur taille logique.
@@ -269,7 +269,7 @@ Précise la mise en œuvre de D-024.
   - il produit un fichier Compose qui monte **un par un, en lecture seule récursive** (`bind.recursive: readonly`), **les seuls disques acceptés**, sous `/audit/disks/<id>`. Le conteneur ne voit donc jamais le disque système, ni un disque refusé ;
   - ce fichier est généré avant chaque utilisation, **hors de `data/`** : le conteneur peut écrire dans `data/`, et un fichier Compose qui s'y trouverait pourrait devenir, au démarrage suivant, un montage en écriture de n'importe quel dossier. Toutes les valeurs sont échappées en JSON, et `$` est doublé pour que Compose n'interprète jamais un nom de disque comme une variable ;
   - **dans le conteneur**, chaque disque est revérifié : montage dédié, lecture seule, et toujours pas sur un disque du système, d'après les périphériques système mesurés sur l'hôte. Sinon il est refusé. C'est vérifié en réel : un disque forgé situé sur le NVMe système est refusé.
-- **Propagation des montages écartée** : elle aurait fait apparaître sans redémarrage les disques branchés plus tard, mais ces disques arriveraient **en écriture**, même sous un montage en lecture seule. Un disque branché après le démarrage demande donc de relancer `make up`.
+- **Propagation des montages écartée** : elle aurait fait apparaître sans redémarrage les disques branchés plus tard, mais ces disques arriveraient **en écriture**, même sous un montage en lecture seule. Un disque branché après le démarrage demande donc de relancer `./treeaudit`.
 - **Racines** : un disque reçoit l'identifiant stable `ext-<nom>-<empreinte du chemin>`, et ses analyses restent regroupées d'une fois sur l'autre. Le préfixe `ext-` est réservé.
   - En Docker, toute racine doit être son propre point de montage (`not_mounted` sinon). La racine `main` peut donc être absente quand seuls les disques externes sont utilisés ; `compose.root.yaml` ne la monte que si `TREEAUDIT_ROOT_PATH` est défini.
 - **Archives** : le chevauchement du dossier d'archives n'est vérifié qu'avec les dossiers déclarés, ce qui permet de le placer sur un disque externe. Archiver un dossier qui le contient est refusé avant toute écriture.
@@ -279,12 +279,30 @@ Précise la mise en œuvre de D-024.
 - Amende la règle 4 de `CLAUDE.md`.
 
 ## D-034 — Tout par l'interface, sans fichier de configuration ; `.env` devient un ancien mode expérimental (2026-10-21)
-- **Choix du mainteneur** : l'usage normal ne demande aucun fichier à remplir. On lance `make up`, puis tout se fait dans le navigateur ; c'est le plus simple pour tout le monde.
+- **Choix du mainteneur** : l'usage normal ne demande aucun fichier à remplir. On lance `./treeaudit` (D-035), puis tout se fait dans le navigateur ; c'est le plus simple pour tout le monde.
 - **Valeurs par défaut** :
-  - identifiants de l'utilisateur détectés par `make` (`id -u`, `id -g`) ;
+  - identifiants de l'utilisateur détectés par le lanceur (`id -u`, `id -g`) ;
   - détection des disques externes **activée** (D-033) ;
   - archives dans `archives/`, à côté de `data/`, créé en `0700`, ignoré par git et par Docker, validé sur l'hôte et monté en écriture comme tout dossier d'archives (D-032).
 - **Dossier d'archives sur l'ordinateur plutôt que sur un disque choisi dans l'interface.** Choisir la destination dans l'interface obligerait à monter les disques externes en écriture. Ou bien, la demande serait enregistrée dans `data/`, où le conteneur peut écrire, et un conteneur compromis pourrait alors obtenir un montage en écriture au démarrage suivant. Avec le dossier fixe, le conteneur n'écrit que dans un dossier dédié appartenant à TreeAudit. Une archive d'un disque externe rangée sur l'ordinateur est en outre une vraie sauvegarde : deux disques différents.
 - **Page « Mes archives »** : liste en lecture seule du dossier d'archives (nom, taille, date), avec les archives incomplètes et les archives inachevées (`.partial`) signalées, et la commande de restauration. Elle ne suit aucun lien et ignore tout ce qui n'est pas une archive.
-- **Ancien mode `.env`** : toujours lu (`TREEAUDIT_ROOT_PATH`, `TREEAUDIT_ALLOW_SYSTEM_VOLUME`, `TREEAUDIT_ARCHIVE_PATH`, `TREEAUDIT_EXTERNAL_DISKS=0`, `TREEAUDIT_PORT`), avec les mêmes validations. Il est documenté comme **expérimental et non testé**, et n'est plus mis en avant. `make env` produit un fichier qui l'annonce.
+- **Ancien mode `.env`** : toujours lu (`TREEAUDIT_ROOT_PATH`, `TREEAUDIT_ALLOW_SYSTEM_VOLUME`, `TREEAUDIT_ARCHIVE_PATH`, `TREEAUDIT_EXTERNAL_DISKS=0`, `TREEAUDIT_PORT`), avec les mêmes validations. Il est documenté comme **expérimental et non testé**, et n'est plus mis en avant. `./treeaudit env` produit un fichier qui l'annonce.
 - **Interface** : plus aucune mention de `.env`, sauf pour signaler que la détection a été désactivée par l'ancien mode.
+
+## D-035 — Un lanceur `./treeaudit` à la place de `make` (2026-10-21)
+- **Choix du mainteneur** : ne plus dépendre de `make`. Il faut seulement bash et Docker avec le plugin Compose. On lance `./treeaudit`, puis tout se fait dans le navigateur (D-034).
+- **Un seul point d'entrée** : le script bash `treeaudit`, à la racine du dépôt, remplace entièrement le `Makefile`, sans le dupliquer. Il reprend les mêmes étapes et les mêmes validations avant tout montage :
+  - construction des images ;
+  - dossiers `data/` et `archives/` en `0700` ;
+  - détection des disques externes, avec un fichier Compose régénéré à chaque fois hors de `data/` (D-033) ;
+  - validation du dossier de l'ancien mode et du dossier d'archives sur l'hôte (D-008, D-032).
+- **Commandes** :
+  - `./treeaudit` (démarrer), `stop`, `disks`, `help` ;
+  - `cli …` : toute la ligne de commande de TreeAudit, après les mêmes validations ;
+  - `settings` : affiche les réglages retenus sans rien lancer ;
+  - développement : `check`, `test`, `lint`, `format`, `typecheck`, `build`, `lock` ;
+  - `env` : ancien mode, expérimental, non testé.
+- **`.env` lu comme des données, jamais exécuté** : seules les lignes `NOM=valeur` qui nomment un réglage connu comptent. `#` commence un commentaire, et l'environnement l'emporte sur le fichier, comme avec l'ancien `Makefile`. Le fichier n'est jamais passé à `source`, si bien qu'un `$(commande)` qu'il contiendrait reste du texte (test).
+- **SELinux** : en mode enforcing (lu dans `/sys/fs/selinux/enforce`), `compose.selinux.yaml` est ajouté tout seul. `COMPOSE_SELINUX=0` ou `1` force le choix.
+- **Perdu** : les raccourcis « dernière analyse par défaut » des cibles `make scan`, `make dupes`… En ligne de commande, le numéro est donné explicitement (`scan list`, `dupes list`) ; le navigateur reste le chemin normal.
+- *Limite* inchangée : `docker compose up` lancé à la main saute la validation sur l'hôte ; la vérification dans le conteneur garantit tout de même la lecture seule (D-008, D-033).

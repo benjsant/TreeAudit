@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+# TreeAudit launcher: the only command a user needs (D-035). Everything runs in
+# Docker; nothing is installed on the host (D-019). Only bash and Docker with
+# the Compose plugin are required: no make.
+#
+#   ./treeaudit            start TreeAudit, then open http://127.0.0.1:8765
+#   ./treeaudit help       every command
+#
+# Every audited folder is validated on the host before it is mounted (D-008,
+# D-033): starting with "docker compose up" directly would skip that step.
+
+set -euo pipefail
+
+cd -- "$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")"
+HERE="$(pwd -P)"
+
+say() { printf '%s\n' "$*" >&2; }
+die() { say "$@"; exit 1; }
+
+# --- Settings ---------------------------------------------------------------
+# Normal use needs no configuration file (D-034). The settings below keep their
+# defaults unless given in the environment (TREEAUDIT_PORT=9000 ./treeaudit) or
+# in a .env file (OLD, EXPERIMENTAL mode, not tested any more).
+SETTINGS=(TREEAUDIT_ROOT_PATH TREEAUDIT_ALLOW_SYSTEM_VOLUME TREEAUDIT_PORT
+          TREEAUDIT_ARCHIVE_PATH TREEAUDIT_EXTERNAL_DISKS TREEAUDIT_UID TREEAUDIT_GID)
+for name in "${SETTINGS[@]}"; do
+    printf -v "$name" '%s' "${!name:-}"
+done
+
+# .env is read as data, never executed: only "NAME=value" lines naming a known
+# setting count. As with the former Makefile, "#" starts a comment and the
+# environment wins over the file.
+read_env_file() {
+    local line name value
+    while IFS= read -r line || [[ -n $line ]]; do
+        line="${line%$'\r'}"
+        line="${line%%#*}"
+        [[ $line =~ ^[[:space:]]*(export[[:space:]]+)?([A-Z_]+)[[:space:]]*[:?]?=(.*)$ ]] || continue
+        name="${BASH_REMATCH[2]}"
+        value="${BASH_REMATCH[3]}"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        [[ " ${SETTINGS[*]} " == *" $name "* ]] || continue
+        [[ -z ${!name} ]] || continue
+        printf -v "$name" '%s' "$value"
+    done < .env
+}
+if [[ -f .env ]]; then
+    read_env_file
+fi
+
+# A trailing "/" typed by the user is harmless: strip it before validation, so
+# that what is validated and what is mounted are the same normalized path.
+TREEAUDIT_ROOT_PATH="${TREEAUDIT_ROOT_PATH%/}"
+TREEAUDIT_ARCHIVE_PATH="${TREEAUDIT_ARCHIVE_PATH%/}"
+# Defaults (D-034): the host user's ids, external disks on, archives in
+# ./archives next to ./data (a dedicated folder TreeAudit owns).
+[[ -n $TREEAUDIT_UID ]] || TREEAUDIT_UID="$(id -u)"
+[[ -n $TREEAUDIT_GID ]] || TREEAUDIT_GID="$(id -g)"
+[[ -n $TREEAUDIT_EXTERNAL_DISKS ]] || TREEAUDIT_EXTERNAL_DISKS=1
+ARCHIVES_DIR="$HERE/archives"
+[[ -n $TREEAUDIT_ARCHIVE_PATH ]] || TREEAUDIT_ARCHIVE_PATH="$ARCHIVES_DIR"
+# Host time zone (e.g. Europe/Paris), so that archive names use local time.
+if [[ -z ${TREEAUDIT_TZ:-} ]]; then
+    TREEAUDIT_TZ="$(readlink /etc/localtime 2>/dev/null | sed -n 's|^.*/zoneinfo/||p' || true)"
+fi
+# Hand compose exactly the values validated here, so that the check and the
+# actual mount can never disagree.
+export "${SETTINGS[@]}" TREEAUDIT_TZ
+
+# SELinux enforcing (Fedora's default) denies reads of host files that are not
+# labelled for containers: compose.selinux.yaml then lifts confinement for
+# these containers only (D-011). Detected; COMPOSE_SELINUX=0 or 1 forces it.
+if [[ -z ${COMPOSE_SELINUX:-} ]]; then
+    COMPOSE_SELINUX=0
+    if [[ -r /sys/fs/selinux/enforce && "$(< /sys/fs/selinux/enforce)" == 1 ]]; then
+        COMPOSE_SELINUX=1
+    fi
+fi
+
+# Base: images, tools and tests. It mounts no audited folder.
+COMPOSE_BASE=(docker compose -f compose.yaml)
+if [[ $COMPOSE_SELINUX == 1 ]]; then
+    COMPOSE_BASE+=(-f compose.selinux.yaml)
+fi
+# Running TreeAudit: each audited folder is mounted by an override, only once
+# it has been validated on the host (check_roots, write_disks_file).
+COMPOSE=("${COMPOSE_BASE[@]}")
+if [[ -n $TREEAUDIT_ROOT_PATH ]]; then
+    COMPOSE+=(-f compose.root.yaml)
+fi
+# The archive directory is mounted (read-write) only when it is set (D-032).
+if [[ -n $TREEAUDIT_ARCHIVE_PATH ]]; then
+    COMPOSE+=(-f compose.archive.yaml)
+fi
+# External disks (D-033): generated before every use from the host's current
+# mounts, outside data/ (which the container can write to).
+DISKS_FILE=.treeaudit-disks.json
+EXTERNAL=0
+if [[ $TREEAUDIT_EXTERNAL_DISKS == 1 ]]; then
+    EXTERNAL=1
+    COMPOSE+=(-f "$DISKS_FILE")
+fi
+DEV=("${COMPOSE_BASE[@]}" run --rm dev)
+
+# --- Preparation, on the host -----------------------------------------------
+build() { "${COMPOSE_BASE[@]}" --profile dev build; }
+
+make_data_dir() { mkdir -p -m 700 data; }
+
+make_archives_dir() {
+    if [[ $TREEAUDIT_ARCHIVE_PATH == "$ARCHIVES_DIR" ]]; then
+        mkdir -p -m 700 archives
+    fi
+}
+
+# Regenerated before every use: the disks plugged in now, validated now.
+write_disks_file() {
+    [[ $EXTERNAL == 1 ]] || return 0
+    "${COMPOSE_BASE[@]}" run --rm -T check-disks --user "$(id -un)" \
+        --data-dir "$(realpath -e -- data)" < /proc/self/mountinfo > "$DISKS_FILE.tmp"
+    mv -f -- "$DISKS_FILE.tmp" "$DISKS_FILE"
+}
+
+# A folder given by path must exist and be reached without a symbolic link.
+check_real_dir() {
+    local what="$1" path="$2" real
+    [[ -d $path ]] || die "REFUSÉ: $what '$path' n'est pas un dossier existant"
+    real="$(realpath -e -- "$path")" || die "REFUSÉ: $what '$path' illisible"
+    [[ $real == "$path" ]] || die "REFUSÉ: '$path' passe par un lien symbolique ou n'est pas normalisé (chemin réel : $real)"
+}
+
+# Validate everything that will be mounted (.env folder, external disks,
+# archives), on the host, before mounting it.
+check_roots() {
+    build
+    make_data_dir
+    make_archives_dir
+    write_disks_file
+    if [[ -n $TREEAUDIT_ROOT_PATH ]]; then
+        check_real_dir "le dossier" "$TREEAUDIT_ROOT_PATH"
+        local allow=()
+        if [[ $TREEAUDIT_ALLOW_SYSTEM_VOLUME == 1 ]]; then
+            allow=(--allow-system-volume)
+        fi
+        "${COMPOSE_BASE[@]}" run --rm -T check "${allow[@]}" --home "$HOME" \
+            --data-dir "$HERE/data" -- "$TREEAUDIT_ROOT_PATH" < /proc/self/mountinfo
+    elif [[ $EXTERNAL != 1 ]]; then
+        say "Rien à analyser : la détection des disques externes est désactivée (TREEAUDIT_EXTERNAL_DISKS=0) et aucun dossier n'est indiqué"
+        exit 2
+    fi
+    if [[ -n $TREEAUDIT_ARCHIVE_PATH ]]; then
+        check_real_dir "dossier d'archives" "$TREEAUDIT_ARCHIVE_PATH"
+        [[ -w $TREEAUDIT_ARCHIVE_PATH ]] || die "REFUSÉ: '$TREEAUDIT_ARCHIVE_PATH' n'est pas accessible en écriture"
+        local root=()
+        if [[ -n $TREEAUDIT_ROOT_PATH ]]; then
+            root=(--root "$TREEAUDIT_ROOT_PATH")
+        fi
+        "${COMPOSE_BASE[@]}" run --rm -T check-archive --home "$HOME" \
+            --data-dir "$(realpath -e -- data)" "${root[@]}" -- "$TREEAUDIT_ARCHIVE_PATH" \
+            < /proc/self/mountinfo
+    fi
+}
+
+# --- Commands ---------------------------------------------------------------
+cmd_start() {
+    check_roots >&2
+    say "TreeAudit : http://127.0.0.1:${TREEAUDIT_PORT:-8765}  (Ctrl+C pour arrêter)"
+    exec "${COMPOSE[@]}" up app gateway
+}
+
+cmd_stop() { exec "${COMPOSE_BASE[@]}" down; }
+
+cmd_disks() {
+    if [[ $EXTERNAL != 1 ]]; then
+        die "Détection des disques externes désactivée (TREEAUDIT_EXTERNAL_DISKS=0)"
+    fi
+    { build; make_data_dir; write_disks_file; } >&2
+}
+
+# Command-line interface, inside the app container. Preparation messages go to
+# stderr, so that the output can be piped (./treeaudit cli scan list | head -1).
+cmd_cli() {
+    [[ $# -gt 0 ]] || set -- --help
+    check_roots >&2
+    local tty=()
+    if [[ ! -t 0 || ! -t 1 ]]; then
+        tty=(-T)
+    fi
+    exec "${COMPOSE[@]}" run --rm "${tty[@]}" app "$@"
+}
+
+cmd_settings() {
+    local name
+    for name in "${SETTINGS[@]}" TREEAUDIT_TZ COMPOSE_SELINUX; do
+        printf '%s=%s\n' "$name" "${!name}"
+    done
+    printf 'COMPOSE=%s\n' "${COMPOSE[*]}"
+}
+
+# OLD MODE (experimental, not tested): not needed for normal use.
+cmd_env() {
+    if [[ -e .env ]]; then
+        die ".env already exists, not modified"
+    fi
+    (
+        umask 077
+        cat > .env <<EOF
+# OLD MODE, EXPERIMENTAL, NOT TESTED ANY MORE (docs/DECISIONS.md D-034).
+# Not needed: './treeaudit' and the web interface do everything.
+TREEAUDIT_UID=$(id -u)
+TREEAUDIT_GID=$(id -g)
+# Absolute path of the folder to audit. It is mounted read-only.
+TREEAUDIT_ROOT_PATH=
+# Set to 1 only to audit, on purpose, a folder on the system volume.
+TREEAUDIT_ALLOW_SYSTEM_VOLUME=0
+TREEAUDIT_PORT=8765
+# Existing folder for verified archives. Empty: ./archives.
+TREEAUDIT_ARCHIVE_PATH=
+# External disks in the interface (never the system disk). Empty: 1.
+TREEAUDIT_EXTERNAL_DISKS=
+EOF
+    )
+    say ".env created (old, experimental mode)"
+}
+
+cmd_lock() {
+    docker build -f docker/Dockerfile --target uvtool -t treeaudit-uv:local .
+    exec docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$HERE:/app" -w /app \
+        treeaudit-uv:local uv lock
+}
+
+cmd_lint() {
+    "${DEV[@]}" ruff check .
+    "${DEV[@]}" ruff format --check .
+}
+
+cmd_help() {
+    cat <<EOF
+Usage : ./treeaudit [commande]
+
+  (aucune) | start   Démarre TreeAudit sur http://127.0.0.1:${TREEAUDIT_PORT:-8765}
+                     (brancher les disques externes avant)
+  stop               Arrête TreeAudit
+  disks              Disques externes proposés ou refusés, et pourquoi
+  cli ARGS...        Ligne de commande de TreeAudit (./treeaudit cli --help)
+  settings           Réglages utilisés (sans rien lancer)
+  help               Cette aide
+
+Développement :
+  check              Lint, types et tests (tout dans Docker)
+  test [ARGS...]     Tests (options pytest)
+  lint | format | typecheck | build
+  lock               Met à jour uv.lock (réseau nécessaire)
+
+Ancien mode, expérimental, non testé :
+  env                Crée un fichier .env (inutile pour l'usage normal)
+EOF
+}
+
+command="${1:-start}"
+[[ $# -eq 0 ]] || shift
+case "$command" in
+    start | up) cmd_start ;;
+    stop | down) cmd_stop ;;
+    disks) cmd_disks ;;
+    cli) cmd_cli "$@" ;;
+    settings) cmd_settings ;;
+    env) cmd_env ;;
+    build) build ;;
+    lock) cmd_lock ;;
+    test) exec "${DEV[@]}" pytest "$@" ;;
+    lint) cmd_lint ;;
+    format) exec "${DEV[@]}" ruff format . ;;
+    typecheck) exec "${DEV[@]}" mypy ;;
+    check) cmd_lint && "${DEV[@]}" mypy && exec "${DEV[@]}" pytest "$@" ;;
+    help | -h | --help) cmd_help ;;
+    *) say "Commande inconnue : $command"; cmd_help >&2; exit 2 ;;
+esac

@@ -1,6 +1,6 @@
 # Override for hosts where SELinux is enforcing (docs/DECISIONS.md D-011).
 #
-#   make up COMPOSE_SELINUX=1
+#   added by ./treeaudit when SELinux is enforcing (COMPOSE_SELINUX=1 forces it)
 #
 # SELinux denies reads of host files that are not labelled for containers. The
 # usual fix, ':z' / ':Z', relabels (writes to) the audited files and is forbidden.

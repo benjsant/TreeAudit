@@ -82,7 +82,7 @@ ARCHIVE_DIR_MESSAGES: dict[ArchiveDirReason, str] = {
         "choisir un sous-dossier"
     ),
     ArchiveDirReason.NOT_MOUNTED: (
-        "le dossier d'archives n'est pas monté dans le conteneur : relancer TreeAudit avec make up"
+        "le dossier d'archives n'est pas monté dans le conteneur : relancer TreeAudit avec ./treeaudit"
     ),
     ArchiveDirReason.NOT_FOUND: "le dossier n'existe pas (le créer d'abord)",
     ArchiveDirReason.PERMISSION_DENIED: "le dossier n'est pas accessible avec les droits actuels",
@@ -249,7 +249,7 @@ def _same_host_tree(ctx: ArchiveDirContext, first: str, second: str) -> bool:
     host folders behind them could. Each bind mount records its device and the
     folder it exposes within that filesystem (mountinfo field 4): overlapping
     folders on the same device are the same host tree. The host-side check
-    (make check-root) is the main protection; this is defense in depth.
+    (./treeaudit, before mounting) is the main protection; this is defense in depth.
     """
     if not ctx.container_mode:
         return False

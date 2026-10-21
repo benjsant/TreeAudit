@@ -35,16 +35,16 @@ Des outils comme [Czkawka](https://github.com/qarmin/czkawka) trouvent très bie
 
 ## Démarrage rapide
 
-**Prérequis :** Linux, [Docker](https://docs.docker.com/engine/install/) avec le plugin Compose, et `make`. Rien d'autre n'est installé sur ta machine : tout tourne dans des conteneurs. **Aucun fichier de configuration à remplir.**
+**Prérequis :** Linux, [Docker](https://docs.docker.com/engine/install/) avec le plugin Compose. Rien d'autre n'est installé sur ta machine : tout tourne dans des conteneurs. **Aucun fichier de configuration à remplir.**
 
 ```bash
 git clone https://github.com/benjsant/TreeAudit.git
 cd TreeAudit
 # branche d'abord les disques à trier
-make up
+./treeaudit
 ```
 
-Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C` ou `make down` arrête tout. Sous SELinux en mode enforcing (Fedora par défaut) : `make up COMPOSE_SELINUX=1`.
+Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C` ou `./treeaudit stop` arrête tout. SELinux en mode enforcing (Fedora par défaut) est détecté tout seul.
 
 ## Utilisation
 
@@ -61,7 +61,7 @@ Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C`
 - **Les disques externes et secondaires branchés au démarrage** : ce qui est monté sous `/run/media/<toi>`, `/media/<toi>`, `/media` ou `/mnt`.
 - **Le disque du système n'est jamais proposé**, ni aucune de ses partitions : TreeAudit remonte jusqu'au disque physique. En cas de doute sur un disque (disque réseau, image ISO…), il ne le propose pas, et l'interface dit pourquoi.
 - Chaque disque est monté **en lecture seule** : même en cas de bug, TreeAudit ne peut pas le modifier.
-- **Un disque branché après le démarrage** n'apparaît qu'après avoir relancé TreeAudit (`make down`, puis `make up`).
+- **Un disque branché après le démarrage** n'apparaît qu'après avoir relancé TreeAudit (`Ctrl+C`, puis `./treeaudit`).
 
 ### Les archives
 
@@ -76,25 +76,28 @@ TreeAudit vérifie d'abord l'espace libre, puis écrit l'archive sous un nom tem
 
 ### En ligne de commande (facultatif)
 
+Tout passe par `./treeaudit cli …`, qui valide et monte les disques comme le navigateur. Les numéros d'analyse viennent de `scan list` et `dupes list`.
+
 | Commande | Effet |
 |---|---|
-| `make disks` | Disques proposés ou refusés, et pourquoi |
-| `make scan ROOT=ext-…` | Analyse un disque (identifiant donné par `make disks` ; `SUBPATH=sous/dossier` pour une partie seulement) |
-| `make scans` | Liste les analyses enregistrées |
-| `make parasites` | Dossiers à nettoyer ; `SELECT=green` produit une commande « corbeille » |
-| `make dupes` / `make micro` | Doublons (≥ 1 Kio) / petits fichiers en double et fichiers vides |
-| `make dupes-show SELECT=all` | Commande pour les copies en trop (les fichiers vides ne sont jamais inclus) |
-| `make search ARGS="--ext jpg --min-size 5M"` | Recherche ([syntaxe](docs/FILTERS_AND_REGEX.md)) |
-| `make archive ROOT=ext-… SUBPATH=sous/dossier` | Archive vérifiée dans `archives/` |
-| `make bench ROOT=ext-… ARGS="--dupes"` | Mesure les performances, **en n'affichant que des chiffres** |
-| `make help` | Toutes les commandes |
+| `./treeaudit disks` | Disques proposés ou refusés, et pourquoi |
+| `./treeaudit cli roots list` | Disques et dossiers analysables, avec leur identifiant (`ext-…`) |
+| `./treeaudit cli scan run ext-… --path sous/dossier` | Analyse un disque (`--path` pour une partie seulement) |
+| `./treeaudit cli scan list` / `scan show N` | Liste les analyses / affiche l'analyse N |
+| `./treeaudit cli scan parasites N --select green` | Dossiers à nettoyer, avec une commande « corbeille » |
+| `./treeaudit cli dupes run N` (`--micro`) | Doublons (≥ 1 Kio) ; `--micro` : petits fichiers en double et fichiers vides |
+| `./treeaudit cli dupes show R --select all` | Commande pour les copies en trop (les fichiers vides ne sont jamais inclus) |
+| `./treeaudit cli search N --ext jpg --min-size 5M` | Recherche ([syntaxe](docs/FILTERS_AND_REGEX.md)) |
+| `./treeaudit cli archive run ext-… --path sous/dossier` | Archive vérifiée dans `archives/` |
+| `./treeaudit cli bench ext-… --dupes` | Mesure les performances, **en n'affichant que des chiffres** |
+| `./treeaudit help` | Toutes les commandes du lanceur |
 
 ### Ancien mode par fichier `.env` (expérimental, non testé)
 
 > [!CAUTION]
 > **Ancien mode, conservé à titre expérimental.** Il n'est plus testé ni recommandé : l'interface fait tout. Il reste disponible pour qui veut, par exemple, analyser un dossier du disque système ou ranger les archives ailleurs.
 
-`make env` crée un fichier `.env`, dont TreeAudit lit alors les variables :
+`./treeaudit env` crée un fichier `.env`, dont TreeAudit lit alors les variables :
 
 | Variable | Effet |
 |---|---|
@@ -104,7 +107,7 @@ TreeAudit vérifie d'abord l'espace libre, puis écrit l'archive sous un nom tem
 | `TREEAUDIT_EXTERNAL_DISKS=0` | Désactive la détection des disques externes. |
 | `TREEAUDIT_PORT` | Autre port local (par défaut : 8765). |
 
-Les mêmes variables peuvent être passées directement : `make up TREEAUDIT_ROOT_PATH=/chemin`.
+Les mêmes variables peuvent être passées directement : `TREEAUDIT_ROOT_PATH=/chemin ./treeaudit`. `./treeaudit settings` affiche les réglages utilisés.
 
 ## Sécurité en bref
 
@@ -126,7 +129,7 @@ Pensé pour tourner sans à-coups sur une machine modeste (8 Go de RAM) et des d
 | Disque USB 5 400 tours, à froid, 153 000 éléments | analyse 4,3 s, doublons 7,0 s |
 | Deuxième recherche de doublons | quasi instantanée, aucun fichier relu |
 
-Méthode et chiffres détaillés : [docs/ROADMAP.md](docs/ROADMAP.md) (phase 6 ter) et `make bench`.
+Méthode et chiffres détaillés : [docs/ROADMAP.md](docs/ROADMAP.md) (phase 6 ter) et `./treeaudit cli bench`.
 
 ## Limites connues
 
@@ -152,7 +155,7 @@ Méthode et chiffres détaillés : [docs/ROADMAP.md](docs/ROADMAP.md) (phase 6 t
 
 ## Contribuer
 
-Les retours et signalements de problèmes sont bienvenus dans les [issues](https://github.com/benjsant/TreeAudit/issues). Pour le développement : `make check` lance le lint, la vérification des types et les tests, dans Docker.
+Les retours et signalements de problèmes sont bienvenus dans les [issues](https://github.com/benjsant/TreeAudit/issues). Pour le développement : `./treeaudit check` lance le lint, la vérification des types et les tests, dans Docker.
 
 ## Licence
 

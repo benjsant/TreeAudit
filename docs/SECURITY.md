@@ -145,7 +145,7 @@ Relecture critique de tout le code d'archivage, centrée sur le seul module qui 
 - **En Docker, la détection a lieu sur l'hôte avant tout montage**, et seuls les disques acceptés sont montés, un par un et en lecture seule récursive. Le conteneur ne voit ni le disque système ni un disque refusé.
 - **Nouvelle vérification dans le conteneur** : montage dédié, lecture seule, disque physique hors système. Elle a été testée en réel avec un disque forgé, refusé.
 - **Le fichier Compose généré n'est jamais placé dans `data/`**, où le conteneur peut écrire. Il est régénéré avant chaque utilisation, et toutes ses valeurs sont échappées (JSON, `$` doublé).
-- **Les disques branchés après le démarrage n'apparaissent pas** (pas de propagation des montages) : ils arriveraient en écriture dans le conteneur. Il faut relancer `make up`.
+- **Les disques branchés après le démarrage n'apparaissent pas** (pas de propagation des montages) : ils arriveraient en écriture dans le conteneur. Il faut relancer `./treeaudit`.
 - **Exposition** : le conteneur voit tous les disques externes acceptés, pas seulement celui que l'on analyse. Toujours en lecture seule et sans accès à Internet.
 
 ## Toute future fonction destructive est interdite

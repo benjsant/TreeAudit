@@ -29,7 +29,7 @@ TreeAudit/
 ├── docker/          Dockerfile, configuration du conteneur
 ├── docs/
 ├── compose.yaml, compose.selinux.yaml
-├── Makefile         raccourcis vers docker compose (D-019)
+├── treeaudit        lanceur : validation sur l'hôte, puis docker compose (D-035)
 ├── pyproject.toml, uv.lock
 ```
 
@@ -51,7 +51,7 @@ path = "/mnt/Data/Backup2019"
 # cross_mounts = false          (défaut)
 ```
 
-En Docker, aucun fichier n'est à remplir (D-034) : `make up` détecte sur l'hôte les disques externes et les monte un par un, en lecture seule, sous `/audit/disks/<id>` (D-033). `data_dir` vaut `/data` et `archive_dir` vaut `/archives`, monté depuis `archives/`. L'ancien mode `.env` peut en plus monter un dossier précis sous `/audit/roots/main`.
+En Docker, aucun fichier n'est à remplir (D-034) : `./treeaudit` détecte sur l'hôte les disques externes et les monte un par un, en lecture seule, sous `/audit/disks/<id>` (D-033). `data_dir` vaut `/data` et `archive_dir` vaut `/archives`, monté depuis `archives/`. L'ancien mode `.env` peut en plus monter un dossier précis sous `/audit/roots/main`.
 
 ## Flux d'un scan
 1. L'utilisateur demande un scan d'une racine par son identifiant (CLI ou API).
