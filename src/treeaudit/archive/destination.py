@@ -70,8 +70,7 @@ class ArchiveDirReason(StrEnum):
 # User-facing explanations (French, see docs/DECISIONS.md D-016).
 ARCHIVE_DIR_MESSAGES: dict[ArchiveDirReason, str] = {
     ArchiveDirReason.NOT_CONFIGURED: (
-        "aucun dossier d'archives n'est configuré : indiquer TREEAUDIT_ARCHIVE_PATH dans .env "
-        "(ou archive_dir dans la configuration)"
+        "aucun dossier d'archives n'est configuré (archive_dir dans la configuration)"
     ),
     ArchiveDirReason.NOT_ABSOLUTE: "le chemin doit être absolu",
     ArchiveDirReason.NOT_NORMALIZED: (
@@ -83,8 +82,7 @@ ARCHIVE_DIR_MESSAGES: dict[ArchiveDirReason, str] = {
         "choisir un sous-dossier"
     ),
     ArchiveDirReason.NOT_MOUNTED: (
-        "le dossier d'archives n'est pas monté dans le conteneur : indiquer "
-        "TREEAUDIT_ARCHIVE_PATH dans .env puis relancer avec make up"
+        "le dossier d'archives n'est pas monté dans le conteneur : relancer TreeAudit avec make up"
     ),
     ArchiveDirReason.NOT_FOUND: "le dossier n'existe pas (le créer d'abord)",
     ArchiveDirReason.PERMISSION_DENIED: "le dossier n'est pas accessible avec les droits actuels",

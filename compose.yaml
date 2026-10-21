@@ -7,7 +7,7 @@
 name: treeaudit
 
 x-hardening: &hardening
-  user: "${TREEAUDIT_UID:?run 'make env' first}:${TREEAUDIT_GID:?run 'make env' first}"
+  user: "${TREEAUDIT_UID:?start TreeAudit with make (it passes your user id)}:${TREEAUDIT_GID:?start TreeAudit with make}"
   read_only: true
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]

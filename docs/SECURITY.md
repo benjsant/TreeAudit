@@ -105,6 +105,7 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Les modèles de commandes de recréation viennent uniquement du catalogue versionné ; leur seul paramètre (`{name}`) est échappé.
 
 ## Archives vérifiées (D-024, D-032)
+- Par défaut, le dossier d'archives est `archives/`, dans le dossier de TreeAudit (D-034). C'est un dossier dédié, que TreeAudit possède, et non un disque choisi dans l'interface : cela évite de monter un disque externe en écriture.
 - C'est la seule fonction qui écrit en dehors du dossier de données. Tout passe par un descripteur du dossier d'archives, ouvert sans suivre de lien juste après sa validation. Le code est dans un seul module, `archive/output.py`, le seul ajouté à la liste blanche du test statique.
 - **Création** de l'archive avec `O_CREAT | O_EXCL | O_NOFOLLOW`, droits `0600` : jamais un fichier existant, jamais à travers un lien.
 - **Publication** sous le nom final sans jamais remplacer de fichier (`link(2)`). Sans liens physiques (FAT, exFAT), TreeAudit vérifie que le nom est libre, puis renomme.
@@ -139,8 +140,8 @@ Relecture critique de tout le code d'archivage, centrée sur le seul module qui 
 - **Liens symboliques absolus** (par exemple vers `/etc/passwd`) : ils sont archivés tels quels, comme des liens. GNU tar les restaure comme des liens ; le filtre `data` de Python refuse de les extraire.
 - **Limite connue** : sous SELinux en mode enforcing, écrire dans le dossier d'archives depuis le conteneur suppose `COMPOSE_SELINUX=1`, comme pour la lecture des racines. Sinon, l'écriture échoue et l'échec est signalé.
 
-## Disques externes (D-033, option)
-- **Désactivée par défaut.** Activée, elle propose les disques montés sous les dossiers habituels des disques secondaires, mais **jamais un disque physique qui porte le système**. La décision repose sur le disque physique, lu dans sysfs, et non sur le nom du dossier. En cas de doute (disque introuvable, image disque, système non identifié), le disque n'est pas proposé.
+## Disques externes (D-033, activée par défaut depuis D-034)
+- Désactivable avec `TREEAUDIT_EXTERNAL_DISKS=0` (ancien mode `.env`). Elle propose les disques montés sous les dossiers habituels des disques secondaires, mais **jamais un disque physique qui porte le système**. La décision repose sur le disque physique, lu dans sysfs, et non sur le nom du dossier. En cas de doute (disque introuvable, image disque, système non identifié), le disque n'est pas proposé.
 - **En Docker, la détection a lieu sur l'hôte avant tout montage**, et seuls les disques acceptés sont montés, un par un et en lecture seule récursive. Le conteneur ne voit ni le disque système ni un disque refusé.
 - **Nouvelle vérification dans le conteneur** : montage dédié, lecture seule, disque physique hors système. Elle a été testée en réel avec un disque forgé, refusé.
 - **Le fichier Compose généré n'est jamais placé dans `data/`**, où le conteneur peut écrire. Il est régénéré avant chaque utilisation, et toutes ses valeurs sont échappées (JSON, `$` doublé).

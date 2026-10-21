@@ -277,3 +277,14 @@ Précise la mise en œuvre de D-024.
   - tout disque interne secondaire est proposé, au même titre qu'un disque USB ;
   - le conteneur voit tous les disques acceptés, et non le seul disque choisi : c'est l'élargissement accepté pour cette option.
 - Amende la règle 4 de `CLAUDE.md`.
+
+## D-034 — Tout par l'interface, sans fichier de configuration ; `.env` devient un ancien mode expérimental (2026-10-21)
+- **Choix du mainteneur** : l'usage normal ne demande aucun fichier à remplir. On lance `make up`, puis tout se fait dans le navigateur ; c'est le plus simple pour tout le monde.
+- **Valeurs par défaut** :
+  - identifiants de l'utilisateur détectés par `make` (`id -u`, `id -g`) ;
+  - détection des disques externes **activée** (D-033) ;
+  - archives dans `archives/`, à côté de `data/`, créé en `0700`, ignoré par git et par Docker, validé sur l'hôte et monté en écriture comme tout dossier d'archives (D-032).
+- **Dossier d'archives sur l'ordinateur plutôt que sur un disque choisi dans l'interface.** Choisir la destination dans l'interface obligerait à monter les disques externes en écriture. Ou bien, la demande serait enregistrée dans `data/`, où le conteneur peut écrire, et un conteneur compromis pourrait alors obtenir un montage en écriture au démarrage suivant. Avec le dossier fixe, le conteneur n'écrit que dans un dossier dédié appartenant à TreeAudit. Une archive d'un disque externe rangée sur l'ordinateur est en outre une vraie sauvegarde : deux disques différents.
+- **Page « Mes archives »** : liste en lecture seule du dossier d'archives (nom, taille, date), avec les archives incomplètes et les archives inachevées (`.partial`) signalées, et la commande de restauration. Elle ne suit aucun lien et ignore tout ce qui n'est pas une archive.
+- **Ancien mode `.env`** : toujours lu (`TREEAUDIT_ROOT_PATH`, `TREEAUDIT_ALLOW_SYSTEM_VOLUME`, `TREEAUDIT_ARCHIVE_PATH`, `TREEAUDIT_EXTERNAL_DISKS=0`, `TREEAUDIT_PORT`), avec les mêmes validations. Il est documenté comme **expérimental et non testé**, et n'est plus mis en avant. `make env` produit un fichier qui l'annonce.
+- **Interface** : plus aucune mention de `.env`, sauf pour signaler que la détection a été désactivée par l'ancien mode.

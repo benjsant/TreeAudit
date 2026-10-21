@@ -12,7 +12,7 @@
 > - Les pourcentages de confiance des « dossiers à nettoyer » sont des **estimations** fondées sur des indices (présence d'un `package.json`, d'un `pyvenv.cfg`…), pas des certitudes. Un dossier vert peut exceptionnellement contenir quelque chose d'important.
 > - Pour aller plus vite, une recherche de doublons réutilise les empreintes d'une analyse précédente si un fichier a le même inode, la même taille et la même date de modification (le critère de rsync). Un fichier modifié par un outil qui lui remet exactement la même date ne serait pas relu.
 > - L'index local (`data/`) contient **les chemins de tes fichiers** : il reste sur ta machine, mais ne le partage pas.
-> - Testé à ce jour sous **Fedora / Nobara** avec Docker, sur SSD et sur un disque USB 5 400 tours. Les autres distributions Linux ne sont pas encore vérifiées.
+> - Testé à ce jour sous **Fedora / Nobara** avec Docker, sur SSD et sur un disque USB 5 400 tours. Les autres distributions Linux ne sont pas encore vérifiées. Le choix des disques dans l'interface n'a pas encore été essayé avec un vrai disque USB.
 
 ## Ce que fait TreeAudit
 
@@ -35,75 +35,76 @@ Des outils comme [Czkawka](https://github.com/qarmin/czkawka) trouvent très bie
 
 ## Démarrage rapide
 
-**Prérequis :** Linux, [Docker](https://docs.docker.com/engine/install/) avec le plugin Compose, et `make`. Rien d'autre n'est installé sur ta machine : tout tourne dans des conteneurs.
+**Prérequis :** Linux, [Docker](https://docs.docker.com/engine/install/) avec le plugin Compose, et `make`. Rien d'autre n'est installé sur ta machine : tout tourne dans des conteneurs. **Aucun fichier de configuration à remplir.**
 
 ```bash
 git clone https://github.com/benjsant/TreeAudit.git
 cd TreeAudit
-make env      # crée le fichier .env avec ton identifiant utilisateur
+# branche d'abord les disques à trier
+make up
 ```
 
-Ouvre `.env` et indique le dossier à analyser (chemin absolu) :
-
-```bash
-TREEAUDIT_ROOT_PATH=/media/moi/MonDisqueExterne
-```
-
-Puis :
-
-```bash
-make up       # vérifie le dossier, puis démarre TreeAudit
-```
-
-Ouvre **http://127.0.0.1:8765** dans ton navigateur. `Ctrl+C` ou `make down` arrête tout.
-
-**Ou bien, pour trier plusieurs disques externes**, mets `TREEAUDIT_EXTERNAL_DISKS=1` dans `.env` (le dossier `TREEAUDIT_ROOT_PATH` devient alors facultatif). Branche tes disques, lance `make up`, et choisis le disque dans le navigateur. `make disks` affiche la liste. Les règles :
-
-- **Le disque du système n'est jamais proposé**, ni aucune de ses partitions : TreeAudit remonte jusqu'au disque physique. En cas de doute sur un disque (disque réseau, image ISO…), il ne le propose pas, et l'interface dit pourquoi.
-- Chaque disque proposé est monté **en lecture seule**.
-- Un disque branché après le démarrage n'apparaît qu'après avoir relancé `make up`.
-
-Le dossier est monté **en lecture seule** dans le conteneur : même en cas de bug, TreeAudit ne peut pas le modifier. Par défaut, un dossier situé sur le disque du système (par exemple dans ton dossier personnel) est refusé ; pour l'autoriser volontairement, mets `TREEAUDIT_ALLOW_SYSTEM_VOLUME=1` dans `.env` (voir D-009 dans [docs/DECISIONS.md](docs/DECISIONS.md)). Les dossiers système (`/`, `/etc`, `/home` entier…) restent toujours refusés. Sous SELinux en mode enforcing : `make up COMPOSE_SELINUX=1`.
+Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C` ou `make down` arrête tout. Sous SELinux en mode enforcing (Fedora par défaut) : `make up COMPOSE_SELINUX=1`.
 
 ## Utilisation
 
 ### Dans le navigateur
 
-1. **Choisir le dossier** : navigue dans les sous-dossiers, puis « Analyser ».
-2. **Analyse** : la progression s'affiche ; tu peux annuler.
+1. **Choisir le disque** : TreeAudit propose les disques externes branchés, avec leur occupation. Navigue dans les dossiers, puis « Analyser ».
+2. **Analyse** : la progression s'affiche, et tu peux annuler.
 3. **Bilan** : ce qui peut être nettoyé sans risque, les doublons, où va la place, et une recherche.
-4. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
+4. **Archiver si besoin** : « 🗜 Archiver » crée une copie compressée et vérifiée du dossier. Tu la retrouves dans « 🗜 Mes archives ».
+5. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
 
-### En ligne de commande
+### Quels disques sont proposés ?
+
+- **Les disques externes et secondaires branchés au démarrage** : ce qui est monté sous `/run/media/<toi>`, `/media/<toi>`, `/media` ou `/mnt`.
+- **Le disque du système n'est jamais proposé**, ni aucune de ses partitions : TreeAudit remonte jusqu'au disque physique. En cas de doute sur un disque (disque réseau, image ISO…), il ne le propose pas, et l'interface dit pourquoi.
+- Chaque disque est monté **en lecture seule** : même en cas de bug, TreeAudit ne peut pas le modifier.
+- **Un disque branché après le démarrage** n'apparaît qu'après avoir relancé TreeAudit (`make down`, puis `make up`).
+
+### Les archives
+
+Les archives sont rangées dans le dossier `archives/` de TreeAudit, sur ton ordinateur : c'est donc **une vraie sauvegarde** d'un disque externe. La page **« 🗜 Mes archives »** les liste.
+
+TreeAudit vérifie d'abord l'espace libre, puis écrit l'archive sous un nom temporaire. Il la relit ensuite et compare chaque fichier à l'original, et ne la garde que si tout concorde : sinon, il la retire.
+
+- **« Archive complète et vérifiée »** : l'archive contient tout le dossier.
+- **`-INCOMPLET` dans le nom** : il manque des éléments (fichier illisible, fichier modifié pendant la lecture, fichier spécial…). La liste s'affiche. **Ne supprime pas l'original en te fiant à cette archive.**
+- **Arrêt brutal** (coupure de courant…) : un fichier caché `.….partial` peut rester. C'est une archive inachevée ; « Mes archives » la signale, et tu peux la supprimer.
+- **Restaurer** : `tar -xzf archive.tar.gz`. Pour un nom de fichier non UTF-8, GNU tar affiche un avertissement « mot clé inconnu hdrcharset » sans conséquence : le nom est restauré à l'identique.
+
+### En ligne de commande (facultatif)
 
 | Commande | Effet |
 |---|---|
-| `make scan` | Analyse le dossier de `.env` (`SUBPATH=sous/dossier` pour une partie seulement ; `ROOT=ext-…` pour un disque externe) |
-| `make disks` | Disques externes proposés ou refusés, et pourquoi |
+| `make disks` | Disques proposés ou refusés, et pourquoi |
+| `make scan ROOT=ext-…` | Analyse un disque (identifiant donné par `make disks` ; `SUBPATH=sous/dossier` pour une partie seulement) |
 | `make scans` | Liste les analyses enregistrées |
 | `make parasites` | Dossiers à nettoyer ; `SELECT=green` produit une commande « corbeille » |
 | `make dupes` / `make micro` | Doublons (≥ 1 Kio) / petits fichiers en double et fichiers vides |
 | `make dupes-show SELECT=all` | Commande pour les copies en trop (les fichiers vides ne sont jamais inclus) |
 | `make search ARGS="--ext jpg --min-size 5M"` | Recherche ([syntaxe](docs/FILTERS_AND_REGEX.md)) |
-| `make archive SUBPATH=sous/dossier` | Archive vérifiée dans `TREEAUDIT_ARCHIVE_PATH` (voir ci-dessous) |
-| `make bench ARGS="--dupes"` | Mesure les performances, **en n'affichant que des chiffres** |
+| `make archive ROOT=ext-… SUBPATH=sous/dossier` | Archive vérifiée dans `archives/` |
+| `make bench ROOT=ext-… ARGS="--dupes"` | Mesure les performances, **en n'affichant que des chiffres** |
 | `make help` | Toutes les commandes |
 
-### Archiver avant de nettoyer
+### Ancien mode par fichier `.env` (expérimental, non testé)
 
-Indique dans `.env` un dossier **existant** où ranger les archives, de préférence sur **un autre disque** que celui que tu analyses :
+> [!CAUTION]
+> **Ancien mode, conservé à titre expérimental.** Il n'est plus testé ni recommandé : l'interface fait tout. Il reste disponible pour qui veut, par exemple, analyser un dossier du disque système ou ranger les archives ailleurs.
 
-```bash
-TREEAUDIT_ARCHIVE_PATH=/media/moi/AutreDisque/archives
-```
+`make env` crée un fichier `.env`, dont TreeAudit lit alors les variables :
 
-Dans le navigateur, un bouton **« 🗜 Archiver »** apparaît alors sur le choix du dossier et dans « Où va la place ? ». En ligne de commande, `make archive SUBPATH=Projets/vieux-site` crée `vieux-site-AAAAMMJJ-HHMMSS.tar.gz`. TreeAudit vérifie d'abord l'espace libre, puis écrit l'archive sous un nom temporaire. Il la relit ensuite et compare chaque fichier à l'original, et ne la valide que si tout concorde : sinon, il la retire.
+| Variable | Effet |
+|---|---|
+| `TREEAUDIT_ROOT_PATH` | Un dossier précis à analyser (chemin absolu), monté en lecture seule et validé avant le montage. Les dossiers système (`/`, `/etc`, `/home` entier…) sont toujours refusés. |
+| `TREEAUDIT_ALLOW_SYSTEM_VOLUME=1` | Autorise ce dossier même s'il est sur le disque du système (voir D-009 dans [docs/DECISIONS.md](docs/DECISIONS.md)). |
+| `TREEAUDIT_ARCHIVE_PATH` | Un autre dossier d'archives, existant et dédié (par défaut : `archives/`). |
+| `TREEAUDIT_EXTERNAL_DISKS=0` | Désactive la détection des disques externes. |
+| `TREEAUDIT_PORT` | Autre port local (par défaut : 8765). |
 
-- **« Archive complète et vérifiée »** : l'archive contient tout le dossier.
-- **`-INCOMPLET` dans le nom** : il manque des éléments (fichier illisible, fichier modifié pendant la lecture, fichier spécial…). La liste s'affiche. **Ne supprime pas l'original en te fiant à cette archive.**
-- Un avertissement s'affiche si l'archive est sur le même disque que l'original : ce n'est pas une vraie sauvegarde.
-
-Consacre à TreeAudit un dossier d'archives **dédié** : il y écrit, et rien d'autre ne devrait s'y trouver. Le dossier d'archives ne peut pas être dans le dossier analysé, ni l'inverse. Après un arrêt brutal (coupure de courant…), un fichier caché `.….partial` peut rester : c'est une archive inachevée, tu peux la supprimer. L'original n'est jamais modifié. Pour restaurer : `tar -xzf archive.tar.gz`. Pour un nom de fichier non UTF-8, GNU tar affiche un avertissement « mot clé inconnu hdrcharset » sans conséquence : le nom est restauré à l'identique.
+Les mêmes variables peuvent être passées directement : `make up TREEAUDIT_ROOT_PATH=/chemin`.
 
 ## Sécurité en bref
 

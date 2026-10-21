@@ -11,7 +11,10 @@
   <a class="skip" href="#main">Aller au contenu</a>
   <header class="top">
     <a class="brand" href="/">🌳 TreeAudit</a>
-    <a class="button small" href="/scan/new">+ Nouvelle analyse</a>
+    <nav class="top-links">
+      {% if archive.enabled %}<a class="button small" href="/archives">🗜 Mes archives</a>{% endif %}
+      <a class="button small" href="/scan/new">+ Nouvelle analyse</a>
+    </nav>
   </header>
   {% if running_job %}
   <p class="notice info" role="status">

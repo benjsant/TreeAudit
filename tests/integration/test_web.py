@@ -540,7 +540,7 @@ def test_archive_refuses_a_folder_replaced_since_the_analysis(
 
 def test_picker_suggests_enabling_external_disks(client: TestClient) -> None:
     page = client.get("/scan/new")
-    assert "TREEAUDIT_EXTERNAL_DISKS=1" in page.text
+    assert "détection des disques externes est désactivée" in page.text
 
 
 @pytest.fixture
@@ -588,7 +588,7 @@ def test_picker_lists_external_disks(disks_client: TestClient) -> None:
     assert "utilisés sur" in page.text
     assert "Disques non proposés (1)" in page.text
     assert "Data : ce disque contient le système" in page.text
-    assert "TREEAUDIT_EXTERNAL_DISKS=1" not in page.text
+    assert "détection des disques externes est désactivée" not in page.text
     assert_safe_html(page.text)  # the disk label is a hostile name here
 
     home = disks_client.get("/")
@@ -607,3 +607,33 @@ def test_external_disk_can_be_scanned(disks_client: TestClient) -> None:
     assert snapshot["status"] == "complete"
     response = disks_client.post("/api/scans", json={"root_id": "main"}, headers=CSRF)
     assert response.status_code == 409  # not mounted: refused
+
+
+# --- "Mes archives" (D-034) ------------------------------------------------------------------
+
+
+def test_archives_page(archive_client: TestClient) -> None:
+    archive_dir = Path(archive_client.app.state.config.archive_dir)  # type: ignore[attr-defined]
+    empty = archive_client.get("/archives")
+    assert empty.status_code == 200
+    assert "Aucune archive pour l'instant" in empty.text
+    assert 'href="/archives"' in archive_client.get("/").text
+
+    run_job(archive_client, "/api/archives", {"root_id": "main", "subpath": "photos"})
+    (archive_dir / f"{XSS}-20261021-INCOMPLET.tar.gz").write_bytes(b"x")
+    (archive_dir / ".old-20261020.tar.gz.partial").write_bytes(b"x")
+    (archive_dir / "notes.txt").write_bytes(b"not an archive")
+    (archive_dir / "link.tar.gz").symlink_to("/etc/passwd")
+    page = archive_client.get("/archives")
+    assert "photos-" in page.text
+    assert "1 archive(s) inachevée(s)" in page.text
+    assert "⚠ " in page.text and "archive incomplète" in page.text
+    assert "notes.txt" not in page.text and "link.tar.gz" not in page.text
+    assert_safe_html(page.text)
+
+
+def test_archives_page_without_archive_dir(client: TestClient) -> None:
+    page = client.get("/archives")
+    assert page.status_code == 200
+    assert "Archivage indisponible" in page.text
+    assert 'href="/archives"' not in client.get("/").text

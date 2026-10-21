@@ -118,6 +118,12 @@ Aucun parcours de fichiers dans cette phase.
   - mémoire maximale : 31 → 75 Mio (cache SQLite plus grand).
   Le dossier factice étant écrit d'un seul tenant, ses fichiers sont contigus : sur un disque de sauvegarde fragmenté, l'ordre physique devrait apporter davantage.
 
+## Phase 6 quinquies — Tout par l'interface (D-034)
+- [x] `make up` suffit : aucun fichier de configuration ; disques externes activés et archives dans `archives/` par défaut.
+- [x] Page « Mes archives ».
+- [x] `.env` documenté comme ancien mode expérimental, non testé.
+- [x] Essai réel : `make up` sans aucun dossier configuré ; disque système refusé ; dossier d'archives créé et validé.
+
 ## Phase 6 quater — Disques externes (D-033)
 - [x] Détection des disques montés sous `/run/media/<utilisateur>`, `/media/<utilisateur>`, `/media` et `/mnt`. Exclusion par disque physique via sysfs (partitions, LUKS, LVM, RAID), refus en cas de doute.
 - [x] Docker : détection sur l'hôte, montage individuel en lecture seule récursive des seuls disques acceptés, nouvelle vérification dans le conteneur ; dossier de `.env` devenu facultatif.

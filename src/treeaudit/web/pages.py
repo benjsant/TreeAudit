@@ -24,6 +24,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from treeaudit import __version__
+from treeaudit.archive.listing import list_archives
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig, RootConfig
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
@@ -152,7 +153,7 @@ def index(request: Request, conn: Db, config: Config) -> Response:
     refused = [
         {"label": s.root.label, "message": REASON_MESSAGES[s.reason]}
         for s in statuses.values()
-        # Not mounted in the container = not configured in .env: nothing to report.
+        # Not mounted in the container = not configured: nothing to report.
         if s.reason is not None and s.reason is not RejectReason.NOT_MOUNTED and not s.root.external
     ]
     analyses = [
@@ -241,6 +242,18 @@ def _refused_disks(request: Request, statuses: dict[str, RootStatus]) -> list[di
         if s.root.external and s.reason is not None
     ]
     return refused
+
+
+@router.get("/archives")
+def archives_page(request: Request, config: Config) -> Response:
+    status = request.app.state.archive_status
+    listing = None
+    if status.enabled and config.archive_dir is not None:
+        try:
+            listing = list_archives(config.archive_dir)
+        except OSError as exc:
+            raise HTTPException(503, f"Dossier d'archives illisible : {exc.strerror}.") from exc
+    return render(request, "archives.html", listing=listing)
 
 
 @router.get("/jobs/current")

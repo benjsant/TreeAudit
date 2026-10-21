@@ -78,6 +78,6 @@
   {% if listing.hidden %}<p class="muted">{{ listing.hidden }} dossier(s) au nom illisible ne sont pas affichés, mais ils seront bien analysés.</p>{% endif %}
 {% endif %}
 {% if not external_enabled %}
-<p class="muted">Pour choisir un disque externe (jamais celui du système), mets <code>TREEAUDIT_EXTERNAL_DISKS=1</code> dans <code>.env</code>, puis relance (<code>make up</code>).</p>
+<p class="muted">La détection des disques externes est désactivée (ancien mode, expérimental).</p>
 {% endif %}
 {% endblock %}
