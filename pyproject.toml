@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-treeaudit = "treeaudit.cli:main"
+treeaudit = "treeaudit.entry:run"
 
 [dependency-groups]
 dev = [

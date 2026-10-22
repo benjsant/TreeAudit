@@ -2,6 +2,6 @@
 
 import sys
 
-from treeaudit.cli import main
+from treeaudit.entry import run
 
-sys.exit(main())
+sys.exit(run())

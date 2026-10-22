@@ -156,6 +156,15 @@ Relecture critique de tout le code d'archivage, centrée sur le seul module qui 
 - **Le dossier de TreeAudit sur un disque analysé** : `data/` et `archives/` sont reconnus par leur **identité** (périphérique, inode), relevée au moment de l'analyse, et non par leur nom. Ils sont écartés du parcours (exclusion « dossier de TreeAudit »), cachés dans le sélecteur, et une archive qui les contiendrait est refusée avant toute écriture. Dans l'explorateur et le panier, un dossier qui les contient, ou qui contient des secrets, est marqué « protégé » : le mettre à la corbeille les emporterait.
 - **Exposition** : le conteneur voit en plus, en lecture seule, le dossier personnel et les partitions de données. Il n'a toujours pas d'accès à Internet, et rien n'est transmis.
 
+## Mode natif : bac à sable du noyau (D-038)
+- Sans Docker, c'est le noyau qui garde TreeAudit en lecture seule. Le point d'entrée pose, une fois pour toutes, avant toute analyse et tout fil d'exécution :
+  - **Landlock** : lecture partout ; écriture, création, renommage et suppression seulement dans `data/`, `archives/` et le dossier temporaire de SQLite ; aucune exécution de programme ; écoute sur le seul port du serveur ; aucune connexion TCP sortante ; ni signal vers d'autres processus, ni socket Unix abstraite d'un autre processus (ABI 6) ;
+  - **seccomp**, pour ce que Landlock ne couvre pas : seules les sockets TCP peuvent être créées (ni UDP, ni Unix, ni netlink), pas d'`io_uring` ni d'appel x32, et aucun changement de droits, de propriétaire, de dates ou d'attributs étendus.
+- **Refus de démarrer** si le réseau ne peut pas être coupé (noyau trop ancien, architecture non prise en charge) ou si d'autres fils d'exécution existent déjà.
+- **Ce qui reste possible** : lire ce que l'utilisateur peut lire, y compris des secrets. Rien ne peut sortir pour autant : ni réseau, ni exécution, ni écriture ailleurs.
+- `ctypes` n'est autorisé que dans `core/sandbox.py`, pour deux fonctions C (`syscall`, `prctl`) ; un test le vérifie.
+- Preuves : `tests/security/test_sandbox.py`. Une sonde tente 24 actions interdites ; l'analyse, les doublons, l'archive, le serveur web et la ligne de commande fonctionnent sous bac à sable ; un interpréteur BPF vérifie le filtre seccomp. Essais réels sur l'hôte.
+
 ## Toute future fonction destructive est interdite
 Elle exigera une spécification et une revue de sécurité séparées, un aperçu avant action, une confirmation explicite, une journalisation, une stratégie de restauration ou de quarantaine et des tests d'interruption et d'échec.
 

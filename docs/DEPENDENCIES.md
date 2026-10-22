@@ -20,6 +20,7 @@ Commencer par le minimum, verrouiller les versions avec empreintes (`uv.lock`, D
 - `argparse` : ligne de commande.
 - `threading` : thread de travail et annulation.
 - `logging`, `dataclasses`, `typing`, `enum`.
+- `ctypes` (D-038), **uniquement** dans `core/sandbox.py`, pour appeler `syscall` (Landlock) et `prctl` (seccomp, `no_new_privs`) : la bibliothèque standard n'a pas d'interface pour eux. Un test vérifie qu'aucun autre module n'importe `ctypes`, et que ce module n'appelle que ces deux fonctions.
 
 ## Dépendances d'exécution
 | Paquet | Usage | Phase | Remarque |
@@ -47,6 +48,7 @@ Commencer par le minimum, verrouiller les versions avec empreintes (`uv.lock`, D
 | `psutil` | Inutile pour lire les montages, et peu fiable dans Docker | `/proc/self/mountinfo` |
 | htmx, React, Vue… | Interface simple | HTML + JavaScript natif |
 | Celery, Redis | Un seul utilisateur local | `threading` |
+| `landlock`, `pyseccomp`, `python-prctl` | Une dépendance de plus, compilée ou peu suivie, pour quelques appels système | `ctypes` dans `core/sandbox.py` (D-038) |
 
 ## À évaluer plus tard, sur mesure
 - `blake3` ou `xxhash` : empreintes plus rapides ; uniquement si un benchmark montre que SHA-256 est le facteur limitant (le disque l'est souvent).

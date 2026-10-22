@@ -176,3 +176,54 @@ def _scan_through_the_api(server: subprocess.Popen[bytes], base: str) -> dict[st
             break
         time.sleep(0.1)
     return state
+
+
+@needs_landlock
+def test_the_command_line_enters_the_sandbox_natively(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    (root / "sub").mkdir(parents=True)
+    (root / "sub" / "a.txt").write_bytes(b"hello")
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f'data_dir = "{tmp_path / "data"}"\n'
+        f'[[roots]]\nid = "r"\npath = "{root}"\nallow_system_volume = true\n',
+        encoding="utf-8",
+    )
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(tmp_path),
+        "XDG_RUNTIME_DIR": str(tmp_path / "run"),
+        "PYTHONPATH": str(Path(__file__).resolve().parents[2] / "src"),
+    }
+    (tmp_path / "run").mkdir(mode=0o700)
+    result = subprocess.run(  # noqa: S603 - our own package, with the test interpreter
+        [sys.executable, "-P", "-m", "treeaudit", "--config", str(config), "scan", "run", "r"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "kernel sandbox on" in result.stderr
+    assert "scan 1 : complet" in result.stdout
+    # SQLite's temporary folder is TreeAudit's own, inside the runtime folder.
+    assert (tmp_path / "run" / "treeaudit" / "tmp").is_dir()
+
+
+def test_the_network_requirement_is_checked_before_restricting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sandbox, "abi_version", lambda: 3)
+    with pytest.raises(sandbox.SandboxError, match="Docker"):
+        sandbox.restrict(sandbox.Policy(write_dirs=()), require_network=True)
+
+
+def test_the_sandbox_refuses_to_start_with_other_threads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+
+    monkeypatch.setattr(threading, "active_count", lambda: 2)
+    with pytest.raises(sandbox.SandboxError, match="fils"):
+        sandbox.restrict(sandbox.Policy(write_dirs=()))

@@ -118,9 +118,12 @@ Aucun parcours de fichiers dans cette phase.
   - mémoire maximale : 31 → 75 Mio (cache SQLite plus grand).
   Le dossier factice étant écrit d'un seul tenant, ses fichiers sont contigus : sur un disque de sauvegarde fragmenté, l'ordre physique devrait apporter davantage.
 
-## Étude — Mode natif sous bac à sable, vers une AppImage (D-038, proposée)
+## Phase 7 bis — Mode natif sous bac à sable, vers une AppImage (D-038)
 - [x] Prototype Landlock + seccomp, prouvé par des tests et sur l'hôte.
-- [ ] Décision du mainteneur, puis : bac à sable pour toutes les commandes natives, détection des disques sans redémarrage, AppImage.
+- [x] Étape 1 : bac à sable pour toutes les commandes natives, refus de démarrer s'il est incomplet, fichiers temporaires de SQLite dans un dossier privé.
+- [ ] Étape 2 : première AppImage, construite dans Docker.
+- [ ] Étape 3 : disques détectés à chaud, choix libre des dossiers.
+- [ ] Étape 4 : relecture de sécurité du bac à sable, décision sur Docker pour les utilisateurs.
 
 ## Phase 6 octies — Cet ordinateur (D-037)
 - [x] Partitions de données du disque système proposées, jamais celles du système (vérifiées sur l'hôte et dans le conteneur).

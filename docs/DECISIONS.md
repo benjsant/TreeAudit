@@ -348,7 +348,7 @@ Précise la mise en œuvre de D-024.
 - **Exposition acceptée** : le conteneur voit en plus, en lecture seule, le dossier personnel et les partitions de données acceptées. Il reste sans réseau.
 - Amende D-009, D-033 et les règles 3, 4 et 12 de `CLAUDE.md`.
 
-## D-038 — Étude : mode natif sous bac à sable du noyau (Landlock + seccomp), vers une AppImage (2026-10-22) — PROPOSÉE, non adoptée
+## D-038 — Mode natif sous bac à sable du noyau (Landlock + seccomp), vers une AppImage (2026-10-22) — ADOPTÉE, par étapes
 - **Question du mainteneur** : en Docker, ce qui est analysable est figé au démarrage du conteneur. Un disque branché ensuite, ou un dossier hors des emplacements habituels, impose de relancer. Faut-il passer à une AppImage (un seul fichier, pas de Docker) ?
 - **Condition posée** : ne rien perdre de ce que Docker garantit (lecture seule imposée par le noyau, aucun réseau pour le processus qui lit les fichiers), puisque D-007 exige que chaque protection existe aussi sans Docker.
 - **Prototype** : `src/treeaudit/core/sandbox.py`, uniquement la bibliothèque standard et `ctypes`, pour deux fonctions C (`syscall`, `prctl`). C'est le seul module autorisé à importer `ctypes`, et un test vérifie qu'il n'appelle que ces deux fonctions. Une fois `restrict()` appelée, de façon irréversible :
@@ -380,8 +380,17 @@ Précise la mise en œuvre de D-024.
   - le filtre seccomp ne connaît que x86_64 et aarch64 ;
   - le navigateur ne peut pas être ouvert par TreeAudit (aucune exécution) : l'adresse est affichée, ou le lanceur de l'AppImage l'ouvre avant la mise sous bac à sable ;
   - SQLite peut écrire des fichiers temporaires hors de `data/` pour de très gros tris : il faudra fixer `SQLITE_TMPDIR` dans `data/`.
-- **Proposition** (à valider avant tout code au-delà de ce prototype) :
-  1. le mode natif applique ce bac à sable à `serve` et à toutes les commandes, et refuse de démarrer s'il est incomplet ;
-  2. détection des disques à chaque visite de la page de choix, sans redémarrage, avec les mêmes règles (D-033, D-037) ;
-  3. AppImage construite dans Docker (Python autonome et dépendances), sans rien installer sur la machine ;
-  4. Docker reste pour le développement et les tests ; son maintien pour les utilisateurs est à décider après un essai de l'AppImage.
+- **Adoptée par le mainteneur, dans cet ordre** :
+  1. bac à sable pour toutes les commandes natives, refus de démarrer s'il est incomplet (fait, voir ci-dessous) ;
+  2. une première AppImage, construite dans Docker, à essayer ;
+  3. détection des disques à chaud et choix libre des dossiers, avec les mêmes règles (D-033, D-037) ;
+  4. relecture de sécurité du bac à sable, puis décision : AppImage par défaut, Docker pour les noyaux anciens et le développement.
+- **Étape 1, faite** :
+  - le point d'entrée `treeaudit` (`treeaudit/entry.py`) met le processus natif sous bac à sable ; en Docker, rien ne change (le conteneur est le bac à sable) ;
+  - le bac à sable est posé dès que la configuration est lue, avant toute analyse et avant tout fil d'exécution. Il accorde l'écriture à `data/`, à `archives/` s'il existe, et au dossier temporaire de SQLite ; `serve` peut écouter sur son port ;
+  - les commandes qui ne lisent pas de configuration (`roots check`, `archive check`, `disks detect`) sont mises sous bac à sable sans aucun droit d'écriture ;
+  - **refus de démarrer** si le réseau ne peut pas être coupé (Landlock ABI inférieure à 4, ou architecture inconnue du filtre). Le message conseille Docker. Sans les portées (ABI inférieure à 6), un avertissement est affiché ;
+  - **refus** si d'autres fils d'exécution existent déjà : Landlock et seccomp ne s'appliquent qu'au fil qui les pose et à ceux qu'il crée ensuite ;
+  - **fichiers temporaires de SQLite** : un essai l'a confirmé, un gros tri échoue sous bac à sable sans réglage. `SQLITE_TMPDIR` pointe vers un dossier privé (`$XDG_RUNTIME_DIR/treeaudit/tmp`, sinon `~/.cache/treeaudit/tmp`), fixé avant le premier chargement de SQLite, donc indépendant de la configuration ;
+  - essai réel sur l'hôte, hors Docker : analyse de `dummy_folder` (152 970 éléments) complète sous bac à sable.
+- **Reste hors bac à sable** : `treeaudit gateway`, utile seulement en Docker, où elle relaie des connexions.

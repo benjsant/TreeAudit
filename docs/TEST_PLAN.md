@@ -77,6 +77,12 @@
 - Web : liste des disques avec leur occupation, liste des disques non proposés, nom piégé, analyse d'un disque, conseil d'activation quand l'option est désactivée.
 - Réel : détection par Docker (`/mnt/Data` refusé), disque forgé refusé dans le conteneur, mode « un dossier » inchangé.
 
+## Mode natif sous bac à sable (D-038)
+- Sonde dans un processus enfant : écriture, modification, suppression, création, renommage, `chmod`, `utime`, `setxattr` et `chown` hors des dossiers autorisés ; écoute sur un autre port ; TCP sortant, UDP, Unix, netlink ; signal ; `exec`. Tout est refusé ; ce qui est autorisé fonctionne.
+- Analyse, doublons et archive vérifiée sous bac à sable ; serveur web et analyse par l'API ; commande `scan run` par le vrai point d'entrée.
+- Filtre seccomp vérifié par un interpréteur BPF (x86_64, aarch64) ; refus sans Landlock, sans réseau (ABI < 4) ou avec d'autres fils d'exécution.
+- Réel (hôte, hors Docker) : sonde, et analyse de `dummy_folder` complète.
+
 ## Cet ordinateur (D-037)
 - Faux sysfs : partition de données du disque système proposée comme interne, y compris sous LUKS ; système de fichiers du système remonté ailleurs, ou LUKS du système, refusés ; sans les partitions du système, rien n'est proposé sur ce disque.
 - Conteneur : partition interne acceptée, refusée si elle est annoncée comme externe, refusée si c'est une partition du système ; aller-retour JSON des nouveaux champs, valeurs forgées rejetées.

@@ -36,6 +36,7 @@ from treeaudit.core.config import (
 )
 from treeaudit.core.datadir import prepare_data_dir
 from treeaudit.core.errors import TreeAuditError
+from treeaudit.core.sandbox import Policy, restrict
 from treeaudit.filters.spec import FilterSpec
 from treeaudit.parasites.commands import Action
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
@@ -299,10 +300,45 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# Commands that read no configuration (tools run by ./treeaudit on host data).
+_WITHOUT_CONFIG = frozenset({"roots check", "archive check", "disks detect"})
+
+
+def _enter_sandbox(args: argparse.Namespace, write_dirs: Sequence[str]) -> None:
+    """Restrict this process for good (D-038): read anywhere, write only in
+    ``write_dirs`` and SQLite's temporary folder, execute nothing, connect
+    nowhere; ``serve`` may listen on its own port."""
+    if not getattr(args, "sandboxed", False):
+        return
+    args.sandboxed = False  # once is enough: the restriction cannot be undone
+    temp = os.environ.get("SQLITE_TMPDIR")
+    dirs = [*write_dirs, *([temp] if temp else [])]
+    ports = (args.port,) if args.command == "serve" else ()
+    report = restrict(Policy(write_dirs=tuple(dirs), listen_ports=ports), require_network=True)
+    logger.info("kernel sandbox on (Landlock ABI %d)", report.abi)
+    if not report.scoped:
+        logger.warning("Landlock ABI %d: signals to other processes are not scoped", report.abi)
+
+
 def _load_with_disks(args: argparse.Namespace) -> tuple[AppConfig, list[ExternalDisk]]:
-    """Configuration, with the external disks detected at startup added as roots."""
+    """Configuration, with the external disks detected at startup added as roots.
+
+    In the native mode, the process enters the kernel sandbox right after: it
+    may then write only in the data and archive folders (D-038).
+    """
     path = args.config if args.config is not None else default_config_path()
     config = load_config(path, container_mode=is_container_mode())
+    if getattr(args, "sandboxed", False):
+        prepare_data_dir(config.data_dir)
+        args.port = config.port
+        archive = config.archive_dir
+        _enter_sandbox(
+            args,
+            write_dirs=(
+                config.data_dir,
+                *([archive] if archive is not None and os.path.isdir(archive) else []),
+            ),
+        )
     native_detection = config.external_disks and not config.container_mode
     config, disks = with_external_disks(
         config, read_mountinfo() if native_detection else None, os.environ
@@ -1161,14 +1197,20 @@ def _cmd_gateway(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, sandboxed: bool = False) -> int:
+    """``sandboxed``: put this process in the kernel sandbox before any work (D-038).
+    Set by the console entry point (treeaudit.entry) in the native mode only."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    args.sandboxed = sandboxed
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     try:
+        command = f"{args.command} {getattr(args, f'{args.command}_command', '') or ''}"
+        if args.sandboxed and command.strip() in _WITHOUT_CONFIG:
+            _enter_sandbox(args, write_dirs=())
         if args.command == "roots" and args.roots_command == "check":
             return _cmd_roots_check(args)
         if args.command == "roots" and args.roots_command == "list":

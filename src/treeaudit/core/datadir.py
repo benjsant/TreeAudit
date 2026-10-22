@@ -10,6 +10,7 @@ import fcntl
 import logging
 import os
 import stat
+from collections.abc import Mapping
 from pathlib import Path
 
 from treeaudit.core.errors import ConfigError
@@ -118,3 +119,19 @@ def own_dirs(*paths: str | None) -> frozenset[tuple[int, int]]:
             continue  # not created yet: nothing of ours to skip
         identities.add((st.st_dev, st.st_ino))
     return frozenset(identities)
+
+
+def prepare_temp_dir(environ: Mapping[str, str] | None = None) -> str:
+    """Private folder for SQLite's temporary files in the native mode (D-038).
+
+    The kernel sandbox only lets TreeAudit write in its own folders, and SQLite
+    must know this one before it is first loaded: it is therefore fixed, and
+    does not depend on the configuration.
+    """
+    env = os.environ if environ is None else environ
+    runtime = env.get("XDG_RUNTIME_DIR", "")
+    if runtime.startswith("/"):
+        base = Path(runtime) / "treeaudit"
+    else:
+        base = Path(env.get("HOME") or Path.home()) / ".cache" / "treeaudit"
+    return str(prepare_data_dir(str(base / "tmp")))

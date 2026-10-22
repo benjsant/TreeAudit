@@ -31,6 +31,7 @@ import errno
 import os
 import platform
 import struct
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -254,11 +255,26 @@ def _install_socket_filter(libc: ctypes.CDLL) -> bool:
     return True
 
 
-def restrict(policy: Policy) -> Report:
-    """Restrict this process for good. Raises SandboxError if Landlock is missing."""
+def restrict(policy: Policy, *, require_network: bool = False) -> Report:
+    """Restrict this process for good. Raises SandboxError, before restricting
+    anything, if Landlock is missing or, with ``require_network``, if outgoing
+    connections and non-TCP sockets cannot both be blocked.
+
+    Landlock and seccomp apply to the calling thread and to the threads it
+    starts later: called while other threads run, they would escape it.
+    """
     abi = abi_version()
     if abi < 1:
         raise SandboxError("Landlock n'est pas disponible dans ce noyau (Linux 5.13 ou plus)")
+    if require_network and abi < 4:
+        raise SandboxError(
+            f"ce noyau ne permet pas de couper le réseau (Landlock ABI {abi}, il faut 4, "
+            "Linux 6.7 ou plus) : utilise TreeAudit avec Docker"
+        )
+    if require_network and platform.machine() not in _ARCHES:
+        raise SandboxError(f"architecture {platform.machine()} non prise en charge par le filtre")
+    if threading.active_count() != 1:
+        raise SandboxError("le bac à sable doit être posé avant de lancer d'autres fils")
     libc = _libc()
     fs_all = _fs_rights(abi)
     network = abi >= 4
