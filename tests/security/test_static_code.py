@@ -28,6 +28,9 @@ def _may_write(rel_path: str) -> bool:
 
 
 FORBIDDEN_MODULES = frozenset({"subprocess", "shutil", "pty", "ctypes", "tempfile"})
+# The kernel sandbox (D-038) needs two C functions the standard library lacks.
+CTYPES_ALLOWED = frozenset({"core/sandbox.py"})
+SANDBOX_LIBC_CALLS = frozenset({"syscall", "prctl"})
 FORBIDDEN_BUILTINS = frozenset({"eval", "exec", "compile", "__import__"})
 
 # Functions or methods that execute programs: forbidden everywhere.
@@ -121,14 +124,15 @@ def find_violations(source: str, rel_path: str) -> list[str]:
     def report(node: ast.AST, message: str) -> None:
         found.append(f"{rel_path}:{getattr(node, 'lineno', '?')}: {message}")
 
+    forbidden_modules = FORBIDDEN_MODULES - ({"ctypes"} if rel_path in CTYPES_ALLOWED else set())
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.split(".")[0] in FORBIDDEN_MODULES:
+                if alias.name.split(".")[0] in forbidden_modules:
                     report(node, f"import of {alias.name}")
         elif isinstance(node, ast.ImportFrom):
             module = (node.module or "").split(".")[0]
-            if module in FORBIDDEN_MODULES:
+            if module in forbidden_modules:
                 report(node, f"import from {node.module}")
             for alias in node.names:
                 writes = module == "os" and alias.name in OS_WRITE_FUNCS
@@ -186,6 +190,21 @@ def _sources() -> list[Path]:
 def test_no_command_execution_or_file_modification(path: Path) -> None:
     rel = path.relative_to(SRC).as_posix()
     assert find_violations(path.read_text(encoding="utf-8"), rel) == []
+
+
+def test_the_sandbox_only_calls_syscall_and_prctl_from_libc() -> None:
+    tree = ast.parse((SRC / "core" / "sandbox.py").read_text(encoding="utf-8"))
+    called = {
+        node.func.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "libc"
+    }
+    assert called == SANDBOX_LIBC_CALLS
+    for rel in CTYPES_ALLOWED:
+        assert (SRC / rel).exists(), rel
 
 
 def test_write_allowlist_entries_exist() -> None:

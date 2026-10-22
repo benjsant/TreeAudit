@@ -118,6 +118,10 @@ Aucun parcours de fichiers dans cette phase.
   - mémoire maximale : 31 → 75 Mio (cache SQLite plus grand).
   Le dossier factice étant écrit d'un seul tenant, ses fichiers sont contigus : sur un disque de sauvegarde fragmenté, l'ordre physique devrait apporter davantage.
 
+## Étude — Mode natif sous bac à sable, vers une AppImage (D-038, proposée)
+- [x] Prototype Landlock + seccomp, prouvé par des tests et sur l'hôte.
+- [ ] Décision du mainteneur, puis : bac à sable pour toutes les commandes natives, détection des disques sans redémarrage, AppImage.
+
 ## Phase 6 octies — Cet ordinateur (D-037)
 - [x] Partitions de données du disque système proposées, jamais celles du système (vérifiées sur l'hôte et dans le conteneur).
 - [x] Dossier personnel proposé en entier, en lecture seule, secrets jamais lus.

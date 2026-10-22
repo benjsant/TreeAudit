@@ -347,3 +347,41 @@ Précise la mise en œuvre de D-024.
 - **Messages** : au démarrage, la liste des disques trouvés, avec un avertissement s'il n'y a aucun disque externe ; l'interface précise qu'un disque doit être branché **et ouvert** (monté) avant le démarrage. Un essai réel l'a montré : les disques montés 41 s après le démarrage n'étaient pas vus.
 - **Exposition acceptée** : le conteneur voit en plus, en lecture seule, le dossier personnel et les partitions de données acceptées. Il reste sans réseau.
 - Amende D-009, D-033 et les règles 3, 4 et 12 de `CLAUDE.md`.
+
+## D-038 — Étude : mode natif sous bac à sable du noyau (Landlock + seccomp), vers une AppImage (2026-10-22) — PROPOSÉE, non adoptée
+- **Question du mainteneur** : en Docker, ce qui est analysable est figé au démarrage du conteneur. Un disque branché ensuite, ou un dossier hors des emplacements habituels, impose de relancer. Faut-il passer à une AppImage (un seul fichier, pas de Docker) ?
+- **Condition posée** : ne rien perdre de ce que Docker garantit (lecture seule imposée par le noyau, aucun réseau pour le processus qui lit les fichiers), puisque D-007 exige que chaque protection existe aussi sans Docker.
+- **Prototype** : `src/treeaudit/core/sandbox.py`, uniquement la bibliothèque standard et `ctypes`, pour deux fonctions C (`syscall`, `prctl`). C'est le seul module autorisé à importer `ctypes`, et un test vérifie qu'il n'appelle que ces deux fonctions. Une fois `restrict()` appelée, de façon irréversible :
+  - **Landlock, fichiers** : lecture partout où l'utilisateur peut lire ; écriture, création, renommage et suppression **seulement** dans `data/` et `archives/` ; **aucune exécution de programme** (le droit `EXECUTE` n'est jamais accordé, ce qui fait respecter la règle 2 par le noyau) ;
+  - **Landlock, réseau** (ABI 4) : écoute sur le seul port du serveur, **aucune connexion TCP sortante** ;
+  - **Landlock, portées** (ABI 6) : aucun signal vers d'autres processus, aucune socket Unix abstraite d'un autre processus ;
+  - **seccomp**, pour ce que Landlock ne couvre pas : seules les sockets TCP (IPv4, IPv6) peuvent être créées, donc ni UDP, ni socket Unix (comme `/var/run/docker.sock`), ni netlink ; ni `io_uring`, ni appel système x32 ; et **aucun changement de droits, de propriétaire, de dates ou d'attributs étendus** (`chmod`, `chown`, `utime`, `setxattr`…).
+- **Ce que l'étude a trouvé** : Landlock ne contrôle **pas** les métadonnées. Le premier essai a montré qu'un `chmod` hors des dossiers autorisés réussissait. C'est la raison de la seconde partie du filtre seccomp. Landlock ne contrôle pas non plus l'UDP ni les sockets Unix nommées.
+- **Preuves** (`tests/security/test_sandbox.py`, dans un processus enfant) :
+  - la sonde tente 24 actions : écrire, modifier, supprimer, créer un dossier, renommer, sortir un fichier du dossier autorisé, `chmod`, `utime`, `setxattr`, `chown`, écouter sur un autre port, se connecter en TCP, UDP, Unix, netlink, signal, `exec`. Seules les actions prévues réussissent, et le fichier visé reste intact ;
+  - la vraie analyse, la recherche de doublons et l'archive vérifiée aboutissent sous le bac à sable ;
+  - le vrai serveur web démarre sous le bac à sable et mène une analyse par l'API ;
+  - le filtre seccomp est vérifié par un petit interpréteur BPF, pour x86_64 et aarch64 ;
+  - **essai réel sur l'hôte** (Nobara, noyau 7.2, Landlock ABI 10, Python 3.14 du système, disque ext4, hors Docker) : mêmes résultats.
+- **Comparaison** :
+
+  | | Docker (actuel) | Natif + Landlock + seccomp |
+  |---|---|---|
+  | Écriture hors `data/` et `archives/` | impossible (montages en lecture seule) | impossible (Landlock) |
+  | Droits, dates, attributs | impossibles | impossibles (seccomp) |
+  | Exécuter un programme | possible dans le conteneur | impossible |
+  | Réseau sortant | aucun (réseau interne) | aucun (Landlock TCP, seccomp pour le reste) |
+  | Ce qui est lisible | ce qui a été monté au démarrage | tout ce que l'utilisateur peut lire |
+  | Disque branché après le démarrage | relancer | visible tout de suite |
+  | Prérequis | Docker (le groupe `docker` équivaut à root) | un noyau récent, rien d'autre |
+- **Limites** :
+  - la lecture n'est plus limitée : un secret est lisible, mais **ne peut pas sortir** (ni réseau, ni exécution, ni écriture ailleurs) ;
+  - noyau requis : Landlock ABI 4 (Linux 6.7) pour le réseau, ABI 6 (Linux 6.12) pour les portées. Sans ABI 4, le mode natif refuserait de démarrer ; entre 4 et 6, il manquerait seulement la portée des signaux ;
+  - le filtre seccomp ne connaît que x86_64 et aarch64 ;
+  - le navigateur ne peut pas être ouvert par TreeAudit (aucune exécution) : l'adresse est affichée, ou le lanceur de l'AppImage l'ouvre avant la mise sous bac à sable ;
+  - SQLite peut écrire des fichiers temporaires hors de `data/` pour de très gros tris : il faudra fixer `SQLITE_TMPDIR` dans `data/`.
+- **Proposition** (à valider avant tout code au-delà de ce prototype) :
+  1. le mode natif applique ce bac à sable à `serve` et à toutes les commandes, et refuse de démarrer s'il est incomplet ;
+  2. détection des disques à chaque visite de la page de choix, sans redémarrage, avec les mêmes règles (D-033, D-037) ;
+  3. AppImage construite dans Docker (Python autonome et dépendances), sans rien installer sur la machine ;
+  4. Docker reste pour le développement et les tests ; son maintien pour les utilisateurs est à décider après un essai de l'AppImage.
