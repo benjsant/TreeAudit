@@ -1007,3 +1007,24 @@ def test_organize_preview_and_scripts(client: TestClient, scanned: int) -> None:
     assert client.get(f"/export/scans/{scanned}/organize.sh?dir=999999").status_code == 404
     space = client.get(f"/scans/{scanned}/space").text
     assert "🗂 Ranger ce dossier" in space
+
+
+def test_organize_adjustments_reach_the_scripts(client: TestClient, scanned: int) -> None:
+    ids = entry_ids(client, scanned)
+    query = {
+        "exclure": str(ids[b"app"]),
+        "nom_Photos": "Images",
+        "destination": "Classement",
+    }
+    page = client.get(f"/scans/{scanned}/organize", params=query)
+    assert page.status_code == 200
+    assert_safe_html(page.text)
+    assert "Laissés en place à ta demande (1)" in page.text
+    assert "Classement/Images" in page.text
+    script = client.get(f"/export/scans/{scanned}/organize.sh", params=query).text
+    assert " Classement/Images/" in script and "Rangé" not in script
+    assert "folder app " not in script
+    bad = client.get(f"/export/scans/{scanned}/organize.sh", params={"nom_Photos": "../../etc"})
+    assert bad.status_code == 422
+    refused = client.get(f"/scans/{scanned}/organize", params={"destination": ".cache"})
+    assert "Ajustement refusé" in refused.text

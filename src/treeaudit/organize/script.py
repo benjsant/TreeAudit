@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import shlex
 
-from treeaudit.organize.plan import DESTINATION, Plan
+from treeaudit.organize.plan import Plan
 
 _HEADER = """\
 #!/bin/bash
@@ -89,9 +89,9 @@ def undo_script(plan: Plan, folder: str, *, title: str, scan_id: int, date: str)
         lines.append(f"back {_q(move.target)} {_q(move.source)}")
     lines += [
         "# Only the folders of the tidying left empty are removed (rmdir refuses the others).",
-        f"if [[ -d {_q(DESTINATION)} ]]; then",
+        f"if [[ -d {_q(plan.destination)} ]]; then",
         # One rmdir per folder, children first: a parent left empty goes next.
-        f"    find {_q(DESTINATION)} -depth -type d -empty -exec rmdir -- {{}} \\;",
+        f"    find {_q(plan.destination)} -depth -type d -empty -exec rmdir -- {{}} \\;",
         "fi",
         'echo "$done_count élément(s) remis en place, $skipped ignoré(s)."',
     ]

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections import Counter, defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -32,6 +33,22 @@ PHOTOS, VIDEOS, MUSIC, DOCUMENTS = "Photos", "Vidéos", "Musique", "Documents"
 ARCHIVES, INSTALLERS, CODE, FONTS, OTHER = "Archives", "Installateurs", "Code", "Polices", "Autres"
 PROJECTS, SOFTWARE = "Projets", "Logiciels"
 BY_YEAR = frozenset({PHOTOS, VIDEOS})
+CATEGORIES = (
+    PHOTOS,
+    VIDEOS,
+    MUSIC,
+    DOCUMENTS,
+    ARCHIVES,
+    INSTALLERS,
+    CODE,
+    FONTS,
+    PROJECTS,
+    SOFTWARE,
+    OTHER,
+)
+MAX_FOLDER_NAME = 60
+MAX_ADJUSTMENTS = 100_000
+EXCLUDED = "laissé en place à ta demande"
 
 _EXTENSIONS: dict[str, frozenset[str]] = {
     PHOTOS: frozenset(
@@ -210,6 +227,87 @@ def category_of(extension: str | None) -> str:
     return _CATEGORY_OF.get(extension or "", OTHER)
 
 
+def clean_folder_name(text: str) -> str | None:
+    """A folder name chosen by the user, or None if it is not acceptable.
+
+    One plain name: no "/" (no sub-path, no escape upwards), not "." nor "..",
+    not hidden nor starting with "-", no control character, short.
+    """
+    name = text.strip()
+    if (
+        not name
+        or len(name) > MAX_FOLDER_NAME
+        or name in (".", "..")
+        or name.startswith((".", "-"))
+        or "/" in name
+        or "\\" in name
+        or not is_displayable(name.encode())
+    ):
+        return None
+    return name
+
+
+class AdjustmentError(ValueError):
+    """An adjustment of the plan that cannot be accepted."""
+
+
+@dataclass(frozen=True, slots=True)
+class Adjustments:
+    """The user's changes to the plan: elements left in place, other categories,
+    other folder names. Each one is checked again (adjustments_from_query)."""
+
+    excluded: frozenset[int] = frozenset()
+    categories: Mapping[int, str] = field(default_factory=dict)
+    names: Mapping[str, str] = field(default_factory=dict)
+    destination: str = DESTINATION
+
+    def folder(self, category: str) -> str:
+        return self.names.get(category, category)
+
+    @property
+    def any(self) -> bool:
+        return bool(
+            self.excluded or self.categories or self.names or self.destination != DESTINATION
+        )
+
+
+def adjustments_from_query(params: Iterable[tuple[str, str]]) -> Adjustments:
+    """Read the adjustments from a page's query string, refusing anything odd.
+
+    ``exclure=<id>``, ``categorie_<id>=<category>``, ``nom_<category>=<name>``,
+    ``destination=<name>``. Empty values mean "unchanged"; other keys are ignored.
+    """
+    excluded: set[int] = set()
+    categories: dict[int, str] = {}
+    names: dict[str, str] = {}
+    destination = DESTINATION
+    for count, (key, value) in enumerate(params, start=1):
+        if count > MAX_ADJUSTMENTS:
+            raise AdjustmentError("trop d'ajustements")
+        if key == "exclure":
+            if not value.isdigit():
+                raise AdjustmentError("élément inconnu")
+            excluded.add(int(value))
+        elif key.startswith("categorie_") and value:
+            entry = key.removeprefix("categorie_")
+            if not entry.isdigit() or value not in CATEGORIES:
+                raise AdjustmentError(f"catégorie inconnue : {value}")
+            categories[int(entry)] = value
+        elif key.startswith("nom_") and value.strip():
+            category = key.removeprefix("nom_")
+            name = clean_folder_name(value)
+            if category not in CATEGORIES or name is None:
+                raise AdjustmentError(f"nom de dossier refusé : {value}")
+            if name != category:
+                names[category] = name
+        elif key == "destination" and value.strip():
+            chosen = clean_folder_name(value)
+            if chosen is None:
+                raise AdjustmentError(f"nom de dossier refusé : {value}")
+            destination = chosen
+    return Adjustments(frozenset(excluded), categories, names, destination)
+
+
 class PlanTooLargeError(ValueError):
     """The chosen folder holds more than MAX_ENTRIES entries."""
 
@@ -234,12 +332,15 @@ class Move:
 class Kept:
     path: str
     reason: str
+    entry_id: int | None = None
+    """Set when the user asked for it: the page can offer to move it again."""
 
 
 @dataclass
 class Plan:
     start: str
     """The chosen folder, relative to the analysed root ("" for the root)."""
+    adjustments: Adjustments = field(default_factory=Adjustments)
     moves: list[Move] = field(default_factory=list)
     kept: list[Kept] = field(default_factory=list)
 
@@ -252,6 +353,14 @@ class Plan:
             total[1] += move.files
             total[2] += move.size
         return {name: (t[0], t[1], t[2]) for name, t in sorted(totals.items())}
+
+    @property
+    def destination(self) -> str:
+        return self.adjustments.destination
+
+    @property
+    def excluded(self) -> list[Kept]:
+        return [kept for kept in self.kept if kept.entry_id is not None]
 
     @property
     def renamed(self) -> list[Move]:
@@ -394,9 +503,10 @@ def _is_block(node: _Node) -> bool:
 
 
 class _Planner:
-    def __init__(self, start: _Node) -> None:
+    def __init__(self, start: _Node, adjustments: Adjustments) -> None:
         self.start = start
-        self.plan = Plan(start=start.rel_display)
+        self.adjust = adjustments
+        self.plan = Plan(start=start.rel_display, adjustments=adjustments)
         self.taken: set[str] = set()
 
     def _relative(self, node: _Node) -> str:
@@ -406,7 +516,8 @@ class _Planner:
         self.plan.kept.append(Kept(self._relative(node), reason))
 
     def _target(self, category: str, year: int | None, name: str) -> tuple[str, bool]:
-        folder = f"{DESTINATION}/{category}" + (f"/{year}" if year else "")
+        folder = f"{self.adjust.destination}/{self.adjust.folder(category)}"
+        folder += f"/{year}" if year else ""
         target = f"{folder}/{name}"
         number = 1
         stem, dot, suffix = name.rpartition(".")
@@ -418,7 +529,15 @@ class _Planner:
         self.taken.add(target)
         return target, number > 1
 
-    def _move(self, node: _Node, category: str, year: int | None, reason: str) -> None:
+    def _move(self, node: _Node, category: str, reason: str) -> None:
+        chosen = self.adjust.categories.get(node.entry_id)
+        if chosen is not None and chosen != category:
+            category, reason = chosen, "catégorie choisie par toi"
+        year: int | None = None
+        if category in BY_YEAR:
+            year = (
+                _year(node.mtime_ns) if node.kind != "dir" else node.years.most_common(1)[0][0]
+            ) or None
         target, renamed = self._target(category, year, node.name_display)
         self.plan.moves.append(
             Move(
@@ -437,13 +556,16 @@ class _Planner:
 
     def run(self) -> Plan:
         for child in self.start.children:
-            if child.kind == "dir" and child.name.decode("utf-8", "replace") == DESTINATION:
+            if child.kind == "dir" and child.name_display == self.adjust.destination:
                 self._keep(child, "dossier de destination")
                 continue
             self._visit(child)
         return self.plan
 
     def _visit(self, node: _Node) -> None:
+        if node.entry_id in self.adjust.excluded:
+            self.plan.kept.append(Kept(self._relative(node), EXCLUDED, node.entry_id))
+            return
         if not is_displayable(node.rel_path):
             self._keep(node, "nom impossible à écrire sans ambiguïté dans une commande")
             return
@@ -459,31 +581,33 @@ class _Planner:
         if node.kind == "file":
             if node.name in NEUTRAL_FILES:
                 return  # desktop clutter: left with its folder
-            category = category_of(node.extension)
-            year = _year(node.mtime_ns) if category in BY_YEAR else None
-            self._move(node, category, year, "fichier rangé par type")
+            self._move(node, category_of(node.extension), "fichier rangé par type")
             return
         block = _block_kind(node)
         if block is not None:
             reason = "projet, déplacé en entier" if block == PROJECTS else "logiciel ou jeu"
-            self._move(node, block, None, reason)
+            self._move(node, block, reason)
             return
         if not node.files:
             self._keep(node, "dossier vide")
             return
         if len(node.categories) == 1 and not node.unmovable and not node.has_block:
             (category,) = node.categories
-            year = node.years.most_common(1)[0][0] if category in BY_YEAR else None
-            self._move(node, category, year or None, "dossier homogène, gardé tel quel")
+            self._move(node, category, "dossier homogène, gardé tel quel")
             return
         for child in node.children:
             self._visit(child)
 
 
-def make_plan(conn: sqlite3.Connection, scan_id: int, start_id: int) -> Plan:
+def make_plan(
+    conn: sqlite3.Connection,
+    scan_id: int,
+    start_id: int,
+    adjustments: Adjustments | None = None,
+) -> Plan:
     """The plan for the folder ``start_id`` of a finished analysis."""
     start = _load(conn, scan_id, start_id)
     if start.kind != "dir":
         raise KeyError(start_id)
     _summarize(start)
-    return _Planner(start).run()
+    return _Planner(start, adjustments or Adjustments()).run()

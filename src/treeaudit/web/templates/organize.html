@@ -6,59 +6,93 @@
 <nav class="crumbs" aria-label="Dossier à ranger">
   {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/organize?dir={{ crumb.entry_id }}">{{ crumb.name or title }}</a>{% endfor %}
 </nav>
-<p class="lead">Aperçu du rangement proposé. <strong>Rien n'est modifié</strong> : TreeAudit prépare un script que tu relis et lances toi-même, et le script qui remet tout comme avant.</p>
+<p class="lead">Aperçu du rangement proposé. <strong>Rien n'est modifié</strong> : ajuste le plan, puis télécharge le script que tu relis et lances toi-même, et le script qui remet tout comme avant.</p>
 {% if scan.status != "complete" %}<p class="notice warn" role="alert">L'analyse n'a pas pu tout voir : le plan peut être incomplet.</p>{% endif %}
 
 {% if error %}
-  <p class="notice warn">{{ error }}</p>
-{% elif not plan.moves %}
+  <p class="notice warn" role="alert">{{ error }}</p>
+  <p><a class="button small" href="/scans/{{ scan.id }}/organize?dir={{ node.entry_id }}">Revenir au plan proposé</a></p>
+{% elif not plan.moves and not plan.excluded %}
   <p class="notice info">Rien à ranger ici.</p>
 {% else %}
+{% set names = plan.adjustments %}
+<form method="get" action="/scans/{{ scan.id }}/organize" data-compact-query>
+  <input type="hidden" name="dir" value="{{ node.entry_id }}">
+  {% if show_all %}<input type="hidden" name="tout" value="true">{% endif %}
+
   <section class="panel">
-    <p>Tout irait dans <span class="path"><strong>{{ folder }}/{{ destination }}</strong></span> :</p>
+    <p>
+      <label>Tout irait dans <span class="path">{{ folder }}/</span><input type="text" name="destination" value="{{ plan.destination }}" data-default="Rangé" maxlength="60" size="14" aria-label="Nom du dossier de rangement"></label>
+    </p>
     <table>
       <tbody>
       {% for name, total in plan.categories().items() %}
-        <tr><td><strong>{{ name }}</strong></td><td class="num">{{ total[0] | number }} élément(s)</td><td class="num">{{ total[1] | number }} fichier(s)</td><td class="num">{{ total[2] | size }}</td></tr>
+        <tr>
+          <td><input type="text" name="nom_{{ name }}" value="{{ names.folder(name) }}" data-default="{{ name }}" maxlength="60" size="16" aria-label="Nom du dossier « {{ name }} »"></td>
+          <td class="num">{{ total[0] | number }} élément(s)</td><td class="num">{{ total[1] | number }} fichier(s)</td><td class="num">{{ total[2] | size }}</td>
+        </tr>
       {% endfor %}
       </tbody>
     </table>
     <ul class="plain small muted">
       <li>📁 Les albums et dossiers d'un seul type gardent leur nom ; les projets, jeux et logiciels sont déplacés en entier.</li>
       <li>Les photos et vidéos sont classées par année (date de modification).</li>
+      <li>Tu peux renommer les dossiers ci-dessus, et pour chaque élément : le laisser en place ou changer sa catégorie.</li>
       {% if plan.renamed %}<li>⚠ {{ plan.renamed | length }} élément(s) portent le même nom qu'un autre : ils recevront un numéro « (2) ».</li>{% endif %}
     </ul>
+    <div class="actions"><button type="submit" class="button primary">🔄 Mettre à jour l'aperçu</button> <a class="button small" href="/scans/{{ scan.id }}/organize?dir={{ node.entry_id }}">Annuler mes ajustements</a></div>
   </section>
 
   <h2>Aperçu du résultat</h2>
   {% for name, moves in by_category.items() %}
   <details class="group-band"{% if loop.first %} open{% endif %}>
-    <summary><strong>{{ destination }}/{{ name }}</strong> — {{ moves | length | number }} élément(s)</summary>
-    <ul class="plain small">
-    {% for move in moves[:shown_per_category] %}
-      <li>{{ "📁" if move.kind == "dir" else "📄" }} <span class="path">{{ move.target[destination | length + 1:] }}</span>{% if move.renamed %} <span class="badge">renommé</span>{% endif %}<br><span class="muted">depuis <span class="path">{{ move.source }}</span> · {{ move.reason }}{% if move.kind == "dir" %} · {{ move.files | number }} fichier(s){% endif %}</span></li>
+    <summary><strong>{{ plan.destination }}/{{ names.folder(name) }}</strong> — {{ moves | length | number }} élément(s)</summary>
+    <ul class="plain small organize-list">
+    {% for move in (moves if shown_per_category is none else moves[:shown_per_category]) %}
+      <li>
+        <label><input type="checkbox" name="exclure" value="{{ move.entry_id }}"> laisser en place</label>
+        <select name="categorie_{{ move.entry_id }}" aria-label="Catégorie de « {{ move.source }} »">
+          <option value="">{{ names.folder(move.category) }}</option>
+          {% for other in categories if other != move.category %}<option value="{{ other }}">→ {{ names.folder(other) }}</option>{% endfor %}
+        </select>
+        {{ "📁" if move.kind == "dir" else "📄" }} <span class="path">{{ move.target[plan.destination | length + 1:] }}</span>{% if move.renamed %} <span class="badge">renommé</span>{% endif %}<br>
+        <span class="muted">depuis <span class="path">{{ move.source }}</span> · {{ move.reason }}{% if move.kind == "dir" %} · {{ move.files | number }} fichier(s){% endif %}</span>
+      </li>
     {% endfor %}
     </ul>
-    {% if moves | length > shown_per_category %}<p class="muted small">… et {{ (moves | length) - shown_per_category }} autre(s) : tout est dans le script.</p>{% endif %}
+    {% if shown_per_category is not none and moves | length > shown_per_category %}<p class="muted small">… et {{ (moves | length) - shown_per_category }} autre(s), tous dans le script. <a href="/scans/{{ scan.id }}/organize?{{ query }}&amp;tout=true">Tout afficher pour les ajuster</a></p>{% endif %}
   </details>
   {% endfor %}
 
-  {% if plan.kept %}
+  {% if plan.excluded %}
+  <section class="group-band">
+    <h2>Laissés en place à ta demande ({{ plan.excluded | length | number }})</h2>
+    <ul class="plain small">{% for kept in plan.excluded %}<li><label><input type="checkbox" name="exclure" value="{{ kept.entry_id }}" checked> <span class="path">{{ kept.path }}</span></label></li>{% endfor %}</ul>
+    <p class="muted small">Décoche, puis « Mettre à jour l'aperçu », pour le ranger quand même.</p>
+  </section>
+  {% endif %}
+  <div class="actions"><button type="submit" class="button primary">🔄 Mettre à jour l'aperçu</button></div>
+</form>
+
+  {% set others = plan.kept | rejectattr("entry_id") | list %}
+  {% if others %}
   <details class="tech">
-    <summary>Ce qui reste en place ({{ plan.kept | length | number }})</summary>
-    <ul class="plain small">{% for kept in plan.kept[:200] %}<li><span class="path">{{ kept.path }}</span> — {{ kept.reason }}</li>{% endfor %}</ul>
+    <summary>Ce qui reste en place de toute façon ({{ others | length | number }})</summary>
+    <ul class="plain small">{% for kept in others[:200] %}<li><span class="path">{{ kept.path }}</span> — {{ kept.reason }}</li>{% endfor %}</ul>
   </details>
   {% endif %}
 
   <section class="panel final-step">
     <h2>Dernière étape</h2>
-    {% if scripts_possible %}
+    {% if scripts_possible and plan.moves %}
     <ol class="howto">
-      <li>Télécharge les deux scripts : <a class="button small primary" href="/export/scans/{{ scan.id }}/organize.sh?dir={{ node.entry_id }}">📥 Script de rangement</a> <a class="button small" href="/export/scans/{{ scan.id }}/organize-undo.sh?dir={{ node.entry_id }}">📥 Script d'annulation</a></li>
+      <li>Télécharge les deux scripts, qui reprennent tes ajustements : <a class="button small primary" href="/export/scans/{{ scan.id }}/organize.sh?{{ query }}">📥 Script de rangement</a> <a class="button small" href="/export/scans/{{ scan.id }}/organize-undo.sh?{{ query }}">📥 Script d'annulation</a></li>
       <li>Ouvre-les dans un éditeur de texte et relis-les.</li>
       <li>Dans un terminal : <code class="cmd">bash ~/Téléchargements/treeaudit-ranger-{{ scan.id }}-{{ node.entry_id }}.sh</code></li>
     </ol>
     <p class="muted small">Le script vérifie chaque élément avant de le déplacer (toujours là, pas modifié depuis l'analyse, place libre) et n'écrase jamais rien. Garde le script d'annulation : il remet tout comme avant.</p>
+    {% elif not plan.moves %}
+    <p class="notice info">Tout est laissé en place : pas de script à produire.</p>
     {% else %}
     <p class="notice warn">Le chemin de ce dossier ne peut pas être écrit sans ambiguïté dans un script : pas de commande possible.</p>
     {% endif %}

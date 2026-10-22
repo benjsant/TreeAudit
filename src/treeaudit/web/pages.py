@@ -397,8 +397,12 @@ def organize_page(
     conn: Db,
     config: Config,
     dir: Annotated[int | None, Query(ge=1)] = None,
+    tout: bool = False,
 ) -> Response:
-    """Tidying (D-041): the plan and a preview of the result; nothing is changed."""
+    """Tidying (D-041): the plan and a preview of the result; nothing is changed.
+
+    Adjustments (elements left in place, other categories or folder names)
+    come in the query string and are checked again before use."""
     scan = _scan_or_404(conn, scan_id)
     node = (
         queries.start_node(conn, scan_id) if dir is None else queries.get_node(conn, scan_id, dir)
@@ -407,7 +411,10 @@ def organize_page(
         raise HTTPException(404, "Ce dossier n'existe pas dans cette analyse.")
     plan, error = None, None
     try:
-        plan = organize_plan.make_plan(conn, scan_id, node.entry_id)
+        adjustments = organize_plan.adjustments_from_query(request.query_params.multi_items())
+        plan = organize_plan.make_plan(conn, scan_id, node.entry_id, adjustments)
+    except organize_plan.AdjustmentError as exc:
+        error = f"Ajustement refusé : {exc}"
     except organize_plan.PlanTooLargeError:
         error = (
             f"Ce dossier contient plus de {organize_plan.MAX_ENTRIES:,} éléments : "
@@ -428,10 +435,12 @@ def organize_page(
         plan=plan,
         error=error,
         folder=folder,
-        destination=organize_plan.DESTINATION,
         by_category=by_category,
         scripts_possible=safe_root(folder),
-        shown_per_category=30,
+        shown_per_category=None if tout else 30,
+        show_all=tout,
+        categories=organize_plan.CATEGORIES,
+        query=request.url.query,
     )
 
 

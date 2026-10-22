@@ -526,6 +526,19 @@ function setupTheme() {
   show();
 }
 
+// --- tidying adjustments: only what changed goes in the address (D-041) -------------
+
+function setupCompactForms() {
+  for (const form of document.querySelectorAll("form[data-compact-query]")) {
+    form.addEventListener("submit", () => {
+      for (const field of form.querySelectorAll("input[type=text], select")) {
+        const unchanged = field.value === "" || field.value === (field.dataset.default ?? null);
+        if (unchanged) field.disabled = true;
+      }
+    });
+  }
+}
+
 // --- quitting (native mode, no terminal: D-038) -------------------------------------------
 
 function setupQuit() {
@@ -552,6 +565,7 @@ function setupQuit() {
 document.addEventListener("DOMContentLoaded", () => {
   setupTheme();
   setupQuit();
+  setupCompactForms();
   setupStartButtons();
   setupArchiveButtons();
   setupJobMonitor();

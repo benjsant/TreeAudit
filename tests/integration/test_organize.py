@@ -188,3 +188,85 @@ def test_walking_down_uses_the_parent_index() -> None:
         conn.close()
     assert "SEARCH e USING INDEX entry_by_parent (scan_id=? AND parent_id=?)" in plan
     assert not any("entry_by_inode" in step for step in plan), plan
+
+
+# --- adjustments made by the user ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["a/b", "..", ".", ".cache", "-rf", "x" * 61, "a\nb", "a\\b", "  ", "nul\x00"],
+)
+def test_folder_names_are_checked(name: str) -> None:
+    from treeaudit.organize.plan import AdjustmentError, adjustments_from_query
+
+    with pytest.raises(AdjustmentError):
+        adjustments_from_query([("nom_Photos", name)] if name.strip() else [("destination", "/")])
+
+
+def test_adjustments_from_the_query_string() -> None:
+    from treeaudit.organize.plan import AdjustmentError, adjustments_from_query
+
+    adjust = adjustments_from_query(
+        [
+            ("exclure", "12"),
+            ("categorie_7", "Archives"),
+            ("categorie_8", ""),  # unchanged
+            ("nom_Photos", " Images "),
+            ("nom_Musique", "Musique"),  # same name: no change
+            ("destination", "Classement 2026"),
+            ("dir", "3"),  # not an adjustment: ignored
+        ]
+    )
+    assert adjust.excluded == {12} and adjust.categories == {7: "Archives"}
+    assert adjust.names == {"Photos": "Images"} and adjust.destination == "Classement 2026"
+    for bad in (
+        [("exclure", "../1")],
+        [("categorie_7", "Mes trucs")],  # not one of the categories
+        [("categorie_x", "Archives")],
+        [("nom_Inconnue", "x")],
+    ):
+        with pytest.raises(AdjustmentError):
+            adjustments_from_query(bad)
+
+
+def test_adjusted_plan_and_scripts(
+    tmp_path: Path, messy: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    from treeaudit.organize.plan import EXCLUDED, Adjustments
+
+    plan, scan_id = scan_and_plan(tmp_path, messy, data_disk_table)
+    ids = {move.source: move.entry_id for move in plan.moves}
+    adjust = Adjustments(
+        excluded=frozenset({ids["Vacances Bretagne"]}),
+        categories={ids["Bazar/facture.pdf"]: "Archives"},
+        names={"Photos": "Images", "Archives": "Papiers"},
+        destination="Classement",
+    )
+    conn = connect(str(tmp_path / "data"))
+    try:
+        start = conn.execute(
+            "SELECT entry_id FROM entry WHERE scan_id = ? AND depth = 0", (scan_id,)
+        ).fetchone()[0]
+        adjusted = make_plan(conn, scan_id, start, adjust)
+    finally:
+        conn.close()
+    moves = {move.source: move for move in adjusted.moves}
+    assert "Vacances Bretagne" not in moves
+    assert [(k.path, k.reason) for k in adjusted.excluded] == [("Vacances Bretagne", EXCLUDED)]
+    assert moves["Bazar/facture.pdf"].target == "Classement/Papiers/facture.pdf"
+    assert moves["Bazar/facture.pdf"].reason == "catégorie choisie par toi"
+    assert moves["Bazar/film.mkv"].target == "Classement/Vidéos/2019/film.mkv"
+    assert moves["photo.jpg"].target.startswith("Classement/Images/2019/")
+
+    before = snapshot(messy)
+    meta = {"title": "t", "scan_id": scan_id, "date": "d"}
+    tidied = run_script(tidy_script(adjusted, str(messy), **meta), tmp_path)
+    assert tidied.returncode == 0, tidied.stderr
+    assert (messy / "Classement" / "Papiers" / "facture.pdf").is_file()
+    assert (messy / "Vacances Bretagne" / "IMG_0.jpg").is_file()  # left in place
+    assert not (messy / DESTINATION).exists()
+    restored = run_script(undo_script(adjusted, str(messy), **meta), tmp_path)
+    assert restored.returncode == 0, restored.stderr
+    assert snapshot(messy) == before
+    assert not (messy / "Classement").exists()

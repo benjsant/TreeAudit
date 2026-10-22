@@ -13,7 +13,7 @@ import json
 from collections.abc import Iterable, Iterator, Sequence
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
 from treeaudit import __version__
@@ -23,7 +23,12 @@ from treeaudit.db.connection import connect
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.filters.search import Sort, search
 from treeaudit.filters.spec import FilterError, compile_filter, describe
-from treeaudit.organize.plan import PlanTooLargeError, make_plan
+from treeaudit.organize.plan import (
+    AdjustmentError,
+    PlanTooLargeError,
+    adjustments_from_query,
+    make_plan,
+)
 from treeaudit.organize.script import tidy_script, undo_script
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.shellcmd import host_path, safe_root
@@ -285,8 +290,8 @@ def search_csv(scan_id: int, conn: Db, form: Annotated[SearchForm, Query()]) -> 
 
 
 def _organize(
-    conn: Any, config: Any, scan_id: int, dir_id: int | None
-) -> tuple[Any, str, dict[str, Any]]:
+    request: Request, conn: Any, config: Any, scan_id: int, dir_id: int | None
+) -> tuple[Any, str, dict[str, Any], int]:
     scan = _scan(conn, scan_id)
     node = (
         queries.start_node(conn, scan_id)
@@ -299,7 +304,10 @@ def _organize(
     if not safe_root(folder):
         raise HTTPException(422, "chemin du dossier impossible à écrire sans ambiguïté")
     try:
-        plan = make_plan(conn, scan_id, node.entry_id)
+        adjustments = adjustments_from_query(request.query_params.multi_items())
+        plan = make_plan(conn, scan_id, node.entry_id, adjustments)
+    except AdjustmentError as exc:
+        raise HTTPException(422, f"ajustement refusé : {exc}") from exc
     except PlanTooLargeError as exc:
         raise HTTPException(422, "dossier trop grand : choisir un sous-dossier") from exc
     meta = {
@@ -307,7 +315,7 @@ def _organize(
         "scan_id": scan_id,
         "date": str(scan["started_at"])[:10],
     }
-    return plan, folder, meta
+    return plan, folder, meta, node.entry_id
 
 
 def _script(text: str, filename: str) -> Response:
@@ -319,17 +327,25 @@ def _script(text: str, filename: str) -> Response:
 
 @router.get("/scans/{scan_id}/organize.sh")
 def organize_script(
-    scan_id: int, conn: Db, config: Config, dir: Annotated[int | None, Query(ge=1)] = None
+    request: Request,
+    scan_id: int,
+    conn: Db,
+    config: Config,
+    dir: Annotated[int | None, Query(ge=1)] = None,
 ) -> Response:
-    plan, folder, meta = _organize(conn, config, scan_id, dir)
-    return _script(tidy_script(plan, folder, **meta), f"treeaudit-ranger-{scan_id}-{dir or 0}.sh")
+    plan, folder, meta, entry = _organize(request, conn, config, scan_id, dir)
+    return _script(tidy_script(plan, folder, **meta), f"treeaudit-ranger-{scan_id}-{entry}.sh")
 
 
 @router.get("/scans/{scan_id}/organize-undo.sh")
 def organize_undo_script(
-    scan_id: int, conn: Db, config: Config, dir: Annotated[int | None, Query(ge=1)] = None
+    request: Request,
+    scan_id: int,
+    conn: Db,
+    config: Config,
+    dir: Annotated[int | None, Query(ge=1)] = None,
 ) -> Response:
-    plan, folder, meta = _organize(conn, config, scan_id, dir)
+    plan, folder, meta, entry = _organize(request, conn, config, scan_id, dir)
     return _script(
-        undo_script(plan, folder, **meta), f"treeaudit-annuler-rangement-{scan_id}-{dir or 0}.sh"
+        undo_script(plan, folder, **meta), f"treeaudit-annuler-rangement-{scan_id}-{entry}.sh"
     )

@@ -502,4 +502,11 @@ Précise la mise en œuvre de D-024.
   - **même piège que pour les doublons** : en descendant dans les sous-dossiers, SQLite prenait le mauvais index et relisait toute l'analyse à chaque dossier (plus de 10 minutes pour 152 970 éléments). Ordre de jointure et index imposés : 1,4 s, avec un test du plan d'exécution. La recherche des dossiers à nettoyer utilisait la même descente et a reçu la même correction (0,36 s, puis 0,17 s) ;
   - tests : les scripts produits sont **réellement exécutés** sur une arborescence de test. Le rangement ne perd ni ne modifie rien (mêmes empreintes de contenu), **le script inverse rétablit tout à l'identique**, un fichier modifié depuis l'analyse est ignoré, une place prise n'est jamais écrasée, et un nom piégé (`$(touch PWNED) -rf.txt`) n'exécute rien ;
   - essai réel (AppImage, sous bac à sable, `dummy_folder`) : aperçu en 1,4 s, 334 déplacements, scripts valides pour bash. Les scripts n'ont pas été lancés sur `dummy_folder`.
+- **Ajustements, faits** : dans l'aperçu, chaque élément peut être laissé en place ou changé de catégorie, les dossiers de catégorie et le dossier de destination peuvent être renommés. Les ajustements passent par l'adresse de la page, sans rien enregistrer, et les deux scripts téléchargés les reprennent exactement. TreeAudit les revérifie tous :
+  - un nom de dossier est un seul nom : ni `/`, ni `\\`, ni `.` ou `..`, ni point ou tiret au début, ni caractère de contrôle, 60 caractères au plus ;
+  - une catégorie doit être l'une des catégories connues ;
+  - au plus 100 000 ajustements.
+
+  Tests : plan ajusté, puis scripts ajustés exécutés et annulés à l'identique ; noms dangereux refusés (page : message ; téléchargement : erreur 422). Essai réel (AppImage, `dummy_folder`) : `Steam` laissé en place, « Photos » renommé « Images », aperçu en 1,3 s.
+- **Le LLM ne fera que proposer** (rappel du mainteneur, à respecter pour l'étape B et au-delà) : il ne pourra jamais déplacer, modifier ni supprimer un fichier ou un dossier, ni rien lancer. Ses propositions passeront par les mêmes contrôles que les ajustements de l'utilisateur, puis par l'aperçu, et c'est l'utilisateur qui lance le script.
 - **Étape B (à venir)** : l'IA du mode expert propose des catégories plus fines (« Administratif/Factures »…), vérifiées et testées sur banc d'essai comme pour les cas douteux (D-040).
