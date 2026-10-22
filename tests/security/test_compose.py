@@ -239,3 +239,31 @@ def test_generated_disks_file_is_ignored_and_outside_the_data_dir() -> None:
     assert ".treeaudit-disks.json" in (REPO / ".gitignore").read_text(encoding="utf-8")
     launcher = (REPO / "treeaudit").read_text(encoding="utf-8")
     assert "\nDISKS_FILE=.treeaudit-disks.json\n" in launcher
+
+
+LLM_OVERRIDE = load("compose.llm.yaml")
+
+
+def test_llm_container_is_hardened_and_offline() -> None:
+    llm = LLM_OVERRIDE["services"]["llm"]
+    assert "@sha256:" in llm["image"]
+    assert llm["read_only"] is True and llm["cap_drop"] == ["ALL"]
+    assert "no-new-privileges:true" in llm["security_opt"]
+    assert not llm.get("privileged") and "ports" not in llm
+    assert llm["networks"] == ["llm"]
+    assert LLM_OVERRIDE["networks"]["llm"]["internal"] is True
+    # The GPU compute node only: never /dev, never a display or card node.
+    assert llm["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128"]
+    (volume,) = llm["volumes"]
+    assert volume["read_only"] is True and volume["target"] == "/models"
+    for flag in ("--no-webui", "--no-webui-mcp-proxy", "--offline"):
+        assert flag in llm["command"]
+    assert "--tools" not in llm["command"]
+
+
+def test_only_app_joins_the_llm_network() -> None:
+    joined = {
+        name for name, service in LLM_OVERRIDE["services"].items() if "llm" in service["networks"]
+    }
+    assert joined == {"llm", "app"}
+    assert "llm" not in str(COMPOSE["services"]["gateway"].get("networks"))

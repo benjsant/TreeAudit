@@ -40,6 +40,8 @@ from treeaudit.core.datadir import prepare_data_dir
 from treeaudit.core.errors import TreeAuditError
 from treeaudit.core.sandbox import Policy, SandboxError, restrict
 from treeaudit.filters.spec import FilterSpec
+from treeaudit.llm.bench import run_bench
+from treeaudit.llm.client import LlmClient, LlmError, client_from_environment
 from treeaudit.parasites.commands import Action
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
 from treeaudit.parasites.report import human_size
@@ -294,6 +296,13 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--path", default="", help="sous-dossier, relatif à la racine")
     bench.add_argument("--dupes", action="store_true", help="mesurer aussi les doublons")
     bench.add_argument("--micro", action="store_true", help="et le micro-nettoyage")
+
+    llm = commands.add_parser("llm", help="mode expert : LLM local (D-040)")
+    llm_commands = llm.add_subparsers(dest="llm_command", required=True)
+    llm_commands.add_parser("status", help="le LLM du mode expert répond-il ?")
+    llm_bench = llm_commands.add_parser("bench", help="mesurer le modèle sur des cas connus")
+    llm_bench.add_argument("--label", default="", help="nom du modèle, pour le tableau")
+    llm_bench.add_argument("--wait", type=float, default=300.0, help="attente du chargement (s)")
 
     commands.add_parser("serve", help="démarrer le serveur web local")
 
@@ -631,6 +640,52 @@ def _cmd_roots_list(args: argparse.Namespace) -> int:
         print(f"{status.root.id}\t{state}\t{status.root.label}\t{status.root.path}")
         if status.reason is not None:
             print(f"\t{REASON_MESSAGES[status.reason]}")
+    return EXIT_OK
+
+
+def _llm_client() -> LlmClient:
+    client = client_from_environment()
+    if client is None:
+        raise LlmError("mode expert inactif : lancer TreeAudit avec TREEAUDIT_EXPERT=1 (Docker)")
+    return client
+
+
+def _cmd_llm_status(args: argparse.Namespace) -> int:
+    client = _llm_client()
+    if client.healthy():
+        print(f"LLM prêt : {client.url}")
+        return EXIT_OK
+    print(f"LLM injoignable ou en cours de chargement : {client.url}")
+    return EXIT_ERROR
+
+
+def _cmd_llm_bench(args: argparse.Namespace) -> int:
+    client = _llm_client()
+    if not client.wait_until_ready(args.wait):
+        raise LlmError("le LLM n'est pas prêt (modèle trop long à charger ?)")
+    results = run_bench(client)
+    label = args.label or client.url
+    for result in results:
+        mark = "✔" if result.correct else ("✘ DANGEREUX" if result.dangerous else "✘")
+        verdict = (
+            f"{result.opinion.verdict} ({result.opinion.confidence} %)"
+            + (" [garde-fou]" if result.opinion.guarded else "")
+            if result.opinion
+            else f"erreur : {result.error}"
+        )
+        print(f"{mark:12} {result.case.name:36} {verdict:22} {result.seconds:5.1f} s")
+        if result.opinion:
+            for reason in result.opinion.reasons:
+                print(f"{'':14}· {reason}")
+    answered = [r for r in results if r.opinion is not None]
+    speed = sum(r.tokens_per_second for r in answered) / len(answered) if answered else 0.0
+    seconds = sum(r.seconds for r in answered) / len(answered) if answered else 0.0
+    print(
+        f"BILAN {label} : justes {sum(r.correct for r in results)}/{len(results)}, "
+        f"dangereux {sum(r.dangerous for r in results)}, "
+        f"format respecté {len(answered)}/{len(results)}, "
+        f"{speed:.0f} jetons/s, {seconds:.1f} s par avis"
+    )
     return EXIT_OK
 
 
@@ -1309,6 +1364,10 @@ def main(argv: Sequence[str] | None = None, *, sandboxed: bool = False) -> int:
             return _cmd_disks_list(args)
         if args.command == "serve":
             return _cmd_serve(args)
+        if args.command == "llm" and args.llm_command == "status":
+            return _cmd_llm_status(args)
+        if args.command == "llm" and args.llm_command == "bench":
+            return _cmd_llm_bench(args)
         if args.command == "scan" and args.scan_command == "run":
             return _cmd_scan_run(args)
         if args.command == "scan" and args.scan_command == "list":

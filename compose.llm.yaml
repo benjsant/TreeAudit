@@ -1,0 +1,59 @@
+# Expert mode: a local LLM in its own container (docs/DECISIONS.md D-040).
+#
+# ./treeaudit adds this file only when TREEAUDIT_EXPERT=1 and the chosen model
+# has been downloaded and checked (./treeaudit llm-download). The model only
+# gives opinions on metadata: it has no tool and runs nothing (CLAUDE.md, rule 8).
+#
+# - Network "llm" is internal: no route to the Internet. Only app joins it.
+# - The only device is the GPU render node (compute), never /dev nor a display.
+# - Models are read-only. No web UI, no MCP proxy, no agent tools, offline.
+
+services:
+  llm:
+    image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:a644fb651975d9dea49140302577a3b945993fd5efd3400bf89c7d525d03c103
+    user: "${TREEAUDIT_UID:?start TreeAudit with ./treeaudit}:${TREEAUDIT_GID:?start TreeAudit with ./treeaudit}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:size=256m,mode=1777"]
+    pids_limit: 256
+    networks: [llm]
+    devices: ["/dev/dri/renderD128:/dev/dri/renderD128"]
+    environment:
+      # Vulkan's shader cache goes to the tmpfs, the image is read-only.
+      HOME: /tmp
+      XDG_CACHE_HOME: /tmp/cache
+    volumes:
+      - type: bind
+        source: ./models
+        target: /models
+        read_only: true
+        bind:
+          create_host_path: false
+    command:
+      - --model
+      - "/models/${TREEAUDIT_LLM_MODEL:?choose a model: ./treeaudit llm-download}"
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --gpu-layers
+      - "999"
+      - --ctx-size
+      - "8192"
+      - --parallel
+      - "1"
+      - --no-webui
+      - --no-webui-mcp-proxy
+      - --offline
+    restart: "no"
+
+  app:
+    networks: [internal, llm]
+    environment:
+      TREEAUDIT_LLM_URL: http://llm:8080
+
+networks:
+  # No route outside the host: the LLM can reach nothing, only app reaches it.
+  llm:
+    internal: true

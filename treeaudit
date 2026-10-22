@@ -23,7 +23,7 @@ die() { say "$@"; exit 1; }
 # in a .env file (OLD, EXPERIMENTAL mode, not tested any more).
 SETTINGS=(TREEAUDIT_ROOT_PATH TREEAUDIT_ALLOW_SYSTEM_VOLUME TREEAUDIT_PORT
           TREEAUDIT_ARCHIVE_PATH TREEAUDIT_EXTERNAL_DISKS TREEAUDIT_INTERNAL_DISKS
-          TREEAUDIT_HOME TREEAUDIT_UID TREEAUDIT_GID)
+          TREEAUDIT_HOME TREEAUDIT_EXPERT TREEAUDIT_LLM_MODEL TREEAUDIT_UID TREEAUDIT_GID)
 for name in "${SETTINGS[@]}"; do
     printf -v "$name" '%s' "${!name:-}"
 done
@@ -114,6 +114,19 @@ if [[ $TREEAUDIT_EXTERNAL_DISKS == 1 ]]; then
     EXTERNAL=1
     COMPOSE+=(-f "$DISKS_FILE")
 fi
+# Expert mode (D-040): a local LLM in its own container, internal network only.
+# Models: name, file, address, SHA-256. A file is put in place only once checked.
+MODELS=(
+    "ministral|Ministral-3-3B-Instruct-2512-Q4_K_M.gguf|https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf|9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8"
+    "qwen3|Qwen3-4B-Instruct-2507-Q4_K_M.gguf|https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf|3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"
+    "gemma3|gemma-3-4b-it-Q4_K_M.gguf|https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf|882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863"
+)
+COMPOSE_LLM=("${COMPOSE[@]}" -f compose.llm.yaml)
+if [[ $TREEAUDIT_EXPERT == 1 ]]; then
+    [[ -n $TREEAUDIT_LLM_MODEL && -f models/$TREEAUDIT_LLM_MODEL ]] ||
+        die "Mode expert : modèle absent. ./treeaudit llm-download, puis TREEAUDIT_LLM_MODEL=<fichier>"
+    COMPOSE=("${COMPOSE_LLM[@]}")
+fi
 DEV=("${COMPOSE_BASE[@]}" run --rm dev)
 
 # --- Preparation, on the host -----------------------------------------------
@@ -189,7 +202,47 @@ check_roots() {
 cmd_start() {
     check_roots >&2
     say "TreeAudit : http://127.0.0.1:${TREEAUDIT_PORT:-8765}  (Ctrl+C pour arrêter)"
+    if [[ $TREEAUDIT_EXPERT == 1 ]]; then
+        say "Mode expert : LLM local ($TREEAUDIT_LLM_MODEL), sans accès à Internet"
+        exec "${COMPOSE[@]}" up app gateway llm
+    fi
     exec "${COMPOSE[@]}" up app gateway
+}
+
+# Download the models (all, or the ones named), each checked before use.
+cmd_llm_download() {
+    local entry name file url sum wanted=" $* "
+    mkdir -p -m 700 models
+    for entry in "${MODELS[@]}"; do
+        IFS='|' read -r name file url sum <<<"$entry"
+        [[ $# -eq 0 || $wanted == *" $name "* ]] || continue
+        if [[ -f models/$file ]]; then
+            say "$name : déjà présent"
+            continue
+        fi
+        say "$name : téléchargement de $file"
+        curl -fL --proto '=https' --tlsv1.2 --retry 3 -C - -o "models/.$file.partial" "$url"
+        if ! printf '%s  %s\n' "$sum" "models/.$file.partial" | sha256sum --check --status; then
+            die "$name : empreinte SHA-256 incorrecte, fichier écarté (models/.$file.partial)"
+        fi
+        mv -f -- "models/.$file.partial" "models/$file"
+        say "$name : vérifié ($sum)"
+    done
+}
+
+# Measure each downloaded model on the known cases, one after the other.
+cmd_llm_bench() {
+    local entry name file url sum wanted=" $* "
+    check_roots >&2
+    for entry in "${MODELS[@]}"; do
+        IFS='|' read -r name file url sum <<<"$entry"
+        [[ $# -eq 0 || $wanted == *" $name "* ]] || continue
+        [[ -f models/$file ]] || { say "$name : absent (./treeaudit llm-download $name)"; continue; }
+        say "== $name"
+        TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" up -d llm >&2
+        TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" run --rm -T app llm bench --label "$name" || true
+        TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" rm -sf llm >&2
+    done
 }
 
 cmd_stop() { exec "${COMPOSE_BASE[@]}" down; }
@@ -291,6 +344,11 @@ Développement :
   lock               Met à jour uv.lock (réseau nécessaire)
   appimage           Construit dist/TreeAudit-x86_64.AppImage (dans Docker)
 
+Mode expert (LLM local, Docker seulement) :
+  llm-download [nom] Télécharge et vérifie les modèles (ministral, qwen3, gemma3)
+  llm-bench [nom]    Mesure les modèles sur des cas connus
+  TREEAUDIT_EXPERT=1 TREEAUDIT_LLM_MODEL=<fichier> ./treeaudit
+
 Ancien mode, expérimental, non testé :
   env                Crée un fichier .env (inutile pour l'usage normal)
 EOF
@@ -308,6 +366,8 @@ case "$command" in
     build) build ;;
     lock) cmd_lock ;;
     appimage) cmd_appimage ;;
+    llm-download) cmd_llm_download "$@" ;;
+    llm-bench) cmd_llm_bench "$@" ;;
     test) exec "${DEV[@]}" pytest "$@" ;;
     lint) cmd_lint ;;
     format) exec "${DEV[@]}" ruff format . ;;

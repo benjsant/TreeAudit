@@ -9,6 +9,8 @@ Commencer par le minimum, verrouiller les versions avec empreintes (`uv.lock`, D
 | `ghcr.io/astral-sh/uv` | Résolution, verrouillage et installation des dépendances | Épinglée par version et digest ; absente de l'image finale |
 | Python autonome (python-build-standalone) | Interpréteur embarqué dans l'AppImage (D-038) | Téléchargé et vérifié par `uv python install` (version de uv épinglée) |
 | `squashfs-tools` (Debian) | Image compressée de l'AppImage | Paquet signé de l'image de construction, absent de l'AppImage |
+| `ghcr.io/ggml-org/llama.cpp:server-vulkan` | Mode expert : serveur du LLM local (D-040), avec la carte graphique | Épinglée par empreinte ; conteneur sans Internet, en lecture seule ; jamais dans l'AppImage |
+| Modèles GGUF (Ministral 3 3B, Qwen3 4B, Gemma 3 4B) | Mode expert : candidats comparés (D-040) | Téléchargés à la demande dans `models/`, vérifiés par SHA-256 ; ignorés par git |
 | AppImage type2-runtime | Programme de démarrage de l'AppImage (statique, sans `libfuse2`) | Épinglé par empreinte SHA-256 : un changement arrête la construction |
 
 ## Bibliothèque standard — priorité
