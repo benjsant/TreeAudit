@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}TreeAudit{% endblock %} · TreeAudit</title>
+  <script src="/static/theme.js"></script>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/app.js" defer></script>
 </head>
@@ -14,6 +15,7 @@
     <nav class="top-links">
       {% if archive.enabled %}<a class="button small" href="/archives">🗜 Mes archives</a>{% endif %}
       <a class="button small" href="/scan/new">+ Nouvelle analyse</a>
+      <button type="button" class="button small" data-theme-toggle title="Thème : suit le système">🌓 Auto</button>
       {% if can_quit %}<button type="button" class="button small" data-quit>⏻ Quitter</button>{% endif %}
     </nav>
   </header>

@@ -261,8 +261,10 @@ cmd_lock() {
 # "&&" list (as in "check"), so a failure must be propagated explicitly.
 # The AppImage (D-038), built in Docker: nothing is installed on the host.
 cmd_appimage() {
+    # Built next to it, then renamed: a running AppImage keeps its own file.
     docker buildx build -f docker/appimage.Dockerfile --target out \
-        --output type=local,dest=dist .
+        --output type=local,dest=dist/.build .
+    mv -f -- dist/.build/TreeAudit-x86_64.AppImage dist/TreeAudit-x86_64.AppImage
     say "AppImage : $HERE/dist/TreeAudit-x86_64.AppImage"
 }
 

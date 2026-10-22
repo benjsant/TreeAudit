@@ -16,7 +16,8 @@ URL="http://127.0.0.1:$PORT/"
 # True when TreeAudit itself answers on the port (not another program).
 treeaudit_running() {
     local reply
-    exec 3<>"/dev/tcp/127.0.0.1/$PORT" 2>/dev/null || return 1
+    # Braces: the redirection silences a refused connection, and only that.
+    { exec 3<>"/dev/tcp/127.0.0.1/$PORT"; } 2>/dev/null || return 1
     printf 'GET /health HTTP/1.0\r\nHost: 127.0.0.1:%s\r\n\r\n' "$PORT" >&3
     reply="$(timeout 2 cat <&3 || true)"
     exec 3<&-

@@ -6,12 +6,22 @@
   --ok: #2f7a4b; --warn: #94600b; --bad: #b3332b; --code: #eef1ee;
   --radius: 14px;
 }
+/* Theme: follows the system unless chosen in the header (data-theme on <html>,
+   set by theme.js before the page is drawn). */
+:root[data-theme="light"] { color-scheme: light; }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #141816; --fg: #e8ece9; --muted: #a3ada7; --line: #2c3430; --panel: #1c2220;
     --accent: #6cc495; --accent-fg: #0f1a14; --accent-soft: #1f3128;
     --ok: #74d39c; --warn: #f0b860; --bad: #ff8f86; --code: #252c29;
   }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #141816; --fg: #e8ece9; --muted: #a3ada7; --line: #2c3430; --panel: #1c2220;
+  --accent: #6cc495; --accent-fg: #0f1a14; --accent-soft: #1f3128;
+  --ok: #74d39c; --warn: #f0b860; --bad: #ff8f86; --code: #252c29;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }

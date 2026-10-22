@@ -144,6 +144,21 @@ def test_static_files(client: TestClient) -> None:
     assert not re.search(r"\.(inner|outer)HTML\s*=|insertAdjacentHTML|document\.write", script)
 
 
+def test_theme_choice(client: TestClient) -> None:
+    page = client.get("/").text
+    # Applied in <head>, before the stylesheet and without "defer": no flash.
+    head = page.split("</head>")[0]
+    assert '<script src="/static/theme.js"></script>' in head
+    assert head.index("theme.js") < head.index("app.css")
+    assert "data-theme-toggle" in page
+    theme = client.get("/static/theme.js")
+    assert theme.headers["content-type"].startswith("text/javascript")
+    assert "localStorage" in theme.text and "try" in theme.text
+    css = client.get("/static/app.css").text
+    assert ':root[data-theme="dark"]' in css
+    assert ':root:not([data-theme="light"])' in css
+
+
 def test_foreign_host_rejected_on_pages(client: TestClient) -> None:
     assert client.get("/", headers={"Host": "evil.example"}).status_code == 400
 

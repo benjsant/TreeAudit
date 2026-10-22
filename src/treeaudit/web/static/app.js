@@ -493,6 +493,39 @@ function setupCommandBuilders() {
   }
 }
 
+// --- theme: auto (system), light or dark ---------------------------------------------------
+
+const THEMES = [
+  { value: "auto", label: "🌓 Auto", title: "Thème : suit le système" },
+  { value: "light", label: "☀️ Clair", title: "Thème : clair" },
+  { value: "dark", label: "🌙 Sombre", title: "Thème : sombre" },
+];
+
+function setupTheme() {
+  const button = document.querySelector("[data-theme-toggle]");
+  if (!button) return;
+  const root = document.documentElement;
+  const show = () => {
+    const current = THEMES.find((t) => t.value === (root.dataset.theme || "auto"));
+    button.textContent = current.label;
+    button.title = `${current.title} (cliquer pour changer)`;
+  };
+  button.addEventListener("click", () => {
+    const index = THEMES.findIndex((t) => t.value === (root.dataset.theme || "auto"));
+    const next = THEMES[(index + 1) % THEMES.length].value;
+    if (next === "auto") delete root.dataset.theme;
+    else root.dataset.theme = next;
+    try {
+      if (next === "auto") window.localStorage.removeItem("treeaudit-theme");
+      else window.localStorage.setItem("treeaudit-theme", next);
+    } catch (error) {
+      // Not remembered in this browser: the choice lasts for this page only.
+    }
+    show();
+  });
+  show();
+}
+
 // --- quitting (native mode, no terminal: D-038) -------------------------------------------
 
 function setupQuit() {
@@ -517,6 +550,7 @@ function setupQuit() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  setupTheme();
   setupQuit();
   setupStartButtons();
   setupArchiveButtons();

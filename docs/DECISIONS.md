@@ -401,3 +401,10 @@ Précise la mise en œuvre de D-024.
   - **bouton « Quitter »** (natif seulement : sans terminal, pas de Ctrl+C) : `POST /api/quit`, avec la protection CSRF habituelle. Il annule d'abord la tâche en cours ; une archive retire alors son fichier partiel ;
   - **une erreur trouvée en route** : `uv` désigne Python par un lien symbolique, et la copie avait pris le lien au lieu du dossier (AppImage de 948 Ko). Le contrôle de construction vérifie désormais que le Python embarqué est bien celui de l'AppImage (`sys.prefix`) ;
   - essai réel sur l'hôte : 34 Mo ; analyse en ligne de commande et par l'interface sous bac à sable (Landlock ABI 10) ; « Quitter » arrête le serveur ; un second lancement reconnaît le TreeAudit déjà ouvert.
+
+## D-039 — Thème clair, sombre ou automatique (2026-10-22)
+- **Demande du mainteneur** : pouvoir choisir le mode clair ou sombre.
+- Trois choix dans l'en-tête : **Auto** (suit le système, par défaut), **Clair**, **Sombre**. Le bouton passe de l'un à l'autre.
+- Le choix est gardé dans le navigateur (`localStorage`, une préférence d'affichage, pas une donnée). Si le navigateur refuse le stockage, il dure le temps de la page.
+- `static/theme.js`, chargé dans `<head>` sans `defer`, applique le choix **avant l'affichage** : aucun éclair de la mauvaise couleur. Il n'y a toujours aucun code intégré dans les pages (CSP).
+- Les couleurs restent des variables CSS ; le mode sombre est défini pour le système (`prefers-color-scheme`, sauf choix « Clair ») et pour le choix « Sombre ».
