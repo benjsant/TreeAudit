@@ -969,3 +969,41 @@ def test_disks_plugged_in_while_running_are_offered(
 def test_docker_mode_says_to_restart(client: TestClient) -> None:
     page = client.get("/scan/new").text
     assert "🔄 Actualiser" not in page
+
+
+# --- tidying (D-041) ------------------------------------------------------------------------
+
+
+def test_organize_preview_and_scripts(client: TestClient, scanned: int) -> None:
+    import shlex
+
+    page = client.get(f"/scans/{scanned}/organize")
+    assert page.status_code == 200
+    assert_safe_html(page.text)
+    assert "Rien n'est modifié" in page.text and "Rangé" in page.text
+    assert "Photos" in page.text and "Projets" in page.text  # photos/, and app/ (package.json)
+    assert "&lt;svg onload=alert(2)&gt;" in page.text  # a hostile project name, escaped
+
+    script = client.get(f"/export/scans/{scanned}/organize.sh")
+    assert script.status_code == 200
+    assert script.headers["content-disposition"].startswith("attachment;")
+    assert script.headers["content-type"].startswith("text/x-shellscript")
+    text = script.text
+    assert f"cd -- {shlex.quote(DISPLAY)} || exit 1" in text
+    # Hostile names reach the script as single, quoted words.
+    moves = [
+        shlex.split(line) for line in text.splitlines() if line.startswith(("file ", "folder "))
+    ]
+    assert ["folder", "app", "Rangé/Projets/app"] in moves
+    assert ["folder", XSS_DIR, f"Rangé/Projets/{XSS_DIR}"] in moves
+    assert any(w[:2] == ["folder", "photos"] and w[2].startswith("Rangé/Photos/") for w in moves)
+    assert "rm " not in text and "rm -" not in text
+
+    undo = client.get(f"/export/scans/{scanned}/organize-undo.sh")
+    assert undo.status_code == 200 and "back " in undo.text
+    assert "rmdir --" in undo.text and "rm -" not in undo.text
+
+    assert client.get(f"/scans/{scanned}/organize?dir=999999").status_code == 404
+    assert client.get(f"/export/scans/{scanned}/organize.sh?dir=999999").status_code == 404
+    space = client.get(f"/scans/{scanned}/space").text
+    assert "🗂 Ranger ce dossier" in space

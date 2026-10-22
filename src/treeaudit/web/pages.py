@@ -31,6 +31,7 @@ from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.filters.search import Sort, search
 from treeaudit.filters.spec import FilterError, compile_filter, describe
+from treeaudit.organize import plan as organize_plan
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.commands import recreate_command
 from treeaudit.parasites.detect import Band
@@ -38,6 +39,7 @@ from treeaudit.parasites.report import human_size
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
 from treeaudit.scanner.walker import SubpathError, parse_subpath
+from treeaudit.shellcmd import host_path, safe_root
 from treeaudit.web import explorer, queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, browse_root, root_display
 from treeaudit.web.live import refresh_roots
@@ -385,6 +387,51 @@ def entry_page(request: Request, scan_id: int, entry_id: int, conn: Db, config: 
         parent=parent,
         crumbs=queries.breadcrumb(conn, scan_id, parent) if parent is not None else [],
         dupes_run=explorer.latest_dupes_run(conn, scan_id),
+    )
+
+
+@router.get("/scans/{scan_id}/organize")
+def organize_page(
+    request: Request,
+    scan_id: int,
+    conn: Db,
+    config: Config,
+    dir: Annotated[int | None, Query(ge=1)] = None,
+) -> Response:
+    """Tidying (D-041): the plan and a preview of the result; nothing is changed."""
+    scan = _scan_or_404(conn, scan_id)
+    node = (
+        queries.start_node(conn, scan_id) if dir is None else queries.get_node(conn, scan_id, dir)
+    )
+    if node is None or node.kind != "dir":
+        raise HTTPException(404, "Ce dossier n'existe pas dans cette analyse.")
+    plan, error = None, None
+    try:
+        plan = organize_plan.make_plan(conn, scan_id, node.entry_id)
+    except organize_plan.PlanTooLargeError:
+        error = (
+            f"Ce dossier contient plus de {organize_plan.MAX_ENTRIES:,} éléments : "
+            "choisis un sous-dossier dans l'explorateur.".replace(",", "\u202f")
+        )
+    folder = host_path(root_display(config, scan), node.rel_path)
+    by_category: dict[str, list[Any]] = {}
+    if plan is not None:
+        for move in plan.moves:
+            by_category.setdefault(move.category, []).append(move)
+    return render(
+        request,
+        "organize.html",
+        scan=scan,
+        title=analysis_title(config, scan),
+        node=node,
+        crumbs=queries.breadcrumb(conn, scan_id, node),
+        plan=plan,
+        error=error,
+        folder=folder,
+        destination=organize_plan.DESTINATION,
+        by_category=by_category,
+        scripts_possible=safe_root(folder),
+        shown_per_category=30,
     )
 
 

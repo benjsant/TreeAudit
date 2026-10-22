@@ -23,8 +23,12 @@ from treeaudit.db.connection import connect
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.filters.search import Sort, search
 from treeaudit.filters.spec import FilterError, compile_filter, describe
+from treeaudit.organize.plan import PlanTooLargeError, make_plan
+from treeaudit.organize.script import tidy_script, undo_script
 from treeaudit.parasites.cached import parasite_findings
-from treeaudit.web.api import Config, Db
+from treeaudit.shellcmd import host_path, safe_root
+from treeaudit.web import queries
+from treeaudit.web.api import Config, Db, root_display
 from treeaudit.web.search_form import SearchForm, spec_from_form
 
 router = APIRouter(prefix="/export")
@@ -277,4 +281,55 @@ def search_csv(scan_id: int, conn: Db, form: Annotated[SearchForm, Query()]) -> 
         f"treeaudit-scan{scan_id}-search.csv",
         ["path", "kind", "size", "mtime_ns"],
         [*rows, *[(a, b, "", "") for a, b in notes]],
+    )
+
+
+def _organize(
+    conn: Any, config: Any, scan_id: int, dir_id: int | None
+) -> tuple[Any, str, dict[str, Any]]:
+    scan = _scan(conn, scan_id)
+    node = (
+        queries.start_node(conn, scan_id)
+        if dir_id is None
+        else queries.get_node(conn, scan_id, dir_id)
+    )
+    if node is None or node.kind != "dir":
+        raise HTTPException(404, "dossier inconnu")
+    folder = host_path(root_display(config, scan), node.rel_path)
+    if not safe_root(folder):
+        raise HTTPException(422, "chemin du dossier impossible à écrire sans ambiguïté")
+    try:
+        plan = make_plan(conn, scan_id, node.entry_id)
+    except PlanTooLargeError as exc:
+        raise HTTPException(422, "dossier trop grand : choisir un sous-dossier") from exc
+    meta = {
+        "title": f"rangement de {folder}",
+        "scan_id": scan_id,
+        "date": str(scan["started_at"])[:10],
+    }
+    return plan, folder, meta
+
+
+def _script(text: str, filename: str) -> Response:
+    # A download, never shown inline: the user saves it, reads it, runs it.
+    return Response(
+        text, media_type="text/x-shellscript; charset=utf-8", headers=_download(filename)
+    )
+
+
+@router.get("/scans/{scan_id}/organize.sh")
+def organize_script(
+    scan_id: int, conn: Db, config: Config, dir: Annotated[int | None, Query(ge=1)] = None
+) -> Response:
+    plan, folder, meta = _organize(conn, config, scan_id, dir)
+    return _script(tidy_script(plan, folder, **meta), f"treeaudit-ranger-{scan_id}-{dir or 0}.sh")
+
+
+@router.get("/scans/{scan_id}/organize-undo.sh")
+def organize_undo_script(
+    scan_id: int, conn: Db, config: Config, dir: Annotated[int | None, Query(ge=1)] = None
+) -> Response:
+    plan, folder, meta = _organize(conn, config, scan_id, dir)
+    return _script(
+        undo_script(plan, folder, **meta), f"treeaudit-annuler-rangement-{scan_id}-{dir or 0}.sh"
     )

@@ -133,6 +133,15 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Messages : disques trouvés au démarrage ; « branché et ouvert ».
 - [x] Essai réel : `/mnt/Data` proposé comme partition interne, `data/` reconnu par identité ; dossier personnel monté en lecture seule, `.ssh` et `.mozilla` cachés.
 
+## Phase 10 — Ranger un dossier (D-041)
+- [x] Étape A, sans IA : plan (projets et logiciels en bloc, dossiers homogènes gardés, fichiers en vrac par type et année), aperçu, script de rangement et script d'annulation, testés en les exécutant.
+- [ ] Étape B : catégories plus fines proposées par l'IA (mode expert), sur banc d'essai.
+
+## Phase 9 bis — Mode expert, LLM local (D-040)
+- [x] Étape 1 : conteneur llama.cpp (Vulkan) sans Internet, téléchargement vérifié des modèles, banc d'essai ; Ministral 3 3B retenu (16/16, aucune réponse dangereuse).
+- [ ] Second jeu de cas, écrit à part, pour confirmer.
+- [ ] Étape 2 : « Avis de l'IA » sur les dossiers douteux, dans l'interface.
+
 ## Phase 6 septies — Explorateur et panier (D-036)
 - [x] Explorateur : tri, pages, dates, repères (à nettoyer, en double, protégé).
 - [x] Fiche d'un élément (autres copies, raison des repères).

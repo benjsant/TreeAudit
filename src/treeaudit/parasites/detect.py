@@ -154,7 +154,9 @@ class _Evaluator:
         sql = (
             "WITH RECURSIVE sub(id) AS ("  # noqa: S608 - constant fragments only, values bound
             "SELECT entry_id FROM entry WHERE scan_id = ? AND parent_id = ? "
-            "UNION ALL SELECT e.entry_id FROM entry e JOIN sub "
+            # Forced, as in organize/plan.py: SQLite otherwise walks down with the
+            # inode index, reading every entry of the analysis at each level.
+            "UNION ALL SELECT e.entry_id FROM sub CROSS JOIN entry e INDEXED BY entry_by_parent "
             "ON e.scan_id = ? AND e.parent_id = sub.id) "
             f"SELECT {columns} FROM entry WHERE scan_id = ? AND kind = 'file' "
             f"AND entry_id IN sub {condition}"

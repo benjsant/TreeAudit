@@ -68,8 +68,9 @@ Double-clique sur le fichier, ou lance-le dans un terminal. Le navigateur s'ouvr
 2. **Analyse** : la progression s'affiche, et tu peux annuler.
 3. **Bilan** : ce qui peut être nettoyé sans risque, les doublons, où va la place, et une recherche.
 4. **Explorer** : « 📂 Explorer les fichiers » se parcourt comme un gestionnaire de fichiers. Chaque élément porte ses repères (🧹 à nettoyer, 📑 en double, 🛡 protégé), et ⓘ ouvre sa fiche. Coche ce que tu veux dans n'importe quels dossiers : tout va dans le **🧺 panier**, qui prépare la commande.
-5. **Archiver si besoin** : « 🗜 Archiver » crée une copie compressée et vérifiée du dossier. Tu la retrouves dans « 🗜 Mes archives ».
-6. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
+5. **Ranger** : « 🗂 Ranger ce dossier » (dans l'explorateur) propose un rangement par catégories (Photos/2019, Documents, Projets…), avec un aperçu du résultat. Tu télécharges le script qui fait le rangement, et celui qui l'annule. Rien n'est écrasé, et un fichier modifié depuis l'analyse est laissé en place.
+6. **Archiver si besoin** : « 🗜 Archiver » crée une copie compressée et vérifiée du dossier. Tu la retrouves dans « 🗜 Mes archives ».
+7. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
 
 ### Qu'est-ce qui est proposé ?
 

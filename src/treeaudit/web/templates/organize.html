@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Ranger · {{ title }}{% endblock %}
+{% block content %}
+<p class="back"><a href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}">← Explorateur</a></p>
+<h1>🗂 Ranger</h1>
+<nav class="crumbs" aria-label="Dossier à ranger">
+  {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/organize?dir={{ crumb.entry_id }}">{{ crumb.name or title }}</a>{% endfor %}
+</nav>
+<p class="lead">Aperçu du rangement proposé. <strong>Rien n'est modifié</strong> : TreeAudit prépare un script que tu relis et lances toi-même, et le script qui remet tout comme avant.</p>
+{% if scan.status != "complete" %}<p class="notice warn" role="alert">L'analyse n'a pas pu tout voir : le plan peut être incomplet.</p>{% endif %}
+
+{% if error %}
+  <p class="notice warn">{{ error }}</p>
+{% elif not plan.moves %}
+  <p class="notice info">Rien à ranger ici.</p>
+{% else %}
+  <section class="panel">
+    <p>Tout irait dans <span class="path"><strong>{{ folder }}/{{ destination }}</strong></span> :</p>
+    <table>
+      <tbody>
+      {% for name, total in plan.categories().items() %}
+        <tr><td><strong>{{ name }}</strong></td><td class="num">{{ total[0] | number }} élément(s)</td><td class="num">{{ total[1] | number }} fichier(s)</td><td class="num">{{ total[2] | size }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <ul class="plain small muted">
+      <li>📁 Les albums et dossiers d'un seul type gardent leur nom ; les projets, jeux et logiciels sont déplacés en entier.</li>
+      <li>Les photos et vidéos sont classées par année (date de modification).</li>
+      {% if plan.renamed %}<li>⚠ {{ plan.renamed | length }} élément(s) portent le même nom qu'un autre : ils recevront un numéro « (2) ».</li>{% endif %}
+    </ul>
+  </section>
+
+  <h2>Aperçu du résultat</h2>
+  {% for name, moves in by_category.items() %}
+  <details class="group-band"{% if loop.first %} open{% endif %}>
+    <summary><strong>{{ destination }}/{{ name }}</strong> — {{ moves | length | number }} élément(s)</summary>
+    <ul class="plain small">
+    {% for move in moves[:shown_per_category] %}
+      <li>{{ "📁" if move.kind == "dir" else "📄" }} <span class="path">{{ move.target[destination | length + 1:] }}</span>{% if move.renamed %} <span class="badge">renommé</span>{% endif %}<br><span class="muted">depuis <span class="path">{{ move.source }}</span> · {{ move.reason }}{% if move.kind == "dir" %} · {{ move.files | number }} fichier(s){% endif %}</span></li>
+    {% endfor %}
+    </ul>
+    {% if moves | length > shown_per_category %}<p class="muted small">… et {{ (moves | length) - shown_per_category }} autre(s) : tout est dans le script.</p>{% endif %}
+  </details>
+  {% endfor %}
+
+  {% if plan.kept %}
+  <details class="tech">
+    <summary>Ce qui reste en place ({{ plan.kept | length | number }})</summary>
+    <ul class="plain small">{% for kept in plan.kept[:200] %}<li><span class="path">{{ kept.path }}</span> — {{ kept.reason }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+
+  <section class="panel final-step">
+    <h2>Dernière étape</h2>
+    {% if scripts_possible %}
+    <ol class="howto">
+      <li>Télécharge les deux scripts : <a class="button small primary" href="/export/scans/{{ scan.id }}/organize.sh?dir={{ node.entry_id }}">📥 Script de rangement</a> <a class="button small" href="/export/scans/{{ scan.id }}/organize-undo.sh?dir={{ node.entry_id }}">📥 Script d'annulation</a></li>
+      <li>Ouvre-les dans un éditeur de texte et relis-les.</li>
+      <li>Dans un terminal : <code class="cmd">bash ~/Téléchargements/treeaudit-ranger-{{ scan.id }}-{{ node.entry_id }}.sh</code></li>
+    </ol>
+    <p class="muted small">Le script vérifie chaque élément avant de le déplacer (toujours là, pas modifié depuis l'analyse, place libre) et n'écrase jamais rien. Garde le script d'annulation : il remet tout comme avant.</p>
+    {% else %}
+    <p class="notice warn">Le chemin de ce dossier ne peut pas être écrit sans ambiguïté dans un script : pas de commande possible.</p>
+    {% endif %}
+  </section>
+{% endif %}
+{% endblock %}

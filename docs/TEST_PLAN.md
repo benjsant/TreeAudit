@@ -77,6 +77,11 @@
 - Web : liste des disques avec leur occupation, liste des disques non proposés, nom piégé, analyse d'un disque, conseil d'activation quand l'option est désactivée.
 - Réel : détection par Docker (`/mnt/Data` refusé), disque forgé refusé dans le conteneur, mode « un dossier » inchangé.
 
+## Ranger (D-041)
+- Plan : album gardé en entier, projet et installation Steam jamais découpés, fichiers en vrac par type et année, collisions renommées « (2) », éléments cachés, liens et dossiers vides laissés en place.
+- Scripts exécutés pour de vrai sur une arborescence de test : rangement sans perte (empreintes identiques), annulation à l'identique, fichier modifié ignoré, place prise jamais écrasée, nom piégé sans effet.
+- Plan d'exécution de la descente dans les sous-dossiers (index des parents), page d'aperçu et téléchargements avec des noms piégés.
+
 ## Mode natif sous bac à sable (D-038)
 - Sonde dans un processus enfant : écriture, modification, suppression, création, renommage, `chmod`, `utime`, `setxattr` et `chown` hors des dossiers autorisés ; écoute sur un autre port ; TCP sortant, UDP, Unix, netlink ; signal ; `exec`. Tout est refusé ; ce qui est autorisé fonctionne.
 - Analyse, doublons et archive vérifiée sous bac à sable ; serveur web et analyse par l'API ; commande `scan run` par le vrai point d'entrée.
