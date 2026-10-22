@@ -77,6 +77,16 @@
 - Web : liste des disques avec leur occupation, liste des disques non proposés, nom piégé, analyse d'un disque, conseil d'activation quand l'option est désactivée.
 - Réel : détection par Docker (`/mnt/Data` refusé), disque forgé refusé dans le conteneur, mode « un dossier » inchangé.
 
+## Cet ordinateur (D-037)
+- Faux sysfs : partition de données du disque système proposée comme interne, y compris sous LUKS ; système de fichiers du système remonté ailleurs, ou LUKS du système, refusés ; sans les partitions du système, rien n'est proposé sur ce disque.
+- Conteneur : partition interne acceptée, refusée si elle est annoncée comme externe, refusée si c'est une partition du système ; aller-retour JSON des nouveaux champs, valeurs forgées rejetées.
+- Parcours : dossier de TreeAudit écarté par identité, même renommé ; chemins privés jamais examinés (aucun `stat`) ; analyse impossible à commencer dans l'un ou l'autre.
+- Analyse : disque détecté qui contient TreeAudit (exclusions enregistrées) ; racine déclarée qui le contient toujours refusée ; dossier personnel accepté en entier, mais refusé s'il est déclaré à la main.
+- Archive : dossier contenant TreeAudit ou des secrets refusé avant écriture ; un sous-dossier, accepté.
+- Web : section « Sur cet ordinateur », sélecteur sans dossiers privés ni dossier de TreeAudit, dossiers qui les contiennent marqués « protégé » et signalés dans le panier.
+- Lanceur : dossier personnel et partitions internes activés par défaut, désactivables ; chemin du dossier personnel toujours tiré de `$HOME` (réel) ; Compose en lecture seule récursive.
+- Réel : `/mnt/Data` proposé et `data/` reconnu par identité dans le conteneur ; montages vérifiés en lecture seule par `statvfs` ; `.ssh` et `.mozilla` cachés.
+
 ## Explorateur et panier (D-036)
 - Explorateur : tri par taille, nom (dossiers d'abord) et date ; tri inconnu refusé ; pages ; repères « à nettoyer », « en double » (après une recherche de doublons seulement) et « protégé » ; noms piégés échappés ; pas de case pour le dossier analysé.
 - Fiche : autres copies d'un doublon, lien symbolique non suivi, élément protégé, élément ou analyse inconnus (404).

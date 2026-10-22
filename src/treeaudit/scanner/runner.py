@@ -9,11 +9,11 @@ import threading
 from dataclasses import dataclass, field
 
 from treeaudit.core.config import AppConfig, RootConfig
-from treeaudit.core.datadir import ScanLock, prepare_data_dir
+from treeaudit.core.datadir import ScanLock, own_dirs, prepare_data_dir
 from treeaudit.db import scans
 from treeaudit.db.connection import connect
 from treeaudit.roots.mountinfo import MountTable
-from treeaudit.roots.validation import ValidationContext, validate_root
+from treeaudit.roots.validation import ValidationContext, validate_configured_root
 from treeaudit.scanner.models import (
     DirDone,
     EntryKind,
@@ -103,6 +103,7 @@ def run_scan(
     cancel: threading.Event,
     progress: ScanProgress | None = None,
     batch_size: int = scans.DEFAULT_BATCH_SIZE,
+    own_dirs: frozenset[tuple[int, int]] = frozenset(),
 ) -> ScanOutcome:
     """Scan one root (or a sub-folder of it) and record the result.
 
@@ -112,7 +113,7 @@ def run_scan(
     root = request.root
     subpath = parse_subpath(request.subpath)
     # Revalidate right before scanning: the root may have changed since startup.
-    validate_root(root.path, ctx, allow_system_volume=root.allow_system_volume)
+    validate_configured_root(root, ctx)
     root_stat = os.lstat(root.path)
     options = WalkOptions(
         root_path=root.path,
@@ -120,6 +121,8 @@ def run_scan(
         cross_mounts=root.cross_mounts,
         max_depth=request.max_depth,
         expected_root=(root_stat.st_dev, root_stat.st_ino),
+        own_dirs=own_dirs,
+        private_paths=root.private_paths,
     )
     scan_id = scans.create_scan(
         conn,
@@ -217,6 +220,13 @@ def execute_scan(
             recovered = scans.fail_interrupted_scans(conn)
             if recovered:
                 logger.warning("%d interrupted scan(s) marked as failed", recovered)
-            return run_scan(conn, request, ctx=ctx, cancel=cancel, progress=progress)
+            return run_scan(
+                conn,
+                request,
+                ctx=ctx,
+                cancel=cancel,
+                progress=progress,
+                own_dirs=own_dirs(config.data_dir, config.archive_dir),
+            )
         finally:
             conn.close()

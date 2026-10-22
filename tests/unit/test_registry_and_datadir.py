@@ -96,3 +96,40 @@ def test_prepare_data_dir_refuses_symlink(tmp_path: Path) -> None:
 def test_prepare_data_dir_refuses_relative_path() -> None:
     with pytest.raises(ConfigError, match="absolute"):
         prepare_data_dir("data")
+
+
+# --- personal folder (D-037) -------------------------------------------------------------
+
+
+def test_personal_folder_in_the_container_comes_from_the_launcher() -> None:
+    from treeaudit.roots.personal import CONTAINER_HOME_DIR, HOME_PATH_ENV_VAR, PRIVATE_PATHS
+    from treeaudit.roots.registry import with_personal_folder
+
+    config = AppConfig(data_dir="/data", roots=(), container_mode=True)
+    assert with_personal_folder(config, {}, None) == config
+    assert with_personal_folder(config, {HOME_PATH_ENV_VAR: "relative"}, None) == config
+    added = with_personal_folder(config, {HOME_PATH_ENV_VAR: "/home/me"}, "/ignored")
+    (root,) = added.roots
+    assert (root.id, root.path, root.display_path) == ("home", CONTAINER_HOME_DIR, "/home/me")
+    assert root.personal and root.detected and root.allow_system_volume
+    assert root.private_paths == PRIVATE_PATHS and b".ssh" in PRIVATE_PATHS
+    assert added.declared_roots == ()
+
+
+def test_personal_folder_natively_only_when_enabled() -> None:
+    from treeaudit.roots.registry import with_personal_folder
+
+    config = AppConfig(data_dir="/srv/data", roots=())
+    assert with_personal_folder(config, {}, "/home/me") == config
+    enabled = AppConfig(data_dir="/srv/data", roots=(), personal_home=True)
+    assert [r.path for r in with_personal_folder(enabled, {}, "/home/me").roots] == ["/home/me"]
+    assert with_personal_folder(enabled, {}, None) == enabled
+
+
+def test_own_dirs_are_identities_of_existing_folders(tmp_path: Path) -> None:
+    from treeaudit.core.datadir import own_dirs
+
+    data = tmp_path / "data"
+    data.mkdir()
+    st = os.stat(data)
+    assert own_dirs(str(data), None, str(tmp_path / "missing")) == {(st.st_dev, st.st_ino)}

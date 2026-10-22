@@ -774,3 +774,97 @@ def test_basket_content_and_command(client: TestClient, scanned: int) -> None:
     assert (
         client.post("/api/scans/999/basket", json={"entries": [1]}, headers=CSRF).status_code == 404
     )
+
+
+# --- this computer: personal folder and internal partitions (D-037) ----------------------
+
+
+@pytest.fixture
+def home(tmp_path: Path) -> Path:
+    base = tmp_path / "home"
+    touch(base / ".ssh" / "id_ed25519", b"secret key")
+    touch(base / ".config" / "google-chrome" / "Cookies", b"cookies")
+    touch(base / ".config" / "app.conf", b"ok")
+    touch(base / "Documents" / "cv.pdf", b"cv")
+    return base
+
+
+@pytest.fixture
+def computer_client(
+    tmp_path: Path, home: Path, root: Path, data_disk_table: Callable[..., MountTable]
+) -> Iterator[TestClient]:
+    from treeaudit.roots.external import disk_root_id
+    from treeaudit.roots.personal import personal_root
+    from treeaudit.roots.registry import RootStatus
+
+    internal = RootConfig(
+        id=disk_root_id("/mnt/Data"),
+        path=str(root),
+        label="Data",
+        display_path="/mnt/Data",
+        external=True,
+        internal=True,
+    )
+    personal = personal_root(str(home), display_path="/home/me")
+    # TreeAudit's index lives inside the personal folder here.
+    config = AppConfig(
+        data_dir=str(home / ".local" / "share" / "treeaudit"), roots=(personal, internal)
+    )
+    statuses = (RootStatus(root=personal), RootStatus(root=internal))
+    mounts = data_disk_table(str(tmp_path))
+    app = create_app(
+        config, statuses, mounts=lambda: mounts, home=lambda: None, external_enabled=True
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as test_client:
+        yield test_client
+    app.state.jobs.cancel()
+    app.state.jobs.wait()
+
+
+def test_this_computer_is_offered(computer_client: TestClient) -> None:
+    page = computer_client.get("/scan/new")
+    assert_safe_html(page.text)
+    assert "Sur cet ordinateur" in page.text
+    assert "🏠 Mon dossier personnel" in page.text and "/home/me" in page.text
+    assert "💽 Data" in page.text and "Partition de données du disque système" in page.text
+    assert "branché <strong>et ouvert</strong>" in page.text
+
+
+def test_picker_hides_private_and_own_folders(computer_client: TestClient, home: Path) -> None:
+    (home / ".local" / "share" / "treeaudit").mkdir(parents=True, exist_ok=True)
+    top = computer_client.get("/api/roots/home/folders").json()["folders"]
+    assert "Documents" in top and ".config" in top
+    assert ".ssh" not in top
+    config = computer_client.get("/api/roots/home/folders", params={"path": ".config"}).json()
+    assert config["folders"] == []  # google-chrome is private
+    share = computer_client.get("/api/roots/home/folders", params={"path": ".local/share"}).json()
+    assert share["folders"] == []  # TreeAudit's own index
+    page = computer_client.get("/scan/new", params={"root": "home"})
+    assert ".ssh" not in page.text
+
+
+def test_personal_folder_scan_marks_what_holds_hidden_folders(
+    computer_client: TestClient,
+) -> None:
+    snapshot = run_job(computer_client, "/api/scans", {"root_id": "home", "subpath": ""})
+    scan_id = int(snapshot["scan_id"])  # type: ignore[call-overload]
+    ids = entry_ids(computer_client, scan_id)
+    assert b".ssh" not in ids and b".ssh/id_ed25519" not in ids
+    assert b".config/google-chrome" not in ids and b".config/app.conf" in ids
+    assert not any(path.startswith(b".local/share/treeaudit") for path in ids)
+
+    summary = computer_client.get(f"/scans/{scan_id}")
+    assert "dossier privé, jamais lu" in summary.text
+    assert "dossier de TreeAudit" in summary.text
+    space = computer_client.get(f"/scans/{scan_id}/space")
+    assert_safe_html(space.text)
+    assert space.text.count("🛡 protégé") >= 2  # .config and .local
+    command = computer_client.post(
+        f"/api/scans/{scan_id}/basket/command",
+        json={"entries": [ids[b".config"], ids[b".local"], ids[b"Documents"]]},
+        headers=CSRF,
+    ).json()
+    warnings = " ".join(command["warnings"])
+    assert "contient des dossiers privés" in warnings
+    assert "contient TreeAudit lui-même" in warnings
+    assert command["command"].endswith("\\\n  /home/me/Documents")

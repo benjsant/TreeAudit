@@ -89,7 +89,7 @@
   {% endif %}
   {% if exclusions %}
     <h3>Non parcourus volontairement</h3>
-    <ul class="plain">{% for x in exclusions %}<li><span class="path">{{ x.rel_path_display }}</span> — autre disque monté ici <code>{{ x.reason }}</code></li>{% endfor %}</ul>
+    <ul class="plain">{% for x in exclusions %}<li><span class="path">{{ x.rel_path_display }}</span> — {{ {"mount_point": "autre disque monté ici", "treeaudit": "dossier de TreeAudit (index, archives)", "private": "dossier privé, jamais lu (clés, profils…)"}.get(x.reason, x.reason) }}</li>{% endfor %}</ul>
   {% endif %}
 </details>
 {% endblock %}

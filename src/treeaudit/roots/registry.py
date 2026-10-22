@@ -21,15 +21,17 @@ from treeaudit.roots.external import (
     find_external_disks,
     system_device_specs,
     system_disks,
+    system_partitions,
     system_specs_from_environment,
 )
 from treeaudit.roots.mountinfo import MountTable
+from treeaudit.roots.personal import CONTAINER_HOME_DIR, HOME_PATH_ENV_VAR, personal_root
 from treeaudit.roots.validation import (
     RejectReason,
     RootRejectedError,
     ValidationContext,
     check_data_dir_overlap,
-    validate_root,
+    validate_configured_root,
 )
 
 
@@ -84,18 +86,30 @@ def with_external_disks(
                 label=disk.name,
                 display_path=disk.mount_point,
                 external=True,
+                internal=disk.internal,
             )
             for disk in disks
             if disk.accepted
         ]
     elif config.external_disks and mounts is not None:
-        system = system_disks(system_device_specs(mounts), sysfs)
+        specs = system_device_specs(mounts)
         media_dirs = default_media_dirs(user if user is not None else current_user())
         disks = find_external_disks(
-            media_dirs, mounts, system, data_dir=config.data_dir, sysfs=sysfs
+            media_dirs,
+            mounts,
+            system_disks(specs, sysfs),
+            data_dir=config.data_dir,
+            sysfs=sysfs,
+            system_parts=system_partitions(specs, sysfs),
         )
         roots = [
-            RootConfig(id=disk.root_id, path=disk.mount_point, label=disk.name, external=True)
+            RootConfig(
+                id=disk.root_id,
+                path=disk.mount_point,
+                label=disk.name,
+                external=True,
+                internal=disk.internal,
+            )
             for disk in disks
             if disk.accepted
         ]
@@ -104,12 +118,33 @@ def with_external_disks(
     return dataclasses.replace(config, roots=config.declared_roots + tuple(roots)), disks
 
 
+def with_personal_folder(
+    config: AppConfig, environ: Mapping[str, str], home: str | None
+) -> AppConfig:
+    """Add the user's personal folder as a root (D-037).
+
+    In Docker, ./treeaudit mounts it read-only at /audit/home and passes its
+    host path; natively it is offered when ``personal_home`` is enabled.
+    """
+    if config.container_mode:
+        shown = environ.get(HOME_PATH_ENV_VAR, "")
+        if not shown.startswith("/"):
+            return config
+        root = personal_root(CONTAINER_HOME_DIR, display_path=shown)
+    elif config.personal_home and home is not None:
+        root = personal_root(home)
+    else:
+        return config
+    return dataclasses.replace(config, roots=(*config.roots, root))
+
+
 def check_data_dir_separation(config: AppConfig) -> None:
     """Refuse a configuration where the data directory overlaps a declared root.
 
     This is a configuration error (the application must not start), not a
     rejected root: TreeAudit would otherwise write inside an audited tree.
-    Detected disks containing the data directory are refused at detection.
+    Detected roots (disks, personal folder) may contain it: it is then left out
+    of every walk by identity (D-037).
     """
     for root in config.declared_roots:
         try:
@@ -144,19 +179,30 @@ def evaluate_roots(
     )
     statuses: list[RootStatus] = []
     system: frozenset[str] | None = None
+    system_parts: frozenset[str] | None = None
     if config.container_mode and any(root.external for root in config.roots):
         env = os.environ if environ is None else environ
-        system = system_disks(system_specs_from_environment(env), sysfs)
+        specs = system_specs_from_environment(env)
+        system = system_disks(specs, sysfs)
+        system_parts = system_partitions(specs, sysfs)
     for root in config.roots:
         try:
-            validate_root(root.path, ctx, allow_system_volume=root.allow_system_volume)
+            validate_configured_root(root, ctx)
         except RootRejectedError as exc:
             statuses.append(RootStatus(root=root, reason=exc.reason))
             continue
         if (
             root.external
             and config.container_mode
-            and check_mounted_disk(root.path, mounts, system, sysfs) is not None
+            and check_mounted_disk(
+                root.path,
+                mounts,
+                system,
+                sysfs,
+                system_parts=system_parts,
+                internal=root.internal,
+            )
+            is not None
         ):
             statuses.append(RootStatus(root=root, reason=RejectReason.NOT_EXTERNAL_DISK))
             continue

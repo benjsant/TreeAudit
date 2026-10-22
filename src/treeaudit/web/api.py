@@ -17,7 +17,8 @@ from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
 from treeaudit.archive.destination import ArchiveDirStatus
-from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig
+from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig, RootConfig
+from treeaudit.core.datadir import own_dirs
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
 from treeaudit.db.connection import connect, from_sqlite_int
@@ -26,7 +27,7 @@ from treeaudit.duplicates.report import SelectionError, override_keep
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES
-from treeaudit.scanner.browse import list_folders
+from treeaudit.scanner.browse import Listing, list_folders
 from treeaudit.scanner.walker import SubpathError
 from treeaudit.shellcmd import Action, cleanup_command, is_displayable
 from treeaudit.web.explorer import Basket, resolve_basket
@@ -71,6 +72,16 @@ def accepted_root(request: Request, root_id: str) -> RootStatus:
     return status
 
 
+def browse_root(config: AppConfig, root: RootConfig, path: str) -> Listing:
+    """Sub-folders offered in the picker: never TreeAudit's own, nor private ones."""
+    return list_folders(
+        root.path,
+        path,
+        own_dirs=own_dirs(config.data_dir, config.archive_dir),
+        private_paths=root.private_paths,
+    )
+
+
 def root_display(config: AppConfig, scan: sqlite3.Row) -> str:
     root = config.get_root(scan["root_id"])
     return root.shown_path if root is not None else str(scan["root_path"])
@@ -84,7 +95,7 @@ def folders(
 ) -> dict[str, Any]:
     status = accepted_root(request, root_id)
     try:
-        listing = list_folders(status.root.path, path)
+        listing = browse_root(get_config(request), status.root, path)
     except SubpathError as exc:
         raise HTTPException(422, "chemin invalide") from exc
     except OSError as exc:

@@ -8,11 +8,13 @@ not the main protection: the root still has to be explicitly declared.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import stat
 from dataclasses import dataclass
 from enum import StrEnum
 
+from treeaudit.core.config import RootConfig
 from treeaudit.core.errors import TreeAuditError
 from treeaudit.roots.mountinfo import MountTable
 
@@ -148,6 +150,19 @@ def validate_root(path: str, ctx: ValidationContext, *, allow_system_volume: boo
     _check_mount(path, ctx, allow_system_volume=allow_system_volume)
     if ctx.data_dir is not None:
         check_data_dir_overlap(path, ctx.data_dir, resolve=ctx.check_filesystem)
+
+
+def validate_configured_root(root: RootConfig, ctx: ValidationContext) -> None:
+    """validate_root for a root of the configuration.
+
+    A detected root (disk, personal folder) may contain TreeAudit's own folders:
+    they are then left out by identity during every walk, instead of refusing
+    the whole disk (D-037). The personal folder is, by definition, the one
+    exception to the rule refusing the home directory as a whole.
+    """
+    if root.detected:
+        ctx = dataclasses.replace(ctx, data_dir=None, home=None if root.personal else ctx.home)
+    validate_root(root.path, ctx, allow_system_volume=root.allow_system_volume)
 
 
 def check_data_dir_overlap(root_path: str, data_dir: str, *, resolve: bool = True) -> None:

@@ -59,6 +59,11 @@ class WalkOptions:
     max_depth: int = DEFAULT_MAX_DEPTH
     expected_root: tuple[int, int] | None = None
     """(st_dev, st_ino) of the root at validation time, to detect a swap."""
+    own_dirs: frozenset[tuple[int, int]] = frozenset()
+    """(st_dev, st_ino) of TreeAudit's own directories (data, archives): never walked.
+    Recognised by identity, not by name, so that a renamed or moved folder still is."""
+    private_paths: frozenset[bytes] = frozenset()
+    """Paths relative to the root that are never even examined (secrets, D-037)."""
 
 
 def parse_subpath(subpath: str) -> tuple[str, ...]:
@@ -211,6 +216,9 @@ class _Walk:
     def _entry(self, frame: _Frame, entry_name: str) -> Iterator[WalkEvent]:
         name = os.fsencode(entry_name)
         rel_path = _join(frame.rel_path, name)
+        if rel_path in self.options.private_paths:
+            yield ExclusionRecord(rel_path, ExclusionReason.PRIVATE)
+            return
         try:
             st = _lstat_at(entry_name, frame.fd)
         except OSError as exc:
@@ -218,6 +226,9 @@ class _Walk:
             yield _error(rel_path, ErrorOperation.STAT_ENTRY, exc)
             return
         kind = _kind_of(st.st_mode)
+        if kind is EntryKind.DIR and (st.st_dev, st.st_ino) in self.options.own_dirs:
+            yield ExclusionRecord(rel_path, ExclusionReason.TREEAUDIT)
+            return
         link_target: bytes | None = None
         if kind is EntryKind.SYMLINK:
             try:
@@ -260,6 +271,12 @@ class _Walk:
         rel_path = b""
         for part in subpath:
             rel_path = _join(rel_path, os.fsencode(part))
+            if rel_path in self.options.private_paths:
+                os.close(fd)
+                yield ErrorRecord(
+                    rel_path, ErrorOperation.OPEN_SUBPATH, None, "private folder, never read"
+                )
+                return
             try:
                 child = _open_dir(part, fd)
             except OSError as exc:
@@ -268,6 +285,13 @@ class _Walk:
                 return
             os.close(fd)
             fd = child
+            st = os.fstat(fd)
+            if (st.st_dev, st.st_ino) in self.options.own_dirs:
+                os.close(fd)
+                yield ErrorRecord(
+                    rel_path, ErrorOperation.OPEN_SUBPATH, None, "TreeAudit's own folder"
+                )
+                return
         yield fd
 
     def run(self, subpath: tuple[str, ...]) -> Generator[WalkEvent, None, None]:

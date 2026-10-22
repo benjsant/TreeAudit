@@ -45,12 +45,19 @@ from treeaudit.archive.verify import (
     verify_archive,
 )
 from treeaudit.core.config import AppConfig, RootConfig
-from treeaudit.core.datadir import ArchiveLock, prepare_data_dir
+from treeaudit.core.datadir import ArchiveLock, own_dirs, prepare_data_dir
 from treeaudit.core.errors import TreeAuditError
 from treeaudit.duplicates.reader import Expected, FileChangedError, TreeReader, check_unchanged
 from treeaudit.roots.mountinfo import MountTable
-from treeaudit.roots.validation import ValidationContext, validate_root
-from treeaudit.scanner.models import DirDone, EntryKind, EntryRecord, ErrorRecord, ExclusionRecord
+from treeaudit.roots.validation import ValidationContext, validate_configured_root
+from treeaudit.scanner.models import (
+    DirDone,
+    EntryKind,
+    EntryRecord,
+    ErrorRecord,
+    ExclusionReason,
+    ExclusionRecord,
+)
 from treeaudit.scanner.runner import mount_points_below
 from treeaudit.scanner.walker import DEFAULT_MAX_DEPTH, WalkOptions, parse_subpath, walk
 
@@ -196,15 +203,14 @@ def execute_archive(
     )
     root = request.root
     subpath = parse_subpath(request.subpath)
-    validate_root(
-        root.path,
+    validate_configured_root(
+        root,
         ValidationContext(
             mounts=mounts,
             home=home,
             data_dir=config.data_dir,
             require_read_only_mount=config.container_mode,
         ),
-        allow_system_volume=root.allow_system_volume,
     )
     prepare_data_dir(config.data_dir)
     with ArchiveLock(config.data_dir):
@@ -218,6 +224,20 @@ def execute_archive(
             progress=progress if progress is not None else ArchiveProgress(),
         )
         return job.run(now or datetime.now())
+
+
+# A folder containing one of these is refused before anything is written: the
+# archive could not be complete, and must never hold TreeAudit's index nor secrets.
+_REFUSED_INSIDE = {
+    ExclusionReason.TREEAUDIT: (
+        "ce dossier contient TreeAudit lui-même (son index ou ses archives) : "
+        "choisir un dossier qui ne le contient pas"
+    ),
+    ExclusionReason.PRIVATE: (
+        "ce dossier contient des dossiers privés jamais lus (clés, profils de navigateur…) : "
+        "archiver plutôt un sous-dossier"
+    ),
+}
 
 
 class _ArchiveJob:
@@ -248,6 +268,8 @@ class _ArchiveJob:
             cross_mounts=self.root.cross_mounts,
             max_depth=request.max_depth,
             expected_root=self.expected_root,
+            own_dirs=own_dirs(config.data_dir, archive_dir),
+            private_paths=self.root.private_paths,
         )
         self.outcome = ArchiveOutcome(
             status=ArchiveStatus.FAILED,
@@ -350,6 +372,9 @@ class _ArchiveJob:
                     self.progress.entries_total += 1
                     if event.kind is EntryKind.FILE:
                         self.progress.bytes_total += event.size
+                elif isinstance(event, ExclusionRecord) and event.reason in _REFUSED_INSIDE:
+                    self.outcome.failure = _REFUSED_INSIDE[event.reason]
+                    return False
                 elif isinstance(event, ErrorRecord) and self.progress.entries_total == 0:
                     # The folder itself cannot be opened: nothing to archive.
                     self.outcome.failure = f"{printable(event.rel_path) or '.'} : {event.message}"
@@ -393,6 +418,9 @@ class _ArchiveJob:
                         raise CancelledError
                     if isinstance(event, DirDone):
                         release(event.entry_id)  # empty directory
+                    elif isinstance(event, ExclusionRecord) and event.reason in _REFUSED_INSIDE:
+                        # Appeared after _measure: never archive around TreeAudit or secrets.
+                        raise OutputError(f"{event.reason.value} folder inside the archived folder")
                     elif isinstance(event, ErrorRecord | ExclusionRecord):
                         release(pending_by_path.get(event.rel_path))  # kept, but empty
                         if isinstance(event, ErrorRecord):

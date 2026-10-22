@@ -57,12 +57,14 @@ Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C`
 5. **Archiver si besoin** : « 🗜 Archiver » crée une copie compressée et vérifiée du dossier. Tu la retrouves dans « 🗜 Mes archives ».
 6. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
 
-### Quels disques sont proposés ?
+### Qu'est-ce qui est proposé ?
 
-- **Les disques externes et secondaires branchés au démarrage** : ce qui est monté sous `/run/media/<toi>`, `/media/<toi>`, `/media` ou `/mnt`.
-- **Le disque du système n'est jamais proposé**, ni aucune de ses partitions : TreeAudit remonte jusqu'au disque physique. En cas de doute sur un disque (disque réseau, image ISO…), il ne le propose pas, et l'interface dit pourquoi.
-- Chaque disque est monté **en lecture seule** : même en cas de bug, TreeAudit ne peut pas le modifier.
-- **Un disque branché après le démarrage** n'apparaît qu'après avoir relancé TreeAudit (`Ctrl+C`, puis `./treeaudit`).
+- **🏠 Ton dossier personnel**, en entier, caches cachés compris (`~/.cache`…). Les dossiers de secrets ne sont **jamais lus** : clés SSH et GPG, gestionnaires de mots de passe, profils de navigateur et de messagerie, identifiants de services en ligne.
+- **💽 Les partitions de données du disque système**, comme `/mnt/Data`. Les partitions du système lui-même (`/`, `/boot`, `/home`, `/usr`, `/var`) ne sont jamais proposées.
+- **🔌 Les disques externes** : ce qui est monté sous `/run/media/<toi>`, `/media/<toi>`, `/media` ou `/mnt`. TreeAudit remonte jusqu'au disque physique. En cas de doute (disque réseau, image ISO…), il ne propose pas le disque, et l'interface dit pourquoi.
+- **Le dossier de TreeAudit est toujours ignoré**, même s'il se trouve sur un disque analysé : il est reconnu par son identité sur le disque, pas par son nom.
+- Tout est monté **en lecture seule** : même en cas de bug, TreeAudit ne peut rien modifier.
+- **Un disque doit être branché et ouvert** (monté, par exemple en l'ouvrant dans le gestionnaire de fichiers) **avant** de lancer TreeAudit. Sinon, relance-le (`Ctrl+C`, puis `./treeaudit`). Au démarrage, le terminal affiche la liste des disques trouvés.
 
 ### Les archives
 
@@ -105,7 +107,9 @@ Tout passe par `./treeaudit cli …`, qui valide et monte les disques comme le n
 | `TREEAUDIT_ROOT_PATH` | Un dossier précis à analyser (chemin absolu), monté en lecture seule et validé avant le montage. Les dossiers système (`/`, `/etc`, `/home` entier…) sont toujours refusés. |
 | `TREEAUDIT_ALLOW_SYSTEM_VOLUME=1` | Autorise ce dossier même s'il est sur le disque du système (voir D-009 dans [docs/DECISIONS.md](docs/DECISIONS.md)). |
 | `TREEAUDIT_ARCHIVE_PATH` | Un autre dossier d'archives, existant et dédié (par défaut : `archives/`). |
-| `TREEAUDIT_EXTERNAL_DISKS=0` | Désactive la détection des disques externes. |
+| `TREEAUDIT_EXTERNAL_DISKS=0` | Désactive la détection des disques externes et internes. |
+| `TREEAUDIT_INTERNAL_DISKS=0` | Ne propose pas les partitions de données du disque système. |
+| `TREEAUDIT_HOME=0` | Ne propose pas le dossier personnel. |
 | `TREEAUDIT_PORT` | Autre port local (par défaut : 8765). |
 
 Les mêmes variables peuvent être passées directement : `TREEAUDIT_ROOT_PATH=/chemin ./treeaudit`. `./treeaudit settings` affiche les réglages utilisés.

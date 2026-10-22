@@ -4,6 +4,31 @@
 <p class="steps"><strong>1. Choisir le dossier</strong> › 2. Analyse › 3. Bilan</p>
 {% if root is none %}
   <h1>Quel disque ou dossier ?</h1>
+  {% if home or internal %}
+  <h2>💻 Sur cet ordinateur</h2>
+  <ul class="cards">
+  {% for card in home %}
+    <li>
+      <a class="card link" href="/scan/new?root={{ card.root.id }}">
+        <span class="card-title">🏠 {{ card.root.label }}</span>
+        <span class="muted path">{{ card.root.shown_path }}</span>
+        <span class="muted small">Clés, mots de passe et profils de navigateur ne sont jamais lus.</span>
+      </a>
+    </li>
+  {% endfor %}
+  {% for card in internal %}
+    <li>
+      <a class="card link" href="/scan/new?root={{ card.root.id }}">
+        <span class="card-title">💽 {{ card.root.label }}</span>
+        {% if card.total %}<span>{{ card.used | size }} utilisés sur {{ card.total | size }}</span>{% endif %}
+        <span class="muted path">{{ card.root.shown_path }}</span>
+        <span class="muted small">Partition de données du disque système</span>
+      </a>
+    </li>
+  {% endfor %}
+  </ul>
+  <p class="muted">Les partitions du système (/, /boot, /home…) ne sont jamais proposées en entier. Le dossier de TreeAudit est toujours ignoré.</p>
+  {% endif %}
   {% if external_enabled %}
   <h2>🔌 Disques externes</h2>
   <ul class="cards">
@@ -16,10 +41,10 @@
       </a>
     </li>
   {% else %}
-    <li class="muted">Aucun disque externe à proposer. Branche le disque, puis relance TreeAudit (<code>./treeaudit</code>).</li>
+    <li class="muted">Aucun disque externe à proposer. Branche le disque, ouvre-le dans ton gestionnaire de fichiers (il doit être monté), puis relance TreeAudit (<code>./treeaudit</code>).</li>
   {% endfor %}
   </ul>
-  <p class="muted">Le disque du système n'est jamais proposé. Un disque branché après le démarrage n'apparaît qu'après avoir relancé TreeAudit.</p>
+  <p class="muted">Un disque n'apparaît que s'il était branché <strong>et ouvert</strong> au démarrage de TreeAudit : sinon, relance-le.</p>
   {% if refused_disks %}
   <details class="tech">
     <summary>Disques non proposés ({{ refused_disks | length }})</summary>

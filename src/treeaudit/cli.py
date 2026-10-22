@@ -49,9 +49,15 @@ from treeaudit.roots.external import (
     format_device_specs,
     system_device_specs,
     system_disks,
+    system_partitions,
 )
 from treeaudit.roots.mountinfo import MountInfoError, MountTable, parse_mountinfo, read_mountinfo
-from treeaudit.roots.registry import current_home, evaluate_roots, with_external_disks
+from treeaudit.roots.registry import (
+    current_home,
+    evaluate_roots,
+    with_external_disks,
+    with_personal_folder,
+)
 from treeaudit.roots.validation import (
     REASON_MESSAGES,
     RootRejectedError,
@@ -105,6 +111,12 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--home", default=None, help="dossier personnel à protéger")
     check.add_argument(
         "--data-dir", default=None, help="dossier de données TreeAudit à ne pas chevaucher"
+    )
+    check.add_argument(
+        "--personal",
+        action="store_true",
+        help="le chemin est le dossier personnel, proposé en entier (D-037) : il peut être sur "
+        "le volume du système et contenir le dossier de données, écarté pendant l'analyse",
     )
     check.add_argument(
         "--no-fs-checks",
@@ -170,7 +182,13 @@ def build_parser() -> argparse.ArgumentParser:
     detect.add_argument(
         "--data-dir",
         default=None,
-        help="dossier de données TreeAudit (disque refusé s'il le contient)",
+        help="dossier de données TreeAudit (signalé, et écarté des analyses, s'il est sur "
+        "un disque)",
+    )
+    detect.add_argument(
+        "--internal",
+        action="store_true",
+        help="proposer aussi les partitions de données du disque système (D-037)",
     )
 
     scan = commands.add_parser("scan", help="inventaire d'une racine")
@@ -286,7 +304,10 @@ def _load_with_disks(args: argparse.Namespace) -> tuple[AppConfig, list[External
     path = args.config if args.config is not None else default_config_path()
     config = load_config(path, container_mode=is_container_mode())
     native_detection = config.external_disks and not config.container_mode
-    return with_external_disks(config, read_mountinfo() if native_detection else None, os.environ)
+    config, disks = with_external_disks(
+        config, read_mountinfo() if native_detection else None, os.environ
+    )
+    return with_personal_folder(config, os.environ, current_home()), disks
 
 
 def _load(args: argparse.Namespace) -> AppConfig:
@@ -298,11 +319,20 @@ def _cmd_disks_detect(args: argparse.Namespace) -> int:
     accepted here are then mounted in the container, one by one, read-only."""
     mounts = _read_mounts(args.mountinfo)
     specs = system_device_specs(mounts)
-    system = system_disks(specs)
     disks = find_external_disks(
-        default_media_dirs(args.user), mounts, system, data_dir=args.data_dir
+        default_media_dirs(args.user),
+        mounts,
+        system_disks(specs),
+        data_dir=args.data_dir,
+        system_parts=system_partitions(specs) if args.internal else None,
     )
     _print_disks(disks, file=sys.stderr)
+    if not any(disk.accepted and not disk.internal for disk in disks):
+        print(
+            "⚠ Aucun disque externe : branche-le, ouvre-le dans ton gestionnaire de fichiers "
+            "(il doit être monté), puis relance ./treeaudit.",
+            file=sys.stderr,
+        )
     print(compose_override(disks, format_device_specs(specs)), end="")
     return EXIT_OK
 
@@ -313,9 +343,10 @@ def _print_disks(disks: Sequence[ExternalDisk], *, file: Any = None) -> None:
         print("Aucun disque externe détecté.", file=out)
     for disk in disks:
         if disk.accepted:
-            print(
-                f"✔ disque proposé : {disk.mount_point} ({disk.fs_type}) [{disk.root_id}]", file=out
-            )
+            what = "partition interne proposée" if disk.internal else "disque proposé"
+            print(f"✔ {what} : {disk.mount_point} ({disk.fs_type}) [{disk.root_id}]", file=out)
+            if disk.holds_treeaudit:
+                print("  (TreeAudit est installé dessus : son dossier sera ignoré)", file=out)
         else:
             print(f"✘ non proposé : {disk.mount_point} : {disk.message}", file=out)
 
@@ -332,12 +363,12 @@ def _cmd_disks_list(args: argparse.Namespace) -> int:
 def _cmd_roots_check(args: argparse.Namespace) -> int:
     ctx = ValidationContext(
         mounts=_read_mounts(args.mountinfo),
-        home=args.home if args.home is not None else current_home(),
-        data_dir=args.data_dir,
+        home=None if args.personal else args.home if args.home is not None else current_home(),
+        data_dir=None if args.personal else args.data_dir,
         check_filesystem=not args.no_fs_checks,
     )
     try:
-        validate_root(args.path, ctx, allow_system_volume=args.allow_system_volume)
+        validate_root(args.path, ctx, allow_system_volume=args.allow_system_volume or args.personal)
     except RootRejectedError as exc:
         print(f"REFUSÉ [{exc.reason.value}] {args.path} : {REASON_MESSAGES[exc.reason]}")
         return EXIT_REJECTED

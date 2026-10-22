@@ -17,6 +17,7 @@ from treeaudit.scanner.models import (
     EntryRecord,
     ErrorOperation,
     ErrorRecord,
+    ExclusionReason,
     ExclusionRecord,
     WalkEvent,
 )
@@ -431,3 +432,66 @@ def test_inode_batches_bound_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         (tmp_path / f"f{index:02d}").write_bytes(b"")
     events = run(tmp_path)
     assert len(entries(events)) == 31  # nothing lost across batches
+
+
+# --- TreeAudit's own folders and private folders (D-037) ------------------------------------
+
+
+def identity(path: Path) -> tuple[int, int]:
+    st = os.stat(path)
+    return (st.st_dev, st.st_ino)
+
+
+def test_own_folders_are_recognised_by_identity_not_name(tmp_path: Path) -> None:
+    root = tmp_path / "disk"
+    data = root / "renamed-anything"  # whatever its name, it is TreeAudit's
+    (data / "index").mkdir(parents=True)
+    (data / "index" / "db").write_bytes(b"x")
+    (root / "photos").mkdir()
+    events = run(root, own_dirs=frozenset({identity(data)}))
+    assert b"renamed-anything" not in entries(events)
+    assert b"renamed-anything/index/db" not in entries(events)
+    excluded = [e for e in events if isinstance(e, ExclusionRecord)]
+    assert [(e.rel_path, e.reason) for e in excluded] == [
+        (b"renamed-anything", ExclusionReason.TREEAUDIT)
+    ]
+    assert b"photos" in entries(events)
+
+
+def test_private_paths_are_never_examined(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    (home / ".ssh").mkdir(parents=True)
+    (home / ".ssh" / "id_ed25519").write_bytes(b"secret")
+    (home / ".config" / "google-chrome").mkdir(parents=True)
+    (home / ".config" / "app.conf").write_bytes(b"ok")
+    (home / ".netrc").write_bytes(b"password")
+    examined: list[str] = []
+    real_lstat = walker._lstat_at
+
+    def spy(name: str, dir_fd: int) -> os.stat_result:
+        examined.append(name)
+        return real_lstat(name, dir_fd)
+
+    monkeypatch.setattr(walker, "_lstat_at", spy)
+    private = frozenset({b".ssh", b".config/google-chrome", b".netrc"})
+    events = run(home, private_paths=private)
+    found = entries(events)
+    assert b".config/app.conf" in found
+    for path in (b".ssh", b".ssh/id_ed25519", b".config/google-chrome", b".netrc"):
+        assert path not in found
+    # Not even a stat: the names are skipped before touching them.
+    assert not {".ssh", "google-chrome", ".netrc"} & set(examined)
+    excluded = {e.rel_path: e.reason for e in events if isinstance(e, ExclusionRecord)}
+    assert excluded == dict.fromkeys(private, ExclusionReason.PRIVATE)
+
+
+def test_a_walk_cannot_start_inside_a_private_or_own_folder(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    (home / ".ssh" / "keys").mkdir(parents=True)
+    (home / "data").mkdir()
+    private = run(home, (".ssh", "keys"), private_paths=frozenset({b".ssh"}))
+    assert not entries(private)
+    assert [e.message for e in errors(private)] == ["private folder, never read"]
+    own = run(home, ("data",), own_dirs=frozenset({identity(home / "data")}))
+    assert not entries(own)
+    assert [e.message for e in errors(own)] == ["TreeAudit's own folder"]

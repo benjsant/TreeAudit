@@ -118,6 +118,13 @@ Aucun parcours de fichiers dans cette phase.
   - mémoire maximale : 31 → 75 Mio (cache SQLite plus grand).
   Le dossier factice étant écrit d'un seul tenant, ses fichiers sont contigus : sur un disque de sauvegarde fragmenté, l'ordre physique devrait apporter davantage.
 
+## Phase 6 octies — Cet ordinateur (D-037)
+- [x] Partitions de données du disque système proposées, jamais celles du système (vérifiées sur l'hôte et dans le conteneur).
+- [x] Dossier personnel proposé en entier, en lecture seule, secrets jamais lus.
+- [x] Dossier de TreeAudit écarté par identité de toute analyse, du sélecteur et des archives ; signalé dans l'explorateur et le panier.
+- [x] Messages : disques trouvés au démarrage ; « branché et ouvert ».
+- [x] Essai réel : `/mnt/Data` proposé comme partition interne, `data/` reconnu par identité ; dossier personnel monté en lecture seule, `.ssh` et `.mozilla` cachés.
+
 ## Phase 6 septies — Explorateur et panier (D-036)
 - [x] Explorateur : tri, pages, dates, repères (à nettoyer, en double, protégé).
 - [x] Fiche d'un élément (autres copies, raison des repères).

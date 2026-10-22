@@ -24,9 +24,11 @@ from treeaudit.roots.external import (
     find_external_disks,
     format_device_specs,
     parse_device_specs,
+    partitions,
     physical_disks,
     system_device_specs,
     system_disks,
+    system_partitions,
 )
 from treeaudit.roots.mountinfo import MountTable, parse_mountinfo
 from treeaudit.roots.registry import evaluate_roots, with_external_disks
@@ -82,6 +84,7 @@ def sysfs(tmp_path: Path) -> Path:
     sdd2 = _partition(sdd, root, "sdd2", "8:50")
     _mapper(root, "dm-0", "luks-usb", "253:0", sdd2)
     _mapper(root, "dm-1", "luks-sys", "253:1", root / "devices/pci/nvme0/nvme0n1/nvme0n1p5")
+    _mapper(root, "dm-2", "luks-root", "253:2", root / "devices/pci/nvme0/nvme0n1/nvme0n1p3")
     loop = root / "devices" / "virtual" / "block" / "loop0"
     loop.mkdir(parents=True)
     _block(root, loop, "7:0")
@@ -166,10 +169,55 @@ def test_unknown_system_disk_offers_nothing(host: MountTable, sysfs: Path) -> No
     assert disks and all(d.reason is DiskReason.SYSTEM_UNKNOWN for d in disks)
 
 
-def test_disk_holding_the_data_dir_is_refused(host: MountTable, sysfs: Path) -> None:
-    found = detect(host, sysfs, data_dir="/run/media/me/Whole/treeaudit/data")
-    assert found["/run/media/me/Whole"] is DiskReason.DATA_DIR_INSIDE
-    assert found["/run/media/me/Crypt"] is None
+def test_disk_holding_the_data_dir_is_offered_and_flagged(host: MountTable, sysfs: Path) -> None:
+    """D-037: TreeAudit's own folder is left out of the analysis by identity instead."""
+    system = system_disks(system_device_specs(host), sysfs)
+    disks = find_external_disks(
+        MEDIA, host, system, sysfs=sysfs, data_dir="/run/media/me/Whole/treeaudit/data"
+    )
+    by_point = {disk.mount_point: disk for disk in disks}
+    assert by_point["/run/media/me/Whole"].accepted
+    assert by_point["/run/media/me/Whole"].holds_treeaudit
+    assert not by_point["/run/media/me/Crypt"].holds_treeaudit
+
+
+# --- data partitions of the system disk (D-037) ------------------------------------------
+
+
+INTERNAL_HOST = HOST + (
+    b"20 1 259:3 /srv /mnt/RootAgain rw - ext4 /dev/nvme0n1p3 rw\n"
+    b"21 1 253:2 / /mnt/RootCrypt rw - ext4 /dev/mapper/luks-root rw\n"
+)
+
+
+def test_partitions(sysfs: Path) -> None:
+    assert partitions("259:4", "/dev/nvme0n1p4", sysfs) == {"nvme0n1p4"}
+    assert partitions("253:1", "/dev/mapper/luks-sys", sysfs) == {"nvme0n1p5"}
+    assert partitions("8:32", "/dev/sdc", sysfs) == {"sdc"}  # no partition table
+    specs = system_device_specs(parse_mountinfo(HOST))
+    assert system_partitions(specs, sysfs) == {"nvme0n1p1", "nvme0n1p3"}
+    assert system_partitions([("9:9", "/dev/unknown")], sysfs) is None
+
+
+def test_internal_partitions_are_offered_never_the_systems(sysfs: Path) -> None:
+    table = parse_mountinfo(INTERNAL_HOST)
+    specs = system_device_specs(table)
+    disks = find_external_disks(
+        MEDIA,
+        table,
+        system_disks(specs, sysfs),
+        sysfs=sysfs,
+        system_parts=system_partitions(specs, sysfs),
+    )
+    found = {disk.mount_point: (disk.reason, disk.internal) for disk in disks}
+    assert found["/mnt/Data"] == (None, True)  # a data partition of the system disk
+    assert found["/run/media/me/SysCrypt"] == (None, True)  # LUKS on such a partition
+    # The system's own filesystem, mounted again or through its LUKS container.
+    assert found["/mnt/RootAgain"] == (DiskReason.SYSTEM_PARTITION, True)
+    assert found["/mnt/RootCrypt"] == (DiskReason.SYSTEM_PARTITION, True)
+    assert found["/run/media/me/USB KEY"] == (None, False)
+    # Without the system's partitions (option off, or unknown): nothing internal.
+    assert detect(table, sysfs)["/mnt/Data"] is DiskReason.SYSTEM_DISK
 
 
 def test_names_with_control_characters_are_refused(sysfs: Path) -> None:
@@ -201,6 +249,10 @@ def test_json_round_trip_and_tampering(host: MountTable, sysfs: Path) -> None:
     system = system_disks(system_device_specs(host), sysfs)
     disks = find_external_disks(MEDIA, host, system, sysfs=sysfs)
     assert disks_from_json(disks_to_json(disks)) == disks
+    flagged = [ExternalDisk("D", "/mnt/D", disk_root_id("/mnt/D"), "ext4", None, True, True)]
+    assert disks_from_json(disks_to_json(flagged)) == flagged
+    bad_flag = json.dumps([{**json.loads(disks_to_json(flagged))[0], "internal": "yes"}])
+    assert disks_from_json(bad_flag) == []
     forged = json.dumps([{"id": "ext-x-000000", "name": "x", "host_path": "/", "reason": None}])
     assert disks_from_json(forged) == []
     assert disks_from_json("not json") == []
@@ -253,6 +305,28 @@ def test_check_mounted_disk(sysfs: Path) -> None:
     assert check_mounted_disk("/audit/disks/ext-d", table, system, sysfs) is DiskReason.NOT_MOUNTED
 
 
+def test_check_mounted_internal_disk(sysfs: Path) -> None:
+    table = parse_mountinfo(
+        b"1 0 0:99 / / rw - overlay overlay rw\n"
+        b"2 1 259:4 / /audit/disks/ext-c ro - ext4 /dev/nvme0n1p4 rw\n"
+        b"3 1 259:3 / /audit/disks/ext-r ro - ext4 /dev/nvme0n1p3 rw\n"
+        b"4 1 8:17 / /audit/disks/ext-a ro - exfat /dev/sdb1 rw\n"
+    )
+    system, parts = frozenset({"nvme0n1"}), frozenset({"nvme0n1p1", "nvme0n1p3"})
+
+    def check(path: str, *, internal: bool, system_parts: frozenset[str] | None = parts) -> object:
+        return check_mounted_disk(
+            path, table, system, sysfs, system_parts=system_parts, internal=internal
+        )
+
+    assert check("/audit/disks/ext-c", internal=True) is None
+    # Announced as a separate disk, a partition of the system disk is refused.
+    assert check("/audit/disks/ext-c", internal=False) is DiskReason.SYSTEM_DISK
+    assert check("/audit/disks/ext-r", internal=True) is DiskReason.SYSTEM_PARTITION
+    assert check("/audit/disks/ext-c", internal=True, system_parts=None) is DiskReason.SYSTEM_DISK
+    assert check("/audit/disks/ext-a", internal=True) is None  # a real external disk
+
+
 def test_container_roots_come_from_the_host_detection(
     tmp_path: Path, sysfs: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -283,7 +357,7 @@ def test_container_roots_come_from_the_host_detection(
         f"3 1 259:4 / /audit/disks/{moved.root_id} ro - ext4 /dev/nvme0n1p4 rw\n".encode()
     )
     # The container paths do not exist here: only the disk re-check is exercised.
-    monkeypatch.setattr(registry, "validate_root", lambda *args, **kwargs: None)
+    monkeypatch.setattr(registry, "validate_configured_root", lambda *args, **kwargs: None)
     statuses = evaluate_roots(config, table, home=None, environ=environ, sysfs=sysfs)
     assert [s.reason for s in statuses] == [None, RejectReason.NOT_EXTERNAL_DISK]
 
@@ -295,6 +369,7 @@ def test_native_detection_adds_roots(host: MountTable, sysfs: Path) -> None:
     assert config.declared_roots == (declared,)
     external = [r for r in config.roots if r.external]
     assert {r.path for r in external} == {d.mount_point for d in disks if d.accepted}
-    assert len(external) == 4
+    assert len(external) == 6
+    assert {r.path for r in external if r.internal} == {"/mnt/Data", "/run/media/me/SysCrypt"}
     disabled = AppConfig(data_dir="/srv/treeaudit", roots=(declared,))
     assert with_external_disks(disabled, host, {}, sysfs=sysfs, user="me") == (disabled, [])

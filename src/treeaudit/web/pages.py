@@ -37,10 +37,9 @@ from treeaudit.parasites.detect import Band
 from treeaudit.parasites.report import human_size
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
-from treeaudit.scanner.browse import list_folders
 from treeaudit.scanner.walker import SubpathError, parse_subpath
 from treeaudit.web import explorer, queries, summaries
-from treeaudit.web.api import Config, Db, Jobs, root_display
+from treeaudit.web.api import Config, Db, Jobs, browse_root, root_display
 from treeaudit.web.search_form import SearchForm, spec_from_form
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -204,8 +203,12 @@ def new_scan(
             return render(
                 request,
                 "scan_new.html",
-                roots=[s for s in accepted if not s.root.external],
-                disks=[_disk_card(s.root) for s in accepted if s.root.external],
+                roots=[s for s in accepted if not s.root.detected],
+                home=[_disk_card(s.root) for s in accepted if s.root.personal],
+                internal=[_disk_card(s.root) for s in accepted if s.root.internal],
+                disks=[
+                    _disk_card(s.root) for s in accepted if s.root.external and not s.root.internal
+                ],
                 refused_disks=_refused_disks(request, statuses),
                 external_enabled=external_enabled,
                 root=None,
@@ -215,7 +218,7 @@ def new_scan(
         raise HTTPException(404, "Ce dossier n'est pas autorisé.")
     try:
         parts = parse_subpath(path)
-        listing = list_folders(status.root.path, path)
+        listing = browse_root(request.app.state.config, status.root, path)
     except SubpathError as exc:
         raise HTTPException(422, "Chemin invalide.") from exc
     except OSError as exc:
@@ -236,7 +239,7 @@ def new_scan(
 
 
 def _disk_card(root: RootConfig) -> dict[str, Any]:
-    """An accepted external disk with its usage (statvfs, metadata only)."""
+    """An accepted disk or folder with its disk's usage (statvfs, metadata only)."""
     try:
         st = os.statvfs(root.path)
     except OSError:

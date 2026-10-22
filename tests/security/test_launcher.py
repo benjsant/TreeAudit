@@ -86,3 +86,39 @@ def test_unknown_command_fails(launcher: Path) -> None:
     )
     assert result.returncode == 2
     assert "Commande inconnue" in result.stderr
+
+
+def test_personal_folder_and_internal_disks_are_on_by_default(
+    launcher: Path, tmp_path: Path
+) -> None:
+    home = tmp_path / "me"
+    home.mkdir()
+    values = settings(launcher, HOME=str(home))
+    assert values["TREEAUDIT_HOME"] == "1"
+    assert values["TREEAUDIT_INTERNAL_DISKS"] == "1"
+    assert values["TREEAUDIT_HOME_PATH"] == str(home.resolve())
+    assert " -f compose.home.yaml " in values["COMPOSE"]
+
+
+def test_personal_folder_can_be_turned_off_and_its_path_never_comes_from_outside(
+    launcher: Path, tmp_path: Path
+) -> None:
+    home = tmp_path / "me"
+    home.mkdir()
+    off = settings(launcher, HOME=str(home), TREEAUDIT_HOME="0")
+    assert off["TREEAUDIT_HOME_PATH"] == ""
+    assert "compose.home.yaml" not in off["COMPOSE"]
+    # The mounted path is always derived from $HOME, never taken from .env or the environment.
+    (launcher.parent / ".env").write_text("TREEAUDIT_HOME_PATH=/etc\n", encoding="utf-8")
+    forced = settings(launcher, HOME=str(home), TREEAUDIT_HOME_PATH="/")
+    assert forced["TREEAUDIT_HOME_PATH"] == str(home.resolve())
+
+
+def test_home_through_a_symbolic_link_is_mounted_by_its_real_path(
+    launcher: Path, tmp_path: Path
+) -> None:
+    real = tmp_path / "var-home" / "me"
+    real.mkdir(parents=True)
+    (tmp_path / "home-link").symlink_to(tmp_path / "var-home")
+    values = settings(launcher, HOME=str(tmp_path / "home-link" / "me"))
+    assert values["TREEAUDIT_HOME_PATH"] == str(real.resolve())

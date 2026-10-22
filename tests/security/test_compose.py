@@ -194,6 +194,22 @@ def test_docker_config_declares_the_archive_mount_point() -> None:
     assert 'archive_dir = "/archives"' in text
 
 
+HOME_OVERRIDE = load("compose.home.yaml")
+
+
+def test_home_override_mounts_the_personal_folder_read_only_and_recursively() -> None:
+    assert set(HOME_OVERRIDE["services"]) == {"app"}
+    app = HOME_OVERRIDE["services"]["app"]
+    (volume,) = app["volumes"]
+    assert volume["type"] == "bind"
+    assert volume["target"] == "/audit/home"
+    assert volume["read_only"] is True
+    assert volume["bind"] == {"create_host_path": False, "recursive": "readonly"}
+    assert volume["source"].startswith("${TREEAUDIT_HOME_PATH:?")
+    assert ":z" not in str(volume).lower()
+    assert set(app) == {"environment", "volumes"}
+
+
 def test_selinux_override_only_disables_labels() -> None:
     override = load("compose.selinux.yaml")
     for name, service in override["services"].items():

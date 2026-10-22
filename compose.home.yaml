@@ -1,0 +1,21 @@
+# Mounts the user's personal folder, read-only (docs/DECISIONS.md D-037).
+#
+# ./treeaudit adds this file only when TREEAUDIT_HOME is on (the default), after
+# validating the folder on the host. Folders holding secrets (.ssh, browser
+# profiles...) are never read: see src/treeaudit/roots/personal.py. Submounts
+# are read-only too (recursive), and TreeAudit's own folders, if inside, are
+# left out by identity. Never add ':z' or ':Z'.
+
+services:
+  app:
+    environment:
+      # Host path of the folder, used only to display copy-pasteable commands.
+      TREEAUDIT_HOME_PATH: "${TREEAUDIT_HOME_PATH:?start TreeAudit with ./treeaudit}"
+    volumes:
+      - type: bind
+        source: "${TREEAUDIT_HOME_PATH:?start TreeAudit with ./treeaudit}"
+        target: /audit/home
+        read_only: true
+        bind:
+          create_host_path: false
+          recursive: readonly

@@ -30,8 +30,17 @@ class Listing:
     """Sub-folders not shown because their name cannot be displayed safely."""
 
 
-def list_folders(root_path: str, subpath: str, *, limit: int = DEFAULT_LIMIT) -> Listing:
+def list_folders(
+    root_path: str,
+    subpath: str,
+    *,
+    limit: int = DEFAULT_LIMIT,
+    own_dirs: frozenset[tuple[int, int]] = frozenset(),
+    private_paths: frozenset[bytes] = frozenset(),
+) -> Listing:
     """List the sub-folders of ``subpath`` inside the root.
+
+    TreeAudit's own folders and private folders (D-037) are never proposed.
 
     Raises SubpathError for an unsafe relative path and OSError when a component
     is missing, not a directory, a symlink or not readable.
@@ -52,6 +61,11 @@ def list_folders(root_path: str, subpath: str, *, limit: int = DEFAULT_LIMIT) ->
                 except OSError:
                     continue  # vanished or not accessible: simply not proposed
                 if not stat.S_ISDIR(info.st_mode):
+                    continue
+                if (info.st_dev, info.st_ino) in own_dirs:
+                    continue
+                rel_path = os.fsencode("/".join((*parts, entry.name)))
+                if rel_path in private_paths:
                     continue
                 if not is_displayable(os.fsencode(entry.name)):
                     hidden += 1

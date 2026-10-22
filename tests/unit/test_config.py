@@ -192,3 +192,16 @@ def test_archive_display_path_comes_from_the_environment(tmp_path: Path) -> None
     # Without an archive directory, a display path is meaningless and ignored.
     path.write_text('data_dir = "/data"\n', encoding="utf-8")
     assert load_config(path, environ=env).shown_archive_dir is None
+
+
+@pytest.mark.parametrize("root_id", ["home", "ext-usb-123456"])
+def test_ids_reserved_for_detected_roots(root_id: str) -> None:
+    with pytest.raises(ConfigError, match="reserved"):
+        parse_config(minimal(roots=[{"id": root_id, "path": "/mnt/x"}]))
+
+
+def test_personal_home_flag() -> None:
+    assert parse_config(minimal()).personal_home is False
+    assert parse_config(minimal(personal_home=True)).personal_home is True
+    with pytest.raises(ConfigError, match="personal_home"):
+        parse_config(minimal(personal_home="yes"))

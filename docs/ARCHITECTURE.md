@@ -11,7 +11,8 @@ Le moteur est construit et testé avant l'interface web : chaque fonctionnalité
 TreeAudit/
 ├── src/treeaudit/
 │   ├── core/        configuration, modèles (dataclasses), erreurs, statuts de scan
-│   ├── roots/       déclaration et validation des racines, lecture de mountinfo
+│   ├── roots/       déclaration et validation des racines, mountinfo, disques (external.py),
+│   │                dossier personnel (personal.py)
 │   ├── scanner/     parcours par descripteurs, métadonnées, erreurs, annulation, progression
 │   ├── db/          schéma SQLite, migrations simples, écritures par lots
 │   ├── filters/     extension, glob, regex
@@ -52,7 +53,7 @@ path = "/mnt/Data/Backup2019"
 # cross_mounts = false          (défaut)
 ```
 
-En Docker, aucun fichier n'est à remplir (D-034) : `./treeaudit` détecte sur l'hôte les disques externes et les monte un par un, en lecture seule, sous `/audit/disks/<id>` (D-033). `data_dir` vaut `/data` et `archive_dir` vaut `/archives`, monté depuis `archives/`. L'ancien mode `.env` peut en plus monter un dossier précis sous `/audit/roots/main`.
+En Docker, aucun fichier n'est à remplir (D-034) : `./treeaudit` détecte sur l'hôte les disques externes et les partitions de données du disque système, et les monte un par un, en lecture seule, sous `/audit/disks/<id>` (D-033, D-037). Le dossier personnel est monté en lecture seule sous `/audit/home` ; ses secrets ne sont jamais lus (`roots/personal.py`). `data_dir` vaut `/data` et `archive_dir` vaut `/archives`, monté depuis `archives/`. L'ancien mode `.env` peut en plus monter un dossier précis sous `/audit/roots/main`.
 
 ## Flux d'un scan
 1. L'utilisateur demande un scan d'une racine par son identifiant (CLI ou API).

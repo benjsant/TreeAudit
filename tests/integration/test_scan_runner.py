@@ -13,6 +13,7 @@ import pytest
 
 from treeaudit.core.config import AppConfig, RootConfig
 from treeaudit.core.datadir import ScanLock, ScanLockedError
+from treeaudit.core.errors import ConfigError
 from treeaudit.db import scans
 from treeaudit.db.connection import (
     connect,
@@ -22,6 +23,8 @@ from treeaudit.db.connection import (
     to_sqlite_int,
 )
 from treeaudit.roots.mountinfo import MountTable
+from treeaudit.roots.personal import personal_root
+from treeaudit.roots.registry import check_data_dir_separation
 from treeaudit.roots.validation import RootRejectedError, ValidationContext
 from treeaudit.scanner.models import DirDone, ScanStatus
 from treeaudit.scanner.runner import ScanRequest, execute_scan, run_scan
@@ -296,3 +299,97 @@ def test_migration_from_v1_to_latest(tmp_path: Path) -> None:
     assert "entry_by_path" not in indexes  # dropped in v4 (measured cost, see schema)
     assert raw.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     raw.close()
+
+
+# --- detected roots containing TreeAudit, personal folder (D-037) ---------------------------
+
+
+def test_a_detected_disk_may_hold_treeaudit_which_is_left_out(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    disk = tmp_path / "disk"
+    (disk / "photos").mkdir(parents=True)
+    (disk / "photos" / "a.jpg").write_bytes(b"a")
+    data = disk / "apps" / "treeaudit" / "data"
+    archives = disk / "apps" / "treeaudit" / "archives"
+    archives.mkdir(parents=True)
+    (archives / "old.tar.gz").write_bytes(b"z")
+    config = AppConfig(
+        data_dir=str(data),
+        archive_dir=str(archives),
+        roots=(RootConfig(id="ext-disk-000000", path=str(disk), label="Disk", external=True),),
+    )
+    outcome = execute_scan(
+        config,
+        ScanRequest(root=config.roots[0]),
+        mounts=data_disk_table(str(tmp_path)),
+        home=None,
+        cancel=threading.Event(),
+    )
+    assert outcome.status is ScanStatus.COMPLETE
+    conn = connect(config.data_dir)
+    try:
+        paths = {
+            bytes(row[0])
+            for row in conn.execute(
+                "SELECT rel_path FROM entry WHERE scan_id = ?", (outcome.scan_id,)
+            )
+        }
+        excluded = {
+            (bytes(row[0]), row[1])
+            for row in conn.execute(
+                "SELECT rel_path, reason FROM scan_exclusion WHERE scan_id = ?",
+                (outcome.scan_id,),
+            )
+        }
+    finally:
+        conn.close()
+    assert b"photos/a.jpg" in paths
+    assert not any(
+        path.startswith((b"apps/treeaudit/data", b"apps/treeaudit/archives")) for path in paths
+    )
+    assert excluded == {
+        (b"apps/treeaudit/data", "treeaudit"),
+        (b"apps/treeaudit/archives", "treeaudit"),
+    }
+
+
+def test_declared_roots_still_may_not_hold_the_data_dir(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    config = AppConfig(
+        data_dir=str(root / "data"), roots=(RootConfig(id="r", path=str(root), label="r"),)
+    )
+    with pytest.raises(ConfigError, match="overlaps"):
+        check_data_dir_separation(config)
+
+
+def test_the_personal_folder_is_accepted_as_a_whole_without_its_secrets(
+    tmp_path: Path, conn: sqlite3.Connection, data_disk_table: Callable[..., MountTable]
+) -> None:
+    home = tmp_path / "home"
+    (home / ".ssh").mkdir(parents=True)
+    (home / ".ssh" / "id_ed25519").write_bytes(b"secret")
+    (home / "Documents").mkdir()
+    (home / "Documents" / "cv.pdf").write_bytes(b"cv")
+    ctx = ValidationContext(
+        mounts=data_disk_table(str(tmp_path)),
+        home=str(home),
+        data_dir=str(home / ".local" / "share" / "treeaudit"),
+    )
+    with pytest.raises(RootRejectedError):  # declared, the home directory stays refused
+        run_scan(
+            conn,
+            ScanRequest(root=RootConfig(id="r", path=str(home), label="r")),
+            ctx=ctx,
+            cancel=threading.Event(),
+        )
+    outcome = run_scan(
+        conn, ScanRequest(root=personal_root(str(home))), ctx=ctx, cancel=threading.Event()
+    )
+    assert outcome.status is ScanStatus.COMPLETE
+    paths = {
+        bytes(row[0])
+        for row in conn.execute("SELECT rel_path FROM entry WHERE scan_id = ?", (outcome.scan_id,))
+    }
+    assert b"Documents/cv.pdf" in paths
+    assert not any(path.startswith(b".ssh") for path in paths)

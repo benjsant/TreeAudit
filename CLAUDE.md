@@ -6,8 +6,8 @@ Construire TreeAudit, une application locale d'audit de fichiers et d'arborescen
 ## Règles non négociables
 1. **Jamais de suppression, déplacement, renommage, fusion ou modification d'une donnée auditée** (D-024). TreeAudit propose des commandes de nettoyage que l'utilisateur lance lui-même ; il ne les exécute jamais (D-025). Seule écriture hors du dossier de données : des archives vérifiées, dans le dossier d'archives déclaré (D-032).
 2. Ne jamais utiliser `sudo`, `subprocess`, `os.system`, `rm`, `shutil.rmtree`, des commandes shell destructrices ou des commandes fournies par l'utilisateur ou un LLM.
-3. Ne jamais monter `/`, `/home` entier, `/dev`, `/proc`, `/sys`, le socket Docker ou un volume hôte général. Jamais d'option `:z`/`:Z` sur une cible (D-011).
-4. Les racines sont déclarées dans la configuration et validées (D-008, D-009). En Docker, chacune est montée en lecture seule sous `/audit/roots/<id>`. Seule exception, en option : les disques externes détectés (D-033). Ils sont validés sur l'hôte (jamais un disque physique du système, en cas de doute refusés), puis montés un par un en lecture seule sous `/audit/disks/<id>`, et revérifiés dans le conteneur.
+3. Ne jamais monter `/`, `/home` entier, `/dev`, `/proc`, `/sys`, le socket Docker ou un volume hôte général. Seule exception : le dossier personnel de l'utilisateur, en lecture seule, ses secrets jamais lus (D-037). Jamais d'option `:z`/`:Z` sur une cible (D-011).
+4. Les racines sont déclarées dans la configuration et validées (D-008, D-009). En Docker, chacune est montée en lecture seule sous `/audit/roots/<id>`. Exceptions : les disques externes détectés (D-033), validés sur l'hôte (jamais un disque physique du système, en cas de doute refusés), puis montés un par un en lecture seule sous `/audit/disks/<id>` et revérifiés dans le conteneur ; les partitions de données du disque système, jamais une partition du système (D-037) ; le dossier personnel (règle 3).
 5. Le serveur n'est joignable que depuis `127.0.0.1` : écoute sur `127.0.0.1` en natif ; en Docker, écoute sur `0.0.0.0` dans le conteneur mais port publié uniquement sur `127.0.0.1` (D-010). Toute autre exposition exige une décision documentée et des tests.
 6. Aucun conteneur privilégié, aucune capacité Linux ajoutée (`cap_drop: [ALL]`), aucun accès au socket Docker.
 7. Le conteneur s'exécute avec un utilisateur non-root (UID/GID de l'utilisateur hôte).
@@ -15,7 +15,7 @@ Construire TreeAudit, une application locale d'audit de fichiers et d'arborescen
 9. Une erreur de permission/E/S ou une interruption doit être signalée ; ne jamais présenter un scan comme complet s'il ne l'est pas (D-012).
 10. Ne jamais suivre les liens symboliques. Parcourir par descripteurs avec `O_NOFOLLOW` (D-013). Ne jamais permettre à un chemin de sortir d'une racine autorisée.
 11. La sécurité ne doit jamais dépendre uniquement d'une liste de noms de dossiers ou de regex.
-12. Les seules écritures autorisées vont dans le dossier de données de TreeAudit et, pour les archives vérifiées uniquement, dans le dossier d'archives (D-032). Aucun des deux ne doit chevaucher une racine auditée, ni l'autre.
+12. Les seules écritures autorisées vont dans le dossier de données de TreeAudit et, pour les archives vérifiées uniquement, dans le dossier d'archives (D-032). Aucun des deux ne doit chevaucher une racine déclarée, ni l'autre. Une racine détectée (disque, dossier personnel) peut les contenir : ils sont alors écartés de tout parcours par leur identité (périphérique, inode), jamais par leur nom (D-037).
 13. Ne pas implémenter Windows dans la V1. Documenter le portage comme une future V2.
 14. Toute dépendance tierce doit être justifiée dans `docs/DEPENDENCIES.md`.
 15. Ne pas intégrer de LLM avant que l'inventaire, les filtres et les rapports déterministes soient testés.

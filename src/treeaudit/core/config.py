@@ -30,7 +30,7 @@ CONTAINER_BIND_HOST = "0.0.0.0"  # noqa: S104
 ROOT_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{0,62}")
 
 _TOP_LEVEL_KEYS = frozenset(
-    {"data_dir", "archive_dir", "external_disks", "bind_host", "port", "roots"}
+    {"data_dir", "archive_dir", "external_disks", "personal_home", "bind_host", "port", "roots"}
 )
 _ROOT_KEYS = frozenset(
     {"id", "path", "label", "allow_system_volume", "cross_mounts", "display_path"}
@@ -54,11 +54,22 @@ class RootConfig:
     display_path: str | None = None
     """Path shown to the user (the host path in Docker). Display only."""
     external: bool = False
-    """Detected external disk (D-033), not declared in the configuration."""
+    """Detected disk (D-033), not declared in the configuration."""
+    internal: bool = False
+    """Detected disk that is a data partition of the system disk (D-037)."""
+    personal: bool = False
+    """The user's personal folder (D-037), not declared in the configuration."""
+    private_paths: frozenset[bytes] = frozenset()
+    """Paths relative to the root that are never read (secrets, D-037)."""
 
     @property
     def shown_path(self) -> str:
         return self.display_path or self.path
+
+    @property
+    def detected(self) -> bool:
+        """Offered by TreeAudit itself (disk, personal folder), not declared."""
+        return self.external or self.personal
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,11 +87,13 @@ class AppConfig:
     """Path of the archive directory shown to the user (the host path in Docker)."""
     external_disks: bool = False
     """Offer the external disks detected at startup as roots (D-033)."""
+    personal_home: bool = False
+    """Natively: offer the user's personal folder as a root (D-037)."""
 
     @property
     def declared_roots(self) -> tuple[RootConfig, ...]:
-        """Roots written in the configuration, without detected disks."""
-        return tuple(root for root in self.roots if not root.external)
+        """Roots written in the configuration, without detected ones."""
+        return tuple(root for root in self.roots if not root.detected)
 
     @property
     def shown_archive_dir(self) -> str | None:
@@ -162,6 +175,9 @@ def parse_config(raw: Mapping[str, Any], *, container_mode: bool = False) -> App
     external_disks = raw.get("external_disks", False)
     if not isinstance(external_disks, bool):
         raise ConfigError("external_disks must be true or false")
+    personal_home = raw.get("personal_home", False)
+    if not isinstance(personal_home, bool):
+        raise ConfigError("personal_home must be true or false")
 
     default_host = CONTAINER_BIND_HOST if container_mode else "127.0.0.1"
     bind_host = raw.get("bind_host", default_host)
@@ -192,6 +208,7 @@ def parse_config(raw: Mapping[str, Any], *, container_mode: bool = False) -> App
         container_mode=container_mode,
         archive_dir=archive_dir,
         external_disks=external_disks,
+        personal_home=personal_home,
     )
 
 
@@ -216,6 +233,8 @@ def _parse_root(item: Any, index: int) -> RootConfig:
     root_id = item.get("id")
     if isinstance(root_id, str) and root_id.startswith("ext-"):
         raise ConfigError(f"{where}.id must not start with 'ext-' (reserved for detected disks)")
+    if root_id == "home":
+        raise ConfigError(f"{where}.id 'home' is reserved for the personal folder")
     if not isinstance(root_id, str) or not ROOT_ID_PATTERN.fullmatch(root_id):
         raise ConfigError(
             f"{where}.id must match {ROOT_ID_PATTERN.pattern} "
@@ -239,7 +258,14 @@ def _parse_root(item: Any, index: int) -> RootConfig:
     if display_path is not None:
         display_path = _require_absolute(display_path, f"{where}.display_path")
 
-    return RootConfig(id=root_id, path=path, label=label, display_path=display_path, **flags)
+    return RootConfig(
+        id=root_id,
+        path=path,
+        label=label,
+        display_path=display_path,
+        allow_system_volume=flags["allow_system_volume"],
+        cross_mounts=flags["cross_mounts"],
+    )
 
 
 def _require_path_string(value: Any, name: str) -> str:

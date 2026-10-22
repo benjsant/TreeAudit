@@ -48,7 +48,7 @@ from treeaudit.duplicates.reader import (
     check_unchanged,
 )
 from treeaudit.roots.mountinfo import MountTable
-from treeaudit.roots.validation import ValidationContext, validate_root
+from treeaudit.roots.validation import ValidationContext, validate_configured_root
 from treeaudit.scanner.models import ScanStatus
 
 logger = logging.getLogger(__name__)
@@ -335,7 +335,7 @@ def run_duplicates(
         raise DuplicateAnalysisError(f"unknown scan: {scan_id}")
     if scan["root_id"] != root.id or scan["root_path"] != root.path:
         raise DuplicateAnalysisError(f"scan {scan_id} was made on another root ({scan['root_id']})")
-    validate_root(root.path, ctx, allow_system_volume=root.allow_system_volume)
+    validate_configured_root(root, ctx)
     expected_root = _expected_root(conn, scan, root.path)
 
     progress = progress if progress is not None else DupProgress()

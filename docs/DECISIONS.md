@@ -324,3 +324,26 @@ Précise la mise en œuvre de D-024.
   - élément déjà compris dans un dossier sélectionné retiré ;
   - élément protégé et analyse incomplète signalés.
 - **Écarté pour l'instant** : l'aperçu des images, seule partie qui lirait le contenu des fichiers. Une image ou un SVG piégé peut contenir du code ; il faudra une étape dédiée (types limités, en-têtes stricts).
+
+## D-037 — Partitions de données du disque système, dossier personnel, dossier de TreeAudit écarté (2026-10-22)
+- **Demande du mainteneur** : `/mnt/Data` est une partition de données, pas le système, et le dossier personnel doit pouvoir être analysé. Les trois choix ont été faits par le mainteneur.
+- **Partitions de données du disque système** (`TREEAUDIT_INTERNAL_DISKS`, activé par défaut) :
+  - D-033 refusait tout le disque physique du système ; désormais, une partition de ce disque est proposée si elle ne partage aucune partition avec `/`, `/boot`, `/boot/efi`, `/efi`, `/home`, `/usr` ou `/var` ;
+  - la comparaison se fait au niveau des partitions, sous les couches device-mapper et RAID : un volume LVM ou LUKS qui partage la partition du système est refusé (prudent) ;
+  - si les partitions du système ne peuvent pas être identifiées, rien n'est proposé sur ce disque ;
+  - un disque est marqué « interne » par la détection sur l'hôte, puis vérifié à nouveau dans le conteneur. Un disque annoncé comme externe doit toujours être hors du disque système.
+- **Dossier personnel** (`TREEAUDIT_HOME`, activé par défaut) :
+  - proposé **en entier**, caches cachés compris : ce sont souvent les plus gros à nettoyer ;
+  - monté en lecture seule récursive sous `/audit/home` (`compose.home.yaml`), d'après le chemin réel de `$HOME` (Fedora Silverblue), jamais d'après `.env` ;
+  - vérifié sur l'hôte : dossier appartenant à l'utilisateur, puis validation habituelle (`roots check --personal`) ;
+  - D-009 refusait le dossier personnel entier ; c'est désormais un choix explicite, fait une fois ici, avec un identifiant réservé (`home`). Déclaré à la main dans la configuration, il reste refusé.
+- **Secrets jamais lus** (`roots/personal.py`) : clés, gestionnaires de mots de passe, profils de navigateur et de messagerie, identifiants cloud et forge. Ils sont écartés avant tout `stat`, absents de l'index et du sélecteur, et une analyse ou une archive ne peut pas commencer à l'intérieur. La liste réduit l'exposition et ne constitue pas la protection : lecture seule et absence de réseau (règle 11).
+- **Le dossier de TreeAudit sur une racine détectée** :
+  - D-033 refusait un disque qui contient `data/` ; désormais il est proposé, et `data/` et `archives/` sont écartés de tout parcours par leur identité (périphérique, inode), quel que soit leur nom ;
+  - ils sont cachés du sélecteur ;
+  - une archive qui les contiendrait est refusée avant écriture, et l'écriture échoue s'ils apparaissent en cours de route ;
+  - l'explorateur et le panier marquent « protégé » tout dossier qui les contient, ou qui contient des secrets ;
+  - les racines déclarées dans la configuration restent soumises à l'ancienne règle (aucun chevauchement).
+- **Messages** : au démarrage, la liste des disques trouvés, avec un avertissement s'il n'y a aucun disque externe ; l'interface précise qu'un disque doit être branché **et ouvert** (monté) avant le démarrage. Un essai réel l'a montré : les disques montés 41 s après le démarrage n'étaient pas vus.
+- **Exposition acceptée** : le conteneur voit en plus, en lecture seule, le dossier personnel et les partitions de données acceptées. Il reste sans réseau.
+- Amende D-009, D-033 et les règles 3, 4 et 12 de `CLAUDE.md`.

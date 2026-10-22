@@ -100,3 +100,21 @@ class ArchiveLock(ScanLock):
 
     def _locked_error(self) -> ConfigError:
         return ArchiveLockedError("another archive is already being written")
+
+
+def own_dirs(*paths: str | None) -> frozenset[tuple[int, int]]:
+    """(st_dev, st_ino) of TreeAudit's own folders (data, archives), as they exist now.
+
+    A detected disk or the personal folder may contain them (D-037): they are
+    then recognised by identity, never by name, and left out of every analysis.
+    """
+    identities: set[tuple[int, int]] = set()
+    for path in paths:
+        if path is None:
+            continue
+        try:
+            st = os.stat(path)
+        except OSError:
+            continue  # not created yet: nothing of ours to skip
+        identities.add((st.st_dev, st.st_ino))
+    return frozenset(identities)

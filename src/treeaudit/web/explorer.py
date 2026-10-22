@@ -96,6 +96,30 @@ def _copy_counts(
     return counts
 
 
+_HELD = {
+    "treeaudit": "contient TreeAudit lui-même (son index, ses archives)",
+    "private": "contient des dossiers privés jamais analysés (clés, profils de navigateur…)",
+}
+
+
+def _holders(conn: sqlite3.Connection, scan_id: int) -> dict[bytes, str]:
+    """Folders containing TreeAudit's own or private folders (D-037), and why.
+
+    Those were left out of the analysis: removing a folder that holds them would
+    remove them too, unseen.
+    """
+    holders: dict[bytes, str] = {}
+    rows = conn.execute(
+        "SELECT rel_path, reason FROM scan_exclusion WHERE scan_id = ? AND reason IN (?, ?) "
+        "ORDER BY reason",  # "treeaudit" comes last: it wins when both apply
+        (scan_id, *_HELD),
+    )
+    for row in rows:
+        for ancestor in (b"", *_ancestors(bytes(row["rel_path"]))):
+            holders[ancestor] = _HELD[row["reason"]]
+    return holders
+
+
 class MarkSource:
     """Loads, once per page, what is needed to mark entries of one scan."""
 
@@ -105,8 +129,12 @@ class MarkSource:
         self.findings = {f.entry_id: f for f in parasite_findings(conn, scan_id)}
         self.repo_dirs = repo_dirs_of(conn, scan_id)
         self.dupes_run = latest_dupes_run(conn, scan_id)
+        self.holders = _holders(conn, scan_id)
 
     def protection(self, rel_path: bytes, kind: str) -> str | None:
+        held = self.holders.get(rel_path)
+        if held is not None:
+            return held
         if kind == "dir" and rel_path in self.repo_dirs:
             return "dépôt git"
         return protection_reason(rel_path, self.repo_dirs)
@@ -121,22 +149,11 @@ class MarkSource:
         for entry_id, rel_path, kind in entries:
             finding = self.findings.get(entry_id)
             # A folder to clean is often inside a project: "protected" would only confuse.
-            protection = None if finding is not None else self.protection(rel_path, kind)
+            protection = self.holders.get(rel_path)
+            if protection is None and finding is None:
+                protection = self.protection(rel_path, kind)
             result[entry_id] = Marks(finding, copies.get(entry_id, 0), protection)
         return result
-
-
-def raw_paths(conn: sqlite3.Connection, scan_id: int, entry_ids: Sequence[int]) -> dict[int, bytes]:
-    paths: dict[int, bytes] = {}
-    for chunk in _chunks(entry_ids):
-        marks = ",".join("?" * len(chunk))
-        for row in conn.execute(
-            "SELECT entry_id, rel_path FROM entry "  # noqa: S608 - only "?" placeholders added
-            f"WHERE scan_id = ? AND entry_id IN ({marks})",
-            (scan_id, *chunk),
-        ):
-            paths[row["entry_id"]] = bytes(row["rel_path"])
-    return paths
 
 
 # --- details of one entry ------------------------------------------------------------
@@ -303,8 +320,8 @@ def resolve_basket(conn: sqlite3.Connection, scan_id: int, entry_ids: Sequence[i
             allocated = None if subtree is None else subtree + row["allocated_size"]
         else:
             allocated = row["allocated_size"]
-        protection = None
-        if row["entry_id"] not in source.findings:
+        protection = source.holders.get(rel_path)
+        if protection is None and row["entry_id"] not in source.findings:
             protection = source.protection(rel_path, row["kind"])
         items.append(
             BasketItem(

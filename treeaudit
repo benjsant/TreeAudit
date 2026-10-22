@@ -22,7 +22,8 @@ die() { say "$@"; exit 1; }
 # defaults unless given in the environment (TREEAUDIT_PORT=9000 ./treeaudit) or
 # in a .env file (OLD, EXPERIMENTAL mode, not tested any more).
 SETTINGS=(TREEAUDIT_ROOT_PATH TREEAUDIT_ALLOW_SYSTEM_VOLUME TREEAUDIT_PORT
-          TREEAUDIT_ARCHIVE_PATH TREEAUDIT_EXTERNAL_DISKS TREEAUDIT_UID TREEAUDIT_GID)
+          TREEAUDIT_ARCHIVE_PATH TREEAUDIT_EXTERNAL_DISKS TREEAUDIT_INTERNAL_DISKS
+          TREEAUDIT_HOME TREEAUDIT_UID TREEAUDIT_GID)
 for name in "${SETTINGS[@]}"; do
     printf -v "$name" '%s' "${!name:-}"
 done
@@ -53,11 +54,19 @@ fi
 # that what is validated and what is mounted are the same normalized path.
 TREEAUDIT_ROOT_PATH="${TREEAUDIT_ROOT_PATH%/}"
 TREEAUDIT_ARCHIVE_PATH="${TREEAUDIT_ARCHIVE_PATH%/}"
-# Defaults (D-034): the host user's ids, external disks on, archives in
+# Defaults (D-034, D-037): the host user's ids; external disks, data
+# partitions of the system disk and the personal folder offered; archives in
 # ./archives next to ./data (a dedicated folder TreeAudit owns).
 [[ -n $TREEAUDIT_UID ]] || TREEAUDIT_UID="$(id -u)"
 [[ -n $TREEAUDIT_GID ]] || TREEAUDIT_GID="$(id -g)"
 [[ -n $TREEAUDIT_EXTERNAL_DISKS ]] || TREEAUDIT_EXTERNAL_DISKS=1
+[[ -n $TREEAUDIT_INTERNAL_DISKS ]] || TREEAUDIT_INTERNAL_DISKS=1
+[[ -n $TREEAUDIT_HOME ]] || TREEAUDIT_HOME=1
+# The personal folder, by its real path (on Fedora Silverblue /home is a link).
+TREEAUDIT_HOME_PATH=""
+if [[ $TREEAUDIT_HOME == 1 ]]; then
+    TREEAUDIT_HOME_PATH="$(realpath -e -- "${HOME:-}" 2>/dev/null || true)"
+fi
 ARCHIVES_DIR="$HERE/archives"
 [[ -n $TREEAUDIT_ARCHIVE_PATH ]] || TREEAUDIT_ARCHIVE_PATH="$ARCHIVES_DIR"
 # Host time zone (e.g. Europe/Paris), so that archive names use local time.
@@ -66,7 +75,7 @@ if [[ -z ${TREEAUDIT_TZ:-} ]]; then
 fi
 # Hand compose exactly the values validated here, so that the check and the
 # actual mount can never disagree.
-export "${SETTINGS[@]}" TREEAUDIT_TZ
+export "${SETTINGS[@]}" TREEAUDIT_TZ TREEAUDIT_HOME_PATH
 
 # SELinux enforcing (Fedora's default) denies reads of host files that are not
 # labelled for containers: compose.selinux.yaml then lifts confinement for
@@ -88,6 +97,10 @@ fi
 COMPOSE=("${COMPOSE_BASE[@]}")
 if [[ -n $TREEAUDIT_ROOT_PATH ]]; then
     COMPOSE+=(-f compose.root.yaml)
+fi
+# The personal folder, read-only, its secrets never read (D-037).
+if [[ -n $TREEAUDIT_HOME_PATH ]]; then
+    COMPOSE+=(-f compose.home.yaml)
 fi
 # The archive directory is mounted (read-write) only when it is set (D-032).
 if [[ -n $TREEAUDIT_ARCHIVE_PATH ]]; then
@@ -117,7 +130,11 @@ make_archives_dir() {
 # Regenerated before every use: the disks plugged in now, validated now.
 write_disks_file() {
     [[ $EXTERNAL == 1 ]] || return 0
-    "${COMPOSE_BASE[@]}" run --rm -T check-disks --user "$(id -un)" \
+    local internal=()
+    if [[ $TREEAUDIT_INTERNAL_DISKS == 1 ]]; then
+        internal=(--internal)
+    fi
+    "${COMPOSE_BASE[@]}" run --rm -T check-disks --user "$(id -un)" "${internal[@]}" \
         --data-dir "$(realpath -e -- data)" < /proc/self/mountinfo > "$DISKS_FILE.tmp"
     mv -f -- "$DISKS_FILE.tmp" "$DISKS_FILE"
 }
@@ -145,9 +162,15 @@ check_roots() {
         fi
         "${COMPOSE_BASE[@]}" run --rm -T check "${allow[@]}" --home "$HOME" \
             --data-dir "$HERE/data" -- "$TREEAUDIT_ROOT_PATH" < /proc/self/mountinfo
-    elif [[ $EXTERNAL != 1 ]]; then
-        say "Rien à analyser : la détection des disques externes est désactivée (TREEAUDIT_EXTERNAL_DISKS=0) et aucun dossier n'est indiqué"
+    elif [[ $EXTERNAL != 1 && -z $TREEAUDIT_HOME_PATH ]]; then
+        say "Rien à analyser : disques et dossier personnel désactivés (TREEAUDIT_EXTERNAL_DISKS=0, TREEAUDIT_HOME=0) et aucun dossier n'est indiqué"
         exit 2
+    fi
+    if [[ -n $TREEAUDIT_HOME_PATH ]]; then
+        [[ -d $TREEAUDIT_HOME_PATH && -O $TREEAUDIT_HOME_PATH ]] ||
+            die "REFUSÉ: le dossier personnel '$TREEAUDIT_HOME_PATH' n'est pas un dossier qui t'appartient (TREEAUDIT_HOME=0 pour s'en passer)"
+        "${COMPOSE_BASE[@]}" run --rm -T check --personal -- "$TREEAUDIT_HOME_PATH" \
+            < /proc/self/mountinfo
     fi
     if [[ -n $TREEAUDIT_ARCHIVE_PATH ]]; then
         check_real_dir "dossier d'archives" "$TREEAUDIT_ARCHIVE_PATH"
@@ -192,7 +215,7 @@ cmd_cli() {
 
 cmd_settings() {
     local name
-    for name in "${SETTINGS[@]}" TREEAUDIT_TZ COMPOSE_SELINUX; do
+    for name in "${SETTINGS[@]}" TREEAUDIT_HOME_PATH TREEAUDIT_TZ COMPOSE_SELINUX; do
         printf '%s=%s\n' "$name" "${!name}"
     done
     printf 'COMPOSE=%s\n' "${COMPOSE[*]}"
@@ -219,6 +242,10 @@ TREEAUDIT_PORT=8765
 TREEAUDIT_ARCHIVE_PATH=
 # External disks in the interface (never the system disk). Empty: 1.
 TREEAUDIT_EXTERNAL_DISKS=
+# Data partitions of the system disk (never /, /boot, /home...). Empty: 1.
+TREEAUDIT_INTERNAL_DISKS=
+# The personal folder, read-only, secrets never read. Empty: 1.
+TREEAUDIT_HOME=
 EOF
     )
     say ".env created (old, experimental mode)"

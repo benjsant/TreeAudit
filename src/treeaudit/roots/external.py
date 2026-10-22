@@ -8,6 +8,11 @@ on a physical disk of the running system** and if its physical disk can be
 determined at all. These folder names only say where to look; the decision
 rests on the physical disk.
 
+A data partition of the system disk (D-037) may be offered too, as an
+"internal" disk, when it shares no partition with a system mount point (/,
+/boot, /home, /usr, /var...): a separate filesystem, never the system's own. A
+LUKS or LVM container shared with the system counts as shared: refused.
+
 The physical disk is found through sysfs, read only: the mount's device number
 (or its /dev source) leads to a block device, then through device-mapper and
 RAID layers (``slaves/``: LUKS, LVM, md) and partitions (``partition``) to
@@ -56,7 +61,8 @@ class DiskReason(StrEnum):
     UNKNOWN_DISK = "unknown_disk"
     DISK_IMAGE = "disk_image"
     SYSTEM_UNKNOWN = "system_unknown"
-    DATA_DIR_INSIDE = "data_dir_inside"
+    SYSTEM_PARTITION = "system_partition"
+    DATA_DIR_INSIDE = "data_dir_inside"  # no longer produced (D-037), kept for old lists
     UNSAFE_NAME = "unsafe_name"
     NOT_MOUNTED = "not_mounted"
     NOT_READ_ONLY = "not_read_only"
@@ -65,6 +71,10 @@ class DiskReason(StrEnum):
 # User-facing explanations (French, see docs/DECISIONS.md D-016).
 DISK_MESSAGES: dict[DiskReason, str] = {
     DiskReason.SYSTEM_DISK: "ce disque contient le système en cours d'exécution",
+    DiskReason.SYSTEM_PARTITION: (
+        "c'est une partition du système (/, /boot, /home, /usr ou /var) ou elle en partage "
+        "le conteneur chiffré ou LVM"
+    ),
     DiskReason.UNKNOWN_DISK: (
         "impossible de savoir sur quel disque physique il se trouve : par prudence, "
         "il n'est pas proposé"
@@ -97,6 +107,10 @@ class ExternalDisk:
     root_id: str
     fs_type: str
     reason: DiskReason | None = None
+    internal: bool = False
+    """A data partition of the system disk (D-037), not a separate disk."""
+    holds_treeaudit: bool = False
+    """TreeAudit's own folders are on it: they are left out of every analysis."""
 
     @property
     def accepted(self) -> bool:
@@ -172,12 +186,40 @@ def _disks_of(node: Path, depth: int = 0) -> frozenset[str]:
     return frozenset({node.name})
 
 
+def _partitions_of(node: Path, depth: int = 0) -> frozenset[str]:
+    """Partitions (or whole disks without partitions) under a block device: the
+    level below device-mapper and RAID. Raises _Image or LookupError."""
+    if depth > _MAX_LAYERS:
+        raise LookupError("too many device layers")
+    if node.name.startswith(_IMAGE_PREFIXES):
+        raise _Image
+    slaves = node / "slaves"
+    if slaves.is_dir():
+        layers = sorted(slaves.iterdir())
+        if layers:
+            parts: set[str] = set()
+            for layer in layers:
+                parts |= _partitions_of(layer.resolve(), depth + 1)
+            return frozenset(parts)
+    if node.name.startswith(("dm-", "md")):
+        raise LookupError("virtual device without underlying disks")
+    return frozenset({node.name})
+
+
 def physical_disks(major_minor: str, source: str, sysfs: Path = SYSFS) -> frozenset[str]:
     """Physical disks holding a filesystem. Raises _Image or LookupError if unknown."""
     node = _block_node(major_minor, source, sysfs)
     if node is None:
         raise LookupError(f"no block device for {major_minor} {source}")
     return _disks_of(node)
+
+
+def partitions(major_minor: str, source: str, sysfs: Path = SYSFS) -> frozenset[str]:
+    """Partitions holding a filesystem. Raises _Image or LookupError if unknown."""
+    node = _block_node(major_minor, source, sysfs)
+    if node is None:
+        raise LookupError(f"no block device for {major_minor} {source}")
+    return _partitions_of(node)
 
 
 # --- the running system's disks -------------------------------------------------------
@@ -224,6 +266,21 @@ def system_disks(specs: Iterable[tuple[str, str]], sysfs: Path = SYSFS) -> froze
     return frozenset(disks) if found else None
 
 
+def system_partitions(
+    specs: Iterable[tuple[str, str]], sysfs: Path = SYSFS
+) -> frozenset[str] | None:
+    """Partitions of the system mount points; None if one cannot be resolved."""
+    parts: set[str] = set()
+    found = False
+    for major_minor, source in specs:
+        found = True
+        try:
+            parts |= partitions(major_minor, source, sysfs)
+        except (LookupError, _Image, OSError):
+            return None
+    return frozenset(parts) if found else None
+
+
 def _exact_mount(mounts: MountTable, point: str) -> MountEntry | None:
     visible = None
     for entry in mounts.entries:
@@ -242,12 +299,14 @@ def find_external_disks(
     *,
     data_dir: str | None = None,
     sysfs: Path = SYSFS,
+    system_parts: frozenset[str] | None = None,
 ) -> list[ExternalDisk]:
     """Every disk mounted directly below one of ``media_dirs``, offered or refused.
 
     All paths belong to the machine whose ``mounts`` and ``sysfs`` are given
     (the host, even when this runs in a container). ``system`` is the set of
-    the system's physical disks.
+    the system's physical disks; ``system_parts``, the partitions of its mount
+    points. Without ``system_parts``, nothing on the system disk is offered.
     """
     latest: dict[str, MountEntry] = {}
     for media_dir in media_dirs:
@@ -260,58 +319,71 @@ def find_external_disks(
     for point, entry in sorted(latest.items()):
         if entry.is_virtual:
             continue
+        reason: DiskReason | None
+        if any(ord(char) < 32 or ord(char) == 127 for char in point):
+            reason, internal = DiskReason.UNSAFE_NAME, False
+        else:
+            reason, internal = _classify(entry, system, system_parts, sysfs)
         disks.append(
             ExternalDisk(
                 name=os.path.basename(point),
                 mount_point=point,
                 root_id=disk_root_id(point),
                 fs_type=entry.fs_type,
-                reason=_refusal(entry, system, data_dir, sysfs),
+                reason=reason,
+                internal=internal,
+                holds_treeaudit=data_dir is not None
+                and is_same_or_parent(point, os.path.normpath(data_dir)),
             )
         )
     return disks
 
 
-def _refusal(
-    entry: MountEntry, system: frozenset[str] | None, data_dir: str | None, sysfs: Path
-) -> DiskReason | None:
-    if any(ord(char) < 32 or ord(char) == 127 for char in entry.mount_point):
-        return DiskReason.UNSAFE_NAME
-    reason = _disk_refusal(entry, system, sysfs)
-    if reason is not None:
-        return reason
-    if data_dir is not None and is_same_or_parent(entry.mount_point, os.path.normpath(data_dir)):
-        return DiskReason.DATA_DIR_INSIDE
-    return None
-
-
-def _disk_refusal(
-    entry: MountEntry, system: frozenset[str] | None, sysfs: Path
-) -> DiskReason | None:
+def _classify(
+    entry: MountEntry,
+    system: frozenset[str] | None,
+    system_parts: frozenset[str] | None,
+    sysfs: Path,
+) -> tuple[DiskReason | None, bool]:
+    """(refusal or None, internal): is this filesystem offered, and as what."""
     if system is None:
-        return DiskReason.SYSTEM_UNKNOWN
+        return DiskReason.SYSTEM_UNKNOWN, False
     try:
         disks = physical_disks(entry.major_minor, entry.source, sysfs)
+        parts = partitions(entry.major_minor, entry.source, sysfs)
     except _Image:
-        return DiskReason.DISK_IMAGE
+        return DiskReason.DISK_IMAGE, False
     except (LookupError, OSError):
-        return DiskReason.UNKNOWN_DISK
-    if disks & system:
-        return DiskReason.SYSTEM_DISK
-    return None
+        return DiskReason.UNKNOWN_DISK, False
+    if not disks & system:
+        return None, False
+    if system_parts is None:
+        return DiskReason.SYSTEM_DISK, True
+    if parts & system_parts:
+        return DiskReason.SYSTEM_PARTITION, True
+    return None, True
 
 
 def check_mounted_disk(
-    path: str, mounts: MountTable, system: frozenset[str] | None, sysfs: Path = SYSFS
+    path: str,
+    mounts: MountTable,
+    system: frozenset[str] | None,
+    sysfs: Path = SYSFS,
+    *,
+    system_parts: frozenset[str] | None = None,
+    internal: bool = False,
 ) -> DiskReason | None:
     """Second check inside the container: ``path`` must be a dedicated, read-only
-    mount of a disk that is still not a system disk."""
+    mount of a disk that is still not a system disk, or, for an internal disk,
+    of a partition that is still not one of the system's."""
     entry = _exact_mount(mounts, path)
     if entry is None:
         return DiskReason.NOT_MOUNTED
     if not entry.is_read_only:
         return DiskReason.NOT_READ_ONLY
-    return _disk_refusal(entry, system, sysfs)
+    # Announced as a separate disk, it must be one: no partition of the system
+    # disk is accepted then (system_parts left out).
+    return _classify(entry, system, system_parts if internal else None, sysfs)[0]
 
 
 # --- hand-over from the host to the container ----------------------------------------------
@@ -327,6 +399,8 @@ def disks_to_json(disks: Iterable[ExternalDisk]) -> str:
                 "host_path": disk.mount_point,
                 "fs_type": disk.fs_type,
                 "reason": None if disk.reason is None else disk.reason.value,
+                "internal": disk.internal,
+                "holds_treeaudit": disk.holds_treeaudit,
             }
             for disk in disks
         ],
@@ -348,11 +422,14 @@ def disks_from_json(text: str) -> list[ExternalDisk]:
             continue
         root_id, name, host_path = item.get("id"), item.get("name"), item.get("host_path")
         fs_type, reason = item.get("fs_type", ""), item.get("reason")
+        internal, holds = item.get("internal", False), item.get("holds_treeaudit", False)
         if not (
             isinstance(root_id, str)
             and isinstance(name, str)
             and isinstance(host_path, str)
             and isinstance(fs_type, str)
+            and isinstance(internal, bool)
+            and isinstance(holds, bool)
         ):
             continue
         if not host_path.startswith("/") or root_id != disk_root_id(host_path):
@@ -361,7 +438,7 @@ def disks_from_json(text: str) -> list[ExternalDisk]:
             parsed = None if reason is None else DiskReason(reason)
         except ValueError:
             continue
-        disks.append(ExternalDisk(name, host_path, root_id, fs_type, parsed))
+        disks.append(ExternalDisk(name, host_path, root_id, fs_type, parsed, internal, holds))
     return disks
 
 

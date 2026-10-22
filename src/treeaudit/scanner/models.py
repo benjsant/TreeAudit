@@ -28,6 +28,8 @@ class EntryKind(StrEnum):
 
 class ExclusionReason(StrEnum):
     MOUNT_POINT = "mount_point"
+    TREEAUDIT = "treeaudit"  # TreeAudit's own data or archive directory (D-037)
+    PRIVATE = "private"  # secrets of the personal folder, never read (D-037)
 
 
 class ErrorOperation(StrEnum):

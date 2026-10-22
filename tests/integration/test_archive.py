@@ -44,6 +44,7 @@ from treeaudit.archive.verify import (
 from treeaudit.core.config import AppConfig, RootConfig
 from treeaudit.core.datadir import ArchiveLock, ArchiveLockedError
 from treeaudit.roots.mountinfo import MountTable, parse_mountinfo
+from treeaudit.roots.personal import personal_root
 from treeaudit.roots.validation import RootRejectedError
 from treeaudit.scanner.walker import SubpathError
 
@@ -496,7 +497,7 @@ def test_archive_dir_inside_the_folder_is_refused_before_writing(
     monkeypatch.setattr(runner, "validate_archive_dir", lambda path, ctx: None)
     outcome = run(tmp_path, source, inside)
     assert outcome.status is ArchiveStatus.FAILED
-    assert outcome.failure is not None and "contient le dossier d'archives" in outcome.failure
+    assert outcome.failure is not None and "contient TreeAudit lui-même" in outcome.failure
     assert os.listdir(inside) == []
     # Archiving a sibling folder of the same disk is fine.
     assert run(tmp_path, source, inside, subpath="docs/old").status is ArchiveStatus.COMPLETE
@@ -805,3 +806,57 @@ def test_folder_chosen_in_an_analysis_must_still_be_the_same(
     assert outcome.status is ArchiveStatus.FAILED
     assert outcome.failure is not None and "n'est plus celui de l'analyse" in outcome.failure
     assert len(os.listdir(archives)) == 1
+
+
+# --- TreeAudit's own folders and private folders (D-037) ------------------------------------
+
+
+def run_root(tmp_path: Path, root: RootConfig, archives: Path, data_dir: Path) -> ArchiveOutcome:
+    config = AppConfig(data_dir=str(data_dir), roots=(root,), archive_dir=str(archives))
+    return execute_archive(
+        config,
+        ArchiveRequest(root=root),
+        mounts=mounts_for(tmp_path),
+        home=None,
+        cancel=threading.Event(),
+        now=NOW,
+    )
+
+
+def test_a_folder_holding_the_data_dir_is_refused_before_writing(
+    tmp_path: Path, archives: Path
+) -> None:
+    disk = tmp_path / "disk"
+    data = disk / "tools" / "treeaudit-data"
+    data.mkdir(parents=True)
+    (disk / "photo.jpg").write_bytes(b"j")
+    root = RootConfig(id="ext-disk-000000", path=str(disk), label="Disk", external=True)
+    outcome = run_root(tmp_path, root, archives, data)
+    assert outcome.status is ArchiveStatus.FAILED
+    assert outcome.failure is not None and "contient TreeAudit lui-même" in outcome.failure
+    assert os.listdir(archives) == []
+
+
+def test_a_folder_holding_private_folders_is_refused_but_its_subfolders_are_not(
+    tmp_path: Path, archives: Path
+) -> None:
+    home = tmp_path / "home"
+    (home / ".ssh").mkdir(parents=True)
+    (home / ".ssh" / "id_ed25519").write_bytes(b"secret")
+    (home / "Documents").mkdir()
+    (home / "Documents" / "cv.pdf").write_bytes(b"cv")
+    root = personal_root(str(home))
+    outcome = run_root(tmp_path, root, archives, tmp_path / "data")
+    assert outcome.status is ArchiveStatus.FAILED
+    assert outcome.failure is not None and "dossiers privés" in outcome.failure
+    assert os.listdir(archives) == []
+    config = AppConfig(data_dir=str(tmp_path / "data"), roots=(root,), archive_dir=str(archives))
+    documents = execute_archive(
+        config,
+        ArchiveRequest(root=root, subpath="Documents"),
+        mounts=mounts_for(tmp_path),
+        home=None,
+        cancel=threading.Event(),
+        now=NOW,
+    )
+    assert documents.status is ArchiveStatus.COMPLETE
