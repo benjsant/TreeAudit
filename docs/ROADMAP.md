@@ -123,7 +123,8 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Étape 1 : bac à sable pour toutes les commandes natives, refus de démarrer s'il est incomplet, fichiers temporaires de SQLite dans un dossier privé.
 - [x] Étape 2 : première AppImage, construite dans Docker ; zéro configuration ; bouton « Quitter » ; essai réel sur l'hôte.
 - [x] Étape 3 : disques détectés à chaud (natif) ; le choix libre d'un dossier quelconque n'est pas fait (voir D-038).
-- [ ] Étape 4 : relecture de sécurité du bac à sable, décision sur Docker pour les utilisateurs.
+- [x] Étape 4 : relecture de sécurité (deux contournements trouvés et fermés : SCTP/MPTCP, `chattr`), décision : AppImage recommandée, Docker pour les noyaux anciens et le développement.
+- [ ] Publier l'AppImage (fichier à télécharger) pour qu'elle devienne le démarrage par défaut.
 
 ## Phase 6 octies — Cet ordinateur (D-037)
 - [x] Partitions de données du disque système proposées, jamais celles du système (vérifiées sur l'hôte et dans le conteneur).

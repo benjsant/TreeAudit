@@ -407,6 +407,26 @@ Précise la mise en œuvre de D-024.
   - en Docker, rien ne change : le conteneur ne voit que ce qui était monté à son démarrage, et les messages disent toujours de relancer ;
   - **choix libre d'un dossier quelconque : non fait, volontairement.** Le dossier personnel, les partitions de données et les disques couvrent les données de l'utilisateur ; le reste est le système, toujours refusé (D-009). Saisir un chemin dans l'interface irait contre une règle de l'API (aucune route n'accepte de chemin absolu). À reconsidérer si un besoin réel apparaît ;
   - essai réel (AppImage, hôte, sous bac à sable) : la page de choix propose `Data` (partition interne) et les deux disques USB, refaits à chaque ouverture.
+- **Étape 4, faite : relecture de sécurité du bac à sable**, en cherchant à le contourner, chaque piste essayée pour de vrai (sonde, sur l'hôte et en Docker) :
+
+  | Piste | Avant | Après |
+  |---|---|---|
+  | Connexion par TCP Fast Open (`sendto` sans `connect`), connexion IPv6 | refusées (Landlock) | refusées |
+  | Socket « flux » SCTP ou MPTCP, protocoles que Landlock ne filtre pas | **créées** | refusées : seccomp exige le protocole TCP |
+  | `chattr` (`ioctl FS_IOC_SETFLAGS`) sur un fichier ouvert en lecture seule | **attribut posé sur le fichier audité** | refusé : liste **blanche** d'`ioctl` (terminal, mode non bloquant), tout le reste répond `ENOTTY` |
+  | Programme écrit en mémoire (`memfd`) puis exécuté | refusé (Landlock) | refusé, et `execve`/`execveat` refusés aussi par seccomp |
+  | Lien physique d'un fichier extérieur dans `data/`, écriture par lien symbolique, `truncate` | refusés (Landlock) | refusés |
+  | `ptrace`, mémoire ou descripteurs d'autres processus | refusés (Landlock) | refusés aussi par seccomp |
+  | Configuration `data_dir = "/home/moi"`, `"/"`, dans `/etc` ou `/usr` | **acceptée** : écriture ouverte à tout le dossier | refusée au démarrage |
+  | `treeaudit gateway` en natif | hors bac à sable | refusée (Docker seulement) |
+
+  - Le filtre seccomp est désormais écrit avec un petit assembleur à étiquettes (sauts calculés et bornés), et vérifié par un interpréteur BPF pour x86_64 et aarch64.
+  - Résultat sur l'hôte : 34 tentatives, seules les actions prévues réussissent, et le fichier visé ne change pas (contenu, droits, attributs).
+  - **Limites qui restent** : la lecture n'est pas limitée (rien ne peut sortir pour autant) ; sans Landlock ABI 6 (Linux 6.12), les signaux vers les autres processus de l'utilisateur ne sont pas bloqués ; les droits de fichiers ajoutés par des versions futures de Landlock ne sont pas restreints (ceux dont dépend la protection le sont) ; x86_64 et aarch64 seulement.
+- **Décision sur Docker** :
+  - **l'AppImage devient le mode recommandé** pour l'utilisateur dès qu'elle est publiée (fichier à télécharger) ; d'ici là, elle se construit avec `./treeaudit appimage` ;
+  - **Docker reste** pour les noyaux antérieurs à Linux 6.7, pour le développement et les tests, et pour qui le préfère ;
+  - toute modification de `core/sandbox.py` doit repasser la sonde et la relecture (règle 17 de `CLAUDE.md`).
 
 ## D-039 — Thème clair, sombre ou automatique (2026-10-22)
 - **Demande du mainteneur** : pouvoir choisir le mode clair ou sombre.

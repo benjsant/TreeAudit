@@ -46,7 +46,7 @@ cd TreeAudit
 
 Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C` ou `./treeaudit stop` arrête tout. SELinux en mode enforcing (Fedora par défaut) est détecté tout seul.
 
-### Sans Docker : l'AppImage (nouveau, à l'essai)
+### Sans Docker : l'AppImage (recommandée si ton Linux est récent)
 
 TreeAudit existe aussi en un seul fichier, sans Docker (décision D-038) :
 

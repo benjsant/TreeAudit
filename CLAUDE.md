@@ -20,6 +20,7 @@ Construire TreeAudit, une application locale d'audit de fichiers et d'arborescen
 14. Toute dépendance tierce doit être justifiée dans `docs/DEPENDENCIES.md`.
 15. Ne pas intégrer de LLM avant que l'inventaire, les filtres et les rapports déterministes soient testés.
 16. La sécurité ne repose pas sur Docker : chaque protection existe aussi en mode natif (D-007).
+17. Le mode natif s'exécute toujours sous le bac à sable du noyau (Landlock + seccomp, D-038). Toute modification de `core/sandbox.py` ou de ce qui l'appelle doit repasser la sonde (`tests/security/test_sandbox.py`, aussi sur l'hôte) et une relecture de sécurité.
 
 ## Langue (D-016)
 - Code, identifiants, commentaires, docstrings, messages de commit : **anglais**.

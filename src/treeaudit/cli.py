@@ -38,7 +38,7 @@ from treeaudit.core.config import (
 )
 from treeaudit.core.datadir import prepare_data_dir
 from treeaudit.core.errors import TreeAuditError
-from treeaudit.core.sandbox import Policy, restrict
+from treeaudit.core.sandbox import Policy, SandboxError, restrict
 from treeaudit.filters.spec import FilterSpec
 from treeaudit.parasites.commands import Action
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
@@ -63,9 +63,12 @@ from treeaudit.roots.registry import (
     with_personal_folder,
 )
 from treeaudit.roots.validation import (
+    FORBIDDEN_ROOTS,
     REASON_MESSAGES,
     RootRejectedError,
     ValidationContext,
+    is_same_or_parent,
+    is_within,
     validate_root,
 )
 from treeaudit.scanner.walker import DEFAULT_MAX_DEPTH, SubpathError
@@ -307,6 +310,43 @@ def build_parser() -> argparse.ArgumentParser:
 _WITHOUT_CONFIG = frozenset({"roots check", "archive check", "disks detect"})
 
 
+# Never written inside, whatever the configuration says. /var and /run are not
+# listed: the personal folder may be /var/home/<user> (Fedora Silverblue), and
+# SQLite's temporary folder is in /run/user/<uid>.
+_NEVER_WRITE_INSIDE = (
+    "/bin",
+    "/boot",
+    "/dev",
+    "/etc",
+    "/lib",
+    "/lib32",
+    "/lib64",
+    "/proc",
+    "/sbin",
+    "/sys",
+    "/usr",
+)
+
+
+def _check_write_dir(path: str, home: str | None) -> None:
+    """A folder the sandbox lets TreeAudit write to must be its own, never a
+    system folder nor the whole personal folder (security review, D-038):
+    a configuration naming ``data_dir = "/home/me"`` would otherwise open it all."""
+    real = os.path.realpath(path)
+    too_wide = (
+        not os.path.isabs(path)
+        or any(is_same_or_parent(real, forbidden) for forbidden in FORBIDDEN_ROOTS)
+        or any(is_within(real, tree) for tree in _NEVER_WRITE_INSIDE)
+    )
+    if home is not None and is_same_or_parent(real, os.path.realpath(home)):
+        too_wide = True
+    if too_wide:
+        raise SandboxError(
+            f"dossier d'écriture refusé : {path} (ce doit être un dossier propre à TreeAudit, "
+            "jamais un dossier système ni le dossier personnel entier)"
+        )
+
+
 def _enter_sandbox(args: argparse.Namespace, write_dirs: Sequence[str]) -> None:
     """Restrict this process for good (D-038): read anywhere, write only in
     ``write_dirs`` and SQLite's temporary folder, execute nothing, connect
@@ -316,6 +356,8 @@ def _enter_sandbox(args: argparse.Namespace, write_dirs: Sequence[str]) -> None:
     args.sandboxed = False  # once is enough: the restriction cannot be undone
     temp = os.environ.get("SQLITE_TMPDIR")
     dirs = [*write_dirs, *([temp] if temp else [])]
+    for folder in dirs:
+        _check_write_dir(folder, current_home())
     ports = (args.port,) if args.command == "serve" else ()
     report = restrict(Policy(write_dirs=tuple(dirs), listen_ports=ports), require_network=True)
     logger.info("kernel sandbox on (Landlock ABI %d)", report.abi)
@@ -1248,6 +1290,9 @@ def main(argv: Sequence[str] | None = None, *, sandboxed: bool = False) -> int:
         command = f"{args.command} {getattr(args, f'{args.command}_command', '') or ''}"
         if args.sandboxed and command.strip() in _WITHOUT_CONFIG:
             _enter_sandbox(args, write_dirs=())
+        if args.sandboxed and args.command == "gateway":
+            # It relays connections: only meaningful, and confined, in Docker (D-020).
+            raise SandboxError("treeaudit gateway ne sert qu'avec Docker")
         if args.command == "roots" and args.roots_command == "check":
             return _cmd_roots_check(args)
         if args.command == "roots" and args.roots_command == "list":

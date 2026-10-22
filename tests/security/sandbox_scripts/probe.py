@@ -93,7 +93,72 @@ attempt("unix_socket", lambda: socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 attempt("netlink_socket", lambda: socket.socket(socket.AF_NETLINK, socket.SOCK_RAW).close())
 attempt("socketpair", lambda: [s.close() for s in socket.socketpair()])
 attempt("signal_parent", lambda: os.kill(os.getppid(), 0))
+
+
+# --- security review (D-038, step 4): ways around the rules above ----------------------
+
+
+def fast_open(port: int) -> None:
+    """TCP Fast Open connects through sendto(), not connect()."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.sendto(b"x", socket.MSG_FASTOPEN, ("127.0.0.1", port))
+
+
+def connect_v6(port: int) -> None:
+    with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as sock:
+        sock.settimeout(2)
+        sock.connect(("::1", port))
+
+
+def stream_protocol(protocol: int) -> None:
+    socket.socket(socket.AF_INET, socket.SOCK_STREAM, protocol).close()
+
+
+def link_in(source: str, name: str) -> None:
+    os.link(source, os.path.join(allowed, name))
+
+
+def write_through_symlink() -> None:
+    link = os.path.join(allowed, "to-outside")
+    os.symlink(os.path.join(outside, "existing.txt"), link)
+    write(link)
+
+
+def chattr_read_only_fd() -> None:
+    import fcntl
+    import struct
+
+    fd = os.open(os.path.join(outside, "existing.txt"), os.O_RDONLY)
+    try:
+        flags = struct.unpack("i", fcntl.ioctl(fd, 0x80086601, b"\0" * 4))[0]  # GETFLAGS
+        fcntl.ioctl(fd, 0x40086602, struct.pack("i", flags | 0x80))  # SETFLAGS +noatime
+    finally:
+        os.close(fd)
+
+
+attempt("tcp_fast_open", lambda: fast_open(int(server_port)))
+attempt("connect_tcp_ipv6", lambda: connect_v6(int(server_port)))
+attempt("sctp_stream_socket", lambda: stream_protocol(132))
+attempt("mptcp_stream_socket", lambda: stream_protocol(262))
+attempt("tcp_explicit_protocol", lambda: stream_protocol(6))
+attempt("hard_link_outside_in", lambda: link_in(os.path.join(outside, "existing.txt"), "hard"))
+attempt("write_through_symlink", write_through_symlink)
+attempt("truncate_outside", lambda: os.truncate(os.path.join(outside, "existing.txt"), 0))
+attempt("chattr_outside", chattr_read_only_fd)
 # Last: on success the process would be replaced and print nothing.
 print(json.dumps({"report": dataclasses.asdict(report), "results": results}), flush=True)
 attempt("exec", lambda: os.execv("/bin/true", ["true"]))  # noqa: S606 - must be refused
 print(json.dumps({"exec": results["exec"]}), flush=True)
+
+
+def exec_from_memory() -> None:
+    """A program written to memory, then run: no file in any folder."""
+    with open("/bin/true", "rb") as program:
+        code = program.read()
+    fd = os.memfd_create("payload", 0)
+    os.write(fd, code)
+    os.execv(f"/proc/self/fd/{fd}", ["payload"])  # noqa: S606 - must be refused
+
+
+attempt("exec_from_memory", exec_from_memory)
+print(json.dumps({"exec_from_memory": results["exec_from_memory"]}), flush=True)

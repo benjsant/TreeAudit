@@ -10,11 +10,16 @@ Without Docker, the kernel itself must keep TreeAudit read-only. Once
   Landlock, network rights (ABI 4);
 - signal other processes or use their abstract Unix sockets: Landlock scopes
   (ABI 6);
-- create any socket other than TCP (no UDP, no Unix socket such as Docker's)
-  nor use io_uring: a seccomp filter, since Landlock does not cover those;
-- change permissions, owner, dates or extended attributes of any file
-  (chmod, chown, utime, setxattr...): the same seccomp filter, since Landlock
-  does not cover metadata either (found by this study's tests).
+- create any socket other than TCP (no UDP, no Unix socket such as Docker's,
+  no SCTP nor MPTCP stream) nor use io_uring: a seccomp filter, since
+  Landlock does not cover those;
+- change permissions, owner, dates, extended attributes or flags of any file
+  (chmod, chown, utime, setxattr, and ioctl(): only a few terminal and
+  non-blocking requests are allowed, chattr is not): the same filter, since
+  Landlock does not cover metadata either (found by the study and the
+  security review);
+- execute a program, or reach other processes (ptrace, their memory or
+  descriptors): refused by Landlock, and again by the filter.
 
 Reading stays allowed everywhere the user may read: the folder to audit is
 chosen in the interface. These restrictions cannot be lifted by the process.
@@ -65,34 +70,97 @@ _PR_SET_NO_NEW_PRIVS = 38
 _PR_SET_SECCOMP = 22
 _SECCOMP_MODE_FILTER = 2
 
-# seccomp, per machine: audit architecture, socket() number, and the system
-# calls that change metadata (permissions, owner, dates, extended attributes).
-_ARCHES: dict[str, tuple[int, int, tuple[int, ...]]] = {
-    "x86_64": (
-        0xC000003E,
-        41,
-        # chmod fchmod chown fchown lchown utime utimes futimesat fchownat fchmodat
-        # utimensat setxattr lsetxattr fsetxattr removexattr lremovexattr
-        # fremovexattr fchmodat2 setxattrat removexattrat
-        (
+
+@dataclass(frozen=True, slots=True)
+class _Machine:
+    """System call numbers of one architecture, for the seccomp filter."""
+
+    audit_arch: int
+    socket: int
+    ioctl: int
+    denied: tuple[int, ...]
+    """Always refused: metadata changes (Landlock does not cover them), program
+    execution, other processes' memory and descriptors (Landlock already
+    refuses these: defense in depth), and io_uring (it can create sockets)."""
+
+
+_MACHINES: dict[str, _Machine] = {
+    "x86_64": _Machine(
+        audit_arch=0xC000003E,
+        socket=41,
+        ioctl=16,
+        denied=(
+            # chmod fchmod chown fchown lchown utime utimes futimesat fchownat fchmodat
+            # utimensat setxattr lsetxattr fsetxattr removexattr lremovexattr
+            # fremovexattr fchmodat2 setxattrat removexattrat
             *(90, 91, 92, 93, 94, 132, 235, 261, 260, 268, 280),
             *(188, 189, 190, 197, 198, 199, 452, 463, 466),
+            # execve execveat ptrace process_vm_readv process_vm_writev pidfd_getfd
+            # io_uring_setup
+            *(59, 322, 101, 310, 311, 438, 425),
         ),
     ),
-    "aarch64": (
-        0xC00000B7,
-        198,
-        # fchmod fchmodat fchownat fchown utimensat setxattr lsetxattr fsetxattr
-        # removexattr lremovexattr fremovexattr fchmodat2 setxattrat removexattrat
-        (52, 53, 54, 55, 88, 5, 6, 7, 14, 15, 16, 452, 463, 466),
+    "aarch64": _Machine(
+        audit_arch=0xC00000B7,
+        socket=198,
+        ioctl=29,
+        denied=(
+            # fchmod fchmodat fchownat fchown utimensat setxattr lsetxattr fsetxattr
+            # removexattr lremovexattr fremovexattr fchmodat2 setxattrat removexattrat
+            *(52, 53, 54, 55, 88, 5, 6, 7, 14, 15, 16, 452, 463, 466),
+            # execve execveat ptrace process_vm_readv process_vm_writev pidfd_getfd
+            # io_uring_setup
+            *(221, 281, 117, 270, 271, 438, 425),
+        ),
     ),
 }
+# The only ioctl() requests allowed (the same numbers on both architectures):
+# terminal queries and non-blocking mode, which Python itself uses. Everything
+# else is refused, since many requests change files even through a read-only
+# descriptor (chattr's FS_IOC_SETFLAGS, fs-verity, Btrfs...): found by the
+# security review of step 4.
+_ALLOWED_IOCTLS = (
+    0x5401,  # TCGETS (isatty)
+    0x540F,  # TIOCGPGRP
+    0x5413,  # TIOCGWINSZ
+    0x541B,  # FIONREAD
+    0x5421,  # FIONBIO (socket.setblocking)
+    0x5450,  # FIONCLEX
+    0x5451,  # FIOCLEX
+)
 _X32_SYSCALL_BIT = 0x40000000
 _AF_INET, _AF_INET6, _SOCK_STREAM, _SOCK_TYPE_MASK = 2, 10, 1, 0xF
+_IPPROTO_TCP = 6
 _RET_ALLOW = 0x7FFF0000
 _RET_KILL_PROCESS = 0x80000000
 _RET_ERRNO = 0x00050000
 _LD_W_ABS, _JEQ_K, _JGE_K, _AND_K, _RET_K = 0x20, 0x15, 0x35, 0x54, 0x06
+
+# A BPF instruction before assembly: jump targets are labels (None: the next
+# instruction). A bare string is a label.
+type _Op = tuple[int, str | None, str | None, int] | str
+
+
+def _assemble(ops: Sequence[_Op]) -> list[tuple[int, int, int, int]]:
+    """Resolve labels into the relative jump offsets classic BPF uses."""
+    labels: dict[str, int] = {}
+    position = 0
+    for op in ops:
+        if isinstance(op, str):
+            labels[op] = position
+        else:
+            position += 1
+    program: list[tuple[int, int, int, int]] = []
+    for op in ops:
+        if isinstance(op, str):
+            continue
+        code, true, false, k = op
+        here = len(program)
+        offsets = [0 if target is None else labels[target] - here - 1 for target in (true, false)]
+        if not all(0 <= offset <= 255 for offset in offsets):
+            raise ValueError(f"jump out of range at instruction {here}")
+        program.append((code, offsets[0], offsets[1], k))
+    return program
 
 
 class SandboxError(TreeAuditError):
@@ -190,51 +258,55 @@ def _add_port_rule(libc: ctypes.CDLL, ruleset: int, port: int) -> None:
     )
 
 
-def _seccomp_filter(
-    arch: int, socket_nr: int, metadata: tuple[int, ...]
-) -> list[tuple[int, int, int, int]]:
-    """BPF program: only TCP sockets (IPv4, IPv6) may be created; no io_uring;
-    no change of permissions, owner, dates or extended attributes.
+def _seccomp_filter(machine: _Machine) -> list[tuple[int, int, int, int]]:
+    """BPF program: only TCP sockets; only a few harmless ioctl() requests; no
+    metadata change, execution, access to other processes, nor io_uring.
 
-    Denied calls fail with EACCES (the process goes on, the change is not made).
-    Jump offsets count from the next instruction. seccomp_data: nr at 0, arch
-    at 4, args[i] at 16 + 8 * i (low 32 bits first, little-endian).
+    Refused calls fail with an error (EACCES, ENOTTY for ioctl): the process goes
+    on, nothing is changed. seccomp_data: nr at 0, arch at 4, args[i] at
+    16 + 8 * i (low 32 bits first, little-endian).
     """
-    deny = _RET_ERRNO | errno.EACCES
-    head = [
-        (_LD_W_ABS, 0, 0, 4),  # arch
-        (_JEQ_K, 1, 0, arch),  # known arch: skip the next instruction
-        (_RET_K, 0, 0, _RET_KILL_PROCESS),  # (never: installed for this arch only)
-        (_LD_W_ABS, 0, 0, 0),  # syscall number
-        (_JGE_K, 0, 1, _X32_SYSCALL_BIT),  # x32 ABI: other numbers for the same calls
-        (_RET_K, 0, 0, deny),
-    ]
-    # One test per denied number: on a match, jump to the shared "deny" at the end.
-    denied = (_SYS_IO_URING_SETUP, *metadata)  # io_uring could create sockets itself
-    socket_part = [
-        (_JEQ_K, 1, 0, socket_nr),  # socket(): check its arguments
-        (_RET_K, 0, 0, _RET_ALLOW),
-        (_LD_W_ABS, 0, 0, 16),  # family
-        (_JEQ_K, 1, 0, _AF_INET),
-        (_JEQ_K, 0, 4, _AF_INET6),  # neither: deny
-        (_LD_W_ABS, 0, 0, 24),  # type
-        (_AND_K, 0, 0, _SOCK_TYPE_MASK),  # without SOCK_NONBLOCK / SOCK_CLOEXEC
-        (_JEQ_K, 0, 1, _SOCK_STREAM),
-        (_RET_K, 0, 0, _RET_ALLOW),
-        (_RET_K, 0, 0, deny),  # shared "deny"
-    ]
-    checks = [
-        (_JEQ_K, len(denied) - 1 - index + len(socket_part) - 1, 0, number)
-        for index, number in enumerate(denied)
-    ]
-    return head + checks + socket_part
+    return _assemble(
+        [
+            (_LD_W_ABS, None, None, 4),
+            (_JEQ_K, "known_arch", None, machine.audit_arch),
+            (_RET_K, None, None, _RET_KILL_PROCESS),  # never: installed for this arch only
+            "known_arch",
+            (_LD_W_ABS, None, None, 0),
+            (_JGE_K, "deny", None, _X32_SYSCALL_BIT),  # x32: other numbers, same calls
+            (_JEQ_K, "socket", None, machine.socket),
+            (_JEQ_K, "ioctl", None, machine.ioctl),
+            *[(_JEQ_K, "deny", None, number) for number in machine.denied],
+            (_RET_K, None, None, _RET_ALLOW),
+            "socket",  # family, type and protocol: TCP over IPv4 or IPv6 only
+            (_LD_W_ABS, None, None, 16),
+            (_JEQ_K, "type", None, _AF_INET),
+            (_JEQ_K, "type", "deny", _AF_INET6),
+            "type",
+            (_LD_W_ABS, None, None, 24),
+            (_AND_K, None, None, _SOCK_TYPE_MASK),  # without SOCK_NONBLOCK / SOCK_CLOEXEC
+            (_JEQ_K, "protocol", "deny", _SOCK_STREAM),
+            "protocol",  # a stream socket may also be SCTP or MPTCP: not TCP
+            (_LD_W_ABS, None, None, 32),
+            (_JEQ_K, "allow", None, 0),
+            (_JEQ_K, "allow", "deny", _IPPROTO_TCP),
+            "ioctl",  # the request is an unsigned int for the kernel: 32 bits suffice
+            (_LD_W_ABS, None, None, 24),
+            *[(_JEQ_K, "allow", None, request) for request in _ALLOWED_IOCTLS],
+            (_RET_K, None, None, _RET_ERRNO | errno.ENOTTY),
+            "allow",
+            (_RET_K, None, None, _RET_ALLOW),
+            "deny",
+            (_RET_K, None, None, _RET_ERRNO | errno.EACCES),
+        ]
+    )
 
 
-def _install_socket_filter(libc: ctypes.CDLL) -> bool:
-    known = _ARCHES.get(platform.machine())
-    if known is None:
+def _install_seccomp_filter(libc: ctypes.CDLL) -> bool:
+    machine = _MACHINES.get(platform.machine())
+    if machine is None:
         return False
-    program = _seccomp_filter(*known)
+    program = _seccomp_filter(machine)
     filters = ctypes.create_string_buffer(
         b"".join(struct.pack("=HBBI", *instruction) for instruction in program)
     )
@@ -271,7 +343,7 @@ def restrict(policy: Policy, *, require_network: bool = False) -> Report:
             f"ce noyau ne permet pas de couper le réseau (Landlock ABI {abi}, il faut 4, "
             "Linux 6.7 ou plus) : utilise TreeAudit avec Docker"
         )
-    if require_network and platform.machine() not in _ARCHES:
+    if require_network and platform.machine() not in _MACHINES:
         raise SandboxError(f"architecture {platform.machine()} non prise en charge par le filtre")
     if threading.active_count() != 1:
         raise SandboxError("le bac à sable doit être posé avant de lancer d'autres fils")
@@ -309,7 +381,7 @@ def restrict(policy: Policy, *, require_network: bool = False) -> Report:
             ),
             "no_new_privs",
         )
-        sockets = _install_socket_filter(libc)
+        sockets = _install_seccomp_filter(libc)
         _check(
             libc.syscall(_SYS_LANDLOCK_RESTRICT_SELF, ctypes.c_int(ruleset), ctypes.c_uint32(0)),
             "landlock_restrict_self",

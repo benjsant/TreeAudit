@@ -68,6 +68,7 @@ def test_a_sandboxed_process_can_neither_write_elsewhere_nor_talk_to_anyone(
         "read_outside",
         "listen_own_port",
         "socketpair",  # asyncio's own wake-up pipe
+        "tcp_explicit_protocol",
     }
     for name, outcome in results.items():
         expected = "ok" if name in allowed_actions else "not ok"
@@ -76,6 +77,10 @@ def test_a_sandboxed_process_can_neither_write_elsewhere_nor_talk_to_anyone(
     assert (outside / "existing.txt").read_text(encoding="utf-8") == "original"
     assert sorted(os.listdir(outside)) == ["existing.txt"]
     assert lines[1] == {"exec": "EACCES"}
+    assert lines[2] == {"exec_from_memory": "EACCES"}
+    # The security review's findings (step 4): refused with these errors.
+    assert results["chattr_outside"] == "ENOTTY"
+    assert results["sctp_stream_socket"] == results["mptcp_stream_socket"] == "EACCES"
 
 
 @needs_landlock
@@ -109,26 +114,42 @@ def run_filter(program: list[tuple[int, int, int, int]], data: dict[int, int]) -
         pc += 1
 
 
-@pytest.mark.parametrize("machine", sorted(sandbox._ARCHES))
-def test_seccomp_filter_decisions(machine: str) -> None:
-    arch, socket_nr, metadata = sandbox._ARCHES[machine]
-    program = sandbox._seccomp_filter(arch, socket_nr, metadata)
-    allow, deny = 0x7FFF0000, 0x00050000 | 13
+@pytest.mark.parametrize("name", sorted(sandbox._MACHINES))
+def test_seccomp_filter_decisions(name: str) -> None:
+    machine = sandbox._MACHINES[name]
+    program = sandbox._seccomp_filter(machine)
+    allow, deny, notty = 0x7FFF0000, 0x00050000 | 13, 0x00050000 | 25
 
-    def decide(nr: int, family: int = 0, kind: int = 0) -> int:
-        return run_filter(program, {0: nr, 4: arch, 16: family, 24: kind})
+    def decide(nr: int, a0: int = 0, a1: int = 0, a2: int = 0) -> int:
+        return run_filter(program, {0: nr, 4: machine.audit_arch, 16: a0, 24: a1, 32: a2})
 
-    assert decide(socket_nr, 2, 1) == allow  # TCP over IPv4
-    assert decide(socket_nr, 10, 1 | 0o2000000) == allow  # TCP over IPv6, SOCK_CLOEXEC
-    assert decide(socket_nr, 2, 2) == deny  # UDP
-    assert decide(socket_nr, 1, 1) == deny  # Unix socket
-    assert decide(socket_nr, 16, 3) == deny  # netlink
-    assert decide(425) == deny  # io_uring
-    for number in metadata:
+    sock, ioctl = machine.socket, machine.ioctl
+    assert decide(sock, 2, 1) == allow  # TCP over IPv4
+    assert decide(sock, 2, 1, 6) == allow  # ... with IPPROTO_TCP spelled out
+    assert decide(sock, 10, 1 | 0o2000000) == allow  # TCP over IPv6, SOCK_CLOEXEC
+    assert decide(sock, 2, 1, 132) == deny  # SCTP stream
+    assert decide(sock, 2, 1, 262) == deny  # MPTCP
+    assert decide(sock, 2, 2) == deny  # UDP
+    assert decide(sock, 1, 1) == deny  # Unix socket
+    assert decide(sock, 16, 3) == deny  # netlink
+    assert decide(ioctl, 3, 0x5401) == allow  # isatty
+    assert decide(ioctl, 3, 0x5421) == allow  # non-blocking socket
+    assert decide(ioctl, 3, 0x40086602) == notty  # chattr (FS_IOC_SETFLAGS)
+    assert decide(ioctl, 3, 0x40806685) == notty  # fs-verity
+    for number in machine.denied:
         assert decide(number) == deny, number
     assert decide(0x40000000 + 41) == deny  # x32 ABI
-    assert decide(0) == allow and decide(1) == allow  # read, write...
+    assert decide(0) == allow and decide(1) == allow  # ordinary calls
     assert run_filter(program, {4: 0x12345678, 0: 0}) == 0x80000000  # unknown arch
+
+
+def test_assembler_resolves_labels_and_refuses_far_jumps() -> None:
+    program = sandbox._assemble(
+        [(0x15, "b", None, 1), "a", (0x06, None, None, 0), "b", (0x06, None, None, 1)]
+    )
+    assert program == [(0x15, 1, 0, 1), (0x06, 0, 0, 0), (0x06, 0, 0, 1)]
+    with pytest.raises(ValueError, match="out of range"):
+        sandbox._assemble([(0x15, "far", None, 0), *[(0x06, None, None, 0)] * 300, "far"])
 
 
 @needs_landlock
@@ -227,3 +248,36 @@ def test_the_sandbox_refuses_to_start_with_other_threads(
     monkeypatch.setattr(threading, "active_count", lambda: 2)
     with pytest.raises(sandbox.SandboxError, match="fils"):
         sandbox.restrict(sandbox.Policy(write_dirs=()))
+
+
+@pytest.mark.parametrize(
+    ("path", "accepted"),
+    [
+        ("/home/me/.local/share/treeaudit/index", True),
+        ("/mnt/Data/treeaudit/archives", True),
+        ("/home/me", False),  # the whole personal folder
+        ("/home", False),
+        ("/", False),
+        ("/etc", False),
+        ("/usr/local", False),
+        ("/etc/treeaudit", False),
+        ("/var/home/me/.local/share/treeaudit/index", True),  # Fedora Silverblue
+        ("/run/user/1000/treeaudit/tmp", True),  # SQLite's temporary folder
+        ("relative/data", False),
+    ],
+)
+def test_write_folders_must_be_treeaudits_own(path: str, accepted: bool) -> None:
+    from treeaudit import cli
+
+    if accepted:
+        cli._check_write_dir(path, "/home/me")
+    else:
+        with pytest.raises(sandbox.SandboxError, match="refusé"):
+            cli._check_write_dir(path, "/home/me")
+
+
+def test_the_gateway_is_refused_natively(capsys: pytest.CaptureFixture[str]) -> None:
+    from treeaudit.cli import EXIT_ERROR, main
+
+    assert main(["gateway", "--upstream-host", "app"], sandboxed=True) == EXIT_ERROR
+    assert "Docker" in capsys.readouterr().err

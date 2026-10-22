@@ -163,7 +163,10 @@ Relecture critique de tout le code d'archivage, centrée sur le seul module qui 
 - **Refus de démarrer** si le réseau ne peut pas être coupé (noyau trop ancien, architecture non prise en charge) ou si d'autres fils d'exécution existent déjà.
 - **Ce qui reste possible** : lire ce que l'utilisateur peut lire, y compris des secrets. Rien ne peut sortir pour autant : ni réseau, ni exécution, ni écriture ailleurs.
 - `ctypes` n'est autorisé que dans `core/sandbox.py`, pour deux fonctions C (`syscall`, `prctl`) ; un test le vérifie.
-- Preuves : `tests/security/test_sandbox.py`. Une sonde tente 24 actions interdites ; l'analyse, les doublons, l'archive, le serveur web et la ligne de commande fonctionnent sous bac à sable ; un interpréteur BPF vérifie le filtre seccomp. Essais réels sur l'hôte.
+- Preuves : `tests/security/test_sandbox.py`. Une sonde tente 34 actions, dont les contournements de la relecture ; l'analyse, les doublons, l'archive, le serveur web et la ligne de commande fonctionnent sous bac à sable ; un interpréteur BPF vérifie le filtre seccomp. Essais réels sur l'hôte.
+
+### Relecture de sécurité du bac à sable (2026-10-22)
+Elle a cherché à contourner le bac à sable et a tout essayé pour de vrai. Deux contournements ont été trouvés et fermés : les sockets « flux » SCTP et MPTCP, et `chattr` sur un fichier ouvert en lecture seule. Pour ce dernier, seccomp applique désormais une **liste blanche** d'`ioctl`. Une configuration trop large (`data_dir` sur le dossier personnel ou un dossier système) est refusée, et `treeaudit gateway` est refusée en natif. Le détail, piste par piste, est dans D-038.
 
 ## Toute future fonction destructive est interdite
 Elle exigera une spécification et une revue de sécurité séparées, un aperçu avant action, une confirmation explicite, une journalisation, une stratégie de restauration ou de quarantaine et des tests d'interruption et d'échec.
