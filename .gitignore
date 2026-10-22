@@ -244,3 +244,4 @@ compose.override.yaml
 .treeaudit-disks.json
 # Default archive folder (D-034)
 archives/
+dist/

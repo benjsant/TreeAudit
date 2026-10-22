@@ -868,3 +868,37 @@ def test_personal_folder_scan_marks_what_holds_hidden_folders(
     assert "contient des dossiers privés" in warnings
     assert "contient TreeAudit lui-même" in warnings
     assert command["command"].endswith("\\\n  /home/me/Documents")
+
+
+# --- quitting (native mode, D-038) --------------------------------------------------------
+
+
+def test_quit_is_only_offered_natively(client: TestClient) -> None:
+    assert "data-quit" not in client.get("/").text
+    assert client.post("/api/quit", json={}, headers=CSRF).status_code == 404
+
+
+def test_quit_stops_the_server_and_cancels_the_job(
+    tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    config = AppConfig(
+        data_dir=str(tmp_path / "data"),
+        roots=(RootConfig(id="main", path=str(root), label="Disque"),),
+    )
+    mounts = data_disk_table(str(tmp_path))
+    statuses = evaluate_roots(config, mounts, home=None)
+    stopped: list[bool] = []
+    app = create_app(
+        config,
+        statuses,
+        mounts=lambda: mounts,
+        home=lambda: None,
+        quit=lambda: stopped.append(True),
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as quitting:
+        page = quitting.get("/")
+        assert "data-quit" in page.text and "⏻ Quitter" in page.text
+        assert quitting.post("/api/quit", json={}).status_code == 403  # CSRF header required
+        assert stopped == []
+        assert quitting.post("/api/quit", json={}, headers=CSRF).json() == {"stopping": True}
+        assert stopped == [True]

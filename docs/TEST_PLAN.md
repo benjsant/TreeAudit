@@ -82,6 +82,8 @@
 - Analyse, doublons et archive vérifiée sous bac à sable ; serveur web et analyse par l'API ; commande `scan run` par le vrai point d'entrée.
 - Filtre seccomp vérifié par un interpréteur BPF (x86_64, aarch64) ; refus sans Landlock, sans réseau (ABI < 4) ou avec d'autres fils d'exécution.
 - Réel (hôte, hors Docker) : sonde, et analyse de `dummy_folder` complète.
+- AppImage : entrées de construction épinglées (images, runtime, empreintes des dépendances) ; Python embarqué vérifié à la construction ; `AppRun` en Python isolé, sans commande dangereuse ; entrée de bureau sans argument ; configuration par défaut sans fichier ; bouton « Quitter » natif seulement, protégé par CSRF.
+- Réel (AppImage, hôte) : analyse en ligne de commande et par l'interface sous bac à sable, « Quitter », reconnaissance d'un TreeAudit déjà ouvert.
 
 ## Cet ordinateur (D-037)
 - Faux sysfs : partition de données du disque système proposée comme interne, y compris sous LUKS ; système de fichiers du système remonté ailleurs, ou LUKS du système, refusés ; sans les partitions du système, rien n'est proposé sur ce disque.

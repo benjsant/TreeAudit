@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=TreeAudit
+Comment=Audit de fichiers local, en lecture seule
+Exec=treeaudit
+Icon=treeaudit
+Terminal=false
+Categories=Utility;FileTools;

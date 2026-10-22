@@ -121,7 +121,7 @@ Aucun parcours de fichiers dans cette phase.
 ## Phase 7 bis — Mode natif sous bac à sable, vers une AppImage (D-038)
 - [x] Prototype Landlock + seccomp, prouvé par des tests et sur l'hôte.
 - [x] Étape 1 : bac à sable pour toutes les commandes natives, refus de démarrer s'il est incomplet, fichiers temporaires de SQLite dans un dossier privé.
-- [ ] Étape 2 : première AppImage, construite dans Docker.
+- [x] Étape 2 : première AppImage, construite dans Docker ; zéro configuration ; bouton « Quitter » ; essai réel sur l'hôte.
 - [ ] Étape 3 : disques détectés à chaud, choix libre des dossiers.
 - [ ] Étape 4 : relecture de sécurité du bac à sable, décision sur Docker pour les utilisateurs.
 

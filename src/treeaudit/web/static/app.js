@@ -493,7 +493,31 @@ function setupCommandBuilders() {
   }
 }
 
+// --- quitting (native mode, no terminal: D-038) -------------------------------------------
+
+function setupQuit() {
+  const button = document.querySelector("[data-quit]");
+  button?.addEventListener("click", async () => {
+    const question = "Arrêter TreeAudit ? Une analyse ou une archive en cours sera annulée.";
+    if (!window.confirm(question)) return;
+    button.disabled = true;
+    try {
+      await post("/api/quit", {});
+    } catch (error) {
+      button.disabled = false;
+      window.alert(error.message);
+      return;
+    }
+    const main = document.querySelector("main");
+    const notice = document.createElement("p");
+    notice.className = "notice info";
+    notice.textContent = "TreeAudit est arrêté. Tu peux fermer cet onglet.";
+    main.replaceChildren(notice);
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  setupQuit();
   setupStartButtons();
   setupArchiveButtons();
   setupJobMonitor();

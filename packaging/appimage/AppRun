@@ -1,0 +1,51 @@
+#!/bin/bash
+# TreeAudit AppImage entry point (docs/DECISIONS.md D-038).
+#
+# Runs the bundled Python in isolated mode (-I: no PYTHON* variable, no user
+# site, no current folder on the import path); TreeAudit then puts itself in
+# the kernel sandbox before reading anything. With no argument, it starts the
+# web interface and opens it in the browser; launched again while it runs, it
+# only opens the browser. This script never touches the audited files.
+set -euo pipefail
+
+HERE="$(dirname -- "$(readlink -f -- "$0")")"
+PYTHON="$HERE/usr/python/bin/python3"
+PORT=8765
+URL="http://127.0.0.1:$PORT/"
+
+# True when TreeAudit itself answers on the port (not another program).
+treeaudit_running() {
+    local reply
+    exec 3<>"/dev/tcp/127.0.0.1/$PORT" 2>/dev/null || return 1
+    printf 'GET /health HTTP/1.0\r\nHost: 127.0.0.1:%s\r\n\r\n' "$PORT" >&3
+    reply="$(timeout 2 cat <&3 || true)"
+    exec 3<&-
+    [[ $reply == *'"status":"ok"'* ]]
+}
+
+open_browser() {
+    [[ -n ${DISPLAY:-}${WAYLAND_DISPLAY:-} ]] || return 0
+    command -v xdg-open >/dev/null 2>&1 || return 0
+    xdg-open "$URL" >/dev/null 2>&1 &
+}
+
+if [[ $# -eq 0 ]]; then
+    if treeaudit_running; then
+        echo "TreeAudit tourne déjà : $URL"
+        open_browser
+        exit 0
+    fi
+    echo "TreeAudit : $URL (bouton « Quitter » dans la page pour l'arrêter)"
+    # Opens the page as soon as the server answers (at most 20 s).
+    (
+        for _ in $(seq 100); do
+            if treeaudit_running; then
+                open_browser
+                exit 0
+            fi
+            sleep 0.2
+        done
+    ) &
+    set -- serve
+fi
+exec "$PYTHON" -I -m treeaudit "$@"

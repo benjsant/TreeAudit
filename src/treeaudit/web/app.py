@@ -72,8 +72,13 @@ def create_app(
     home: Callable[[], str | None] = current_home,
     external_disks: Sequence[ExternalDisk] = (),
     external_enabled: bool = False,
+    quit: Callable[[], None] | None = None,
 ) -> FastAPI:
-    """Build the application for the given, already validated, roots."""
+    """Build the application for the given, already validated, roots.
+
+    ``quit`` stops the server: offered as a button in the native mode, which
+    may run without a terminal (AppImage, D-038).
+    """
     prepare_data_dir(config.data_dir)
     app = FastAPI(
         title="TreeAudit",
@@ -93,6 +98,7 @@ def create_app(
     app.state.external_disks = tuple(external_disks)
     app.state.external_enabled = external_enabled or bool(external_disks)
     app.state.jobs = JobManager(config, mounts=mounts, home=home)
+    app.state.quit = quit
     # Shown on the pages; execute_archive validates the directory again before writing.
     app.state.archive_status = (
         evaluate_archive_dir(config, mounts(), home())

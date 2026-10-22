@@ -125,6 +125,7 @@ def render(request: Request, name: str, status_code: int = 200, **context: Any) 
     job = jobs.current
     context.setdefault("running_job", job.snapshot() if job is not None and job.running else None)
     context.setdefault("external_enabled", request.app.state.external_enabled)
+    context.setdefault("can_quit", request.app.state.quit is not None)
     archive = request.app.state.archive_status
     context.setdefault(
         "archive",

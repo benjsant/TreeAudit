@@ -28,7 +28,8 @@ TreeAudit/
 │   ├── unit/
 │   ├── integration/
 │   └── security/
-├── docker/          Dockerfile, configuration du conteneur
+├── docker/          Dockerfile, configuration du conteneur, appimage.Dockerfile (D-038)
+├── packaging/       AppImage : AppRun, entrée de bureau, icône (D-038)
 ├── docs/
 ├── compose.yaml, compose.selinux.yaml
 ├── treeaudit        lanceur : validation sur l'hôte, puis docker compose (D-035)

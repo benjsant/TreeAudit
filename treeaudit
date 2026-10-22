@@ -259,6 +259,13 @@ cmd_lock() {
 
 # Chained with &&: "set -e" does not apply inside a function called from a
 # "&&" list (as in "check"), so a failure must be propagated explicitly.
+# The AppImage (D-038), built in Docker: nothing is installed on the host.
+cmd_appimage() {
+    docker buildx build -f docker/appimage.Dockerfile --target out \
+        --output type=local,dest=dist .
+    say "AppImage : $HERE/dist/TreeAudit-x86_64.AppImage"
+}
+
 cmd_lint() {
     "${DEV[@]}" ruff check . && "${DEV[@]}" ruff format --check .
 }
@@ -280,6 +287,7 @@ Développement :
   test [ARGS...]     Tests (options pytest)
   lint | format | typecheck | build
   lock               Met à jour uv.lock (réseau nécessaire)
+  appimage           Construit dist/TreeAudit-x86_64.AppImage (dans Docker)
 
 Ancien mode, expérimental, non testé :
   env                Crée un fichier .env (inutile pour l'usage normal)
@@ -297,6 +305,7 @@ case "$command" in
     env) cmd_env ;;
     build) build ;;
     lock) cmd_lock ;;
+    appimage) cmd_appimage ;;
     test) exec "${DEV[@]}" pytest "$@" ;;
     lint) cmd_lint ;;
     format) exec "${DEV[@]}" ruff format . ;;

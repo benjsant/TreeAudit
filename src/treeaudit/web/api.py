@@ -350,3 +350,15 @@ def basket_command(scan_id: int, body: BasketCommand, conn: Db, config: Config) 
         "skipped": [item.rel_path_display for item in result.skipped],
         "warnings": warnings,
     }
+
+
+@router.post("/quit")
+def quit_server(request: Request, jobs: Jobs) -> dict[str, bool]:
+    """Stop TreeAudit (native mode only). A running job is cancelled first:
+    an archive in progress is then removed, never left half written."""
+    stop = request.app.state.quit
+    if stop is None:
+        raise HTTPException(404, "TreeAudit s'arrête depuis le terminal qui l'a lancé")
+    jobs.cancel()
+    stop()
+    return {"stopping": True}

@@ -327,3 +327,16 @@ def test_archive_run(
     assert "Archivage échoué" in capsys.readouterr().out
     assert main([*base, "other"]) == EXIT_ERROR
     assert len(list(archives.iterdir())) == 1
+
+
+def test_without_configuration_file_the_native_defaults_apply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.delenv("TREEAUDIT_CONFIG", raising=False)
+    assert main(["scan", "list"]) == EXIT_OK
+    base = tmp_path.resolve() / ".local" / "share" / "treeaudit"
+    assert (base / "index").is_dir() and (base / "archives").is_dir()
+    assert oct((base / "archives").stat().st_mode & 0o777) == "0o700"

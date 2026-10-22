@@ -33,6 +33,7 @@ from treeaudit.core.config import (
     default_config_path,
     is_container_mode,
     load_config,
+    native_defaults,
 )
 from treeaudit.core.datadir import prepare_data_dir
 from treeaudit.core.errors import TreeAuditError
@@ -327,7 +328,14 @@ def _load_with_disks(args: argparse.Namespace) -> tuple[AppConfig, list[External
     may then write only in the data and archive folders (D-038).
     """
     path = args.config if args.config is not None else default_config_path()
-    config = load_config(path, container_mode=is_container_mode())
+    if args.config is None and not is_container_mode() and not path.exists():
+        # No configuration file: the zero-configuration defaults (AppImage, D-038).
+        config = native_defaults()
+        prepare_data_dir(config.data_dir)
+        if config.archive_dir is not None:
+            prepare_data_dir(config.archive_dir)
+    else:
+        config = load_config(path, container_mode=is_container_mode())
     if getattr(args, "sandboxed", False):
         prepare_data_dir(config.data_dir)
         args.port = config.port
@@ -604,19 +612,35 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     else:
         logger.warning("archive directory rejected: %s", archive_status.reason)
 
-    uvicorn.run(
-        create_app(
-            config,
-            statuses,
-            external_disks=disks,
-            external_enabled=config.external_disks or DISKS_ENV_VAR in os.environ,
-        ),
-        host=config.bind_host,
-        port=config.port,
-        server_header=False,
-        proxy_headers=False,
-        log_level="info",
+    servers: list[uvicorn.Server] = []
+
+    def stop() -> None:
+        servers[0].should_exit = True
+
+    app = create_app(
+        config,
+        statuses,
+        external_disks=disks,
+        external_enabled=config.external_disks or DISKS_ENV_VAR in os.environ,
+        # In Docker, ./treeaudit stops the containers; natively there may be no terminal.
+        quit=None if config.container_mode else stop,
     )
+    servers.append(
+        uvicorn.Server(
+            uvicorn.Config(
+                app,
+                host=config.bind_host,
+                port=config.port,
+                server_header=False,
+                proxy_headers=False,
+                log_level="info",
+            )
+        )
+    )
+    servers[0].run()
+    # Let a cancelled job clean up (an archive removes its partial file).
+    app.state.jobs.cancel()
+    app.state.jobs.wait()
     return EXIT_OK
 
 

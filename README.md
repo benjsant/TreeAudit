@@ -46,6 +46,20 @@ cd TreeAudit
 
 Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C` ou `./treeaudit stop` arrête tout. SELinux en mode enforcing (Fedora par défaut) est détecté tout seul.
 
+### Sans Docker : l'AppImage (nouveau, à l'essai)
+
+TreeAudit existe aussi en un seul fichier, sans Docker (décision D-038) :
+
+```bash
+./treeaudit appimage    # construit dist/TreeAudit-x86_64.AppImage, dans Docker
+```
+
+Double-clique sur le fichier, ou lance-le dans un terminal. Le navigateur s'ouvre ; le bouton **« ⏻ Quitter »** arrête TreeAudit.
+
+- **Le noyau le garde en lecture seule** (Landlock et seccomp) : il ne peut écrire que dans son propre dossier (`~/.local/share/treeaudit/`), ne peut lancer aucun programme ni se connecter à quoi que ce soit. Il faut **Linux 6.7 ou plus**, sinon il refuse de démarrer : utilise alors Docker.
+- Son index est séparé de celui de la version Docker.
+- Pour l'instant, comme avec Docker, un disque branché après le démarrage demande de relancer.
+
 ## Utilisation
 
 ### Dans le navigateur

@@ -7,6 +7,9 @@ Commencer par le minimum, verrouiller les versions avec empreintes (`uv.lock`, D
 |---|---|---|
 | `python:3.14-slim` | Image de base | Épinglée par digest (D-031) |
 | `ghcr.io/astral-sh/uv` | Résolution, verrouillage et installation des dépendances | Épinglée par version et digest ; absente de l'image finale |
+| Python autonome (python-build-standalone) | Interpréteur embarqué dans l'AppImage (D-038) | Téléchargé et vérifié par `uv python install` (version de uv épinglée) |
+| `squashfs-tools` (Debian) | Image compressée de l'AppImage | Paquet signé de l'image de construction, absent de l'AppImage |
+| AppImage type2-runtime | Programme de démarrage de l'AppImage (statique, sans `libfuse2`) | Épinglé par empreinte SHA-256 : un changement arrête la construction |
 
 ## Bibliothèque standard — priorité
 - `os` (`scandir`, `open` avec `dir_fd`, `O_NOFOLLOW`, `O_DIRECTORY`, `O_NOATIME`), `stat` : parcours et métadonnées.

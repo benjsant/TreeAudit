@@ -107,6 +107,30 @@ class AppConfig:
         return None
 
 
+def native_defaults(environ: Mapping[str, str] | None = None) -> AppConfig:
+    """Configuration of the native mode when there is no configuration file
+    (the AppImage, D-038): nothing to fill in, as with Docker (D-034).
+
+    Index and archives in ``$XDG_DATA_HOME/treeaudit`` (by default
+    ``~/.local/share/treeaudit``), by their real path; disks and the personal
+    folder offered, as in Docker (D-033, D-037).
+    """
+    env = os.environ if environ is None else environ
+    xdg = env.get("XDG_DATA_HOME", "")
+    if xdg.startswith("/"):
+        base = Path(xdg)
+    else:
+        base = Path(env.get("HOME") or Path.home()) / ".local" / "share"
+    folder = Path(os.path.realpath(base)) / "treeaudit"
+    return AppConfig(
+        data_dir=str(folder / "index"),
+        roots=(),
+        archive_dir=str(folder / "archives"),
+        external_disks=True,
+        personal_home=True,
+    )
+
+
 def is_container_mode(environ: Mapping[str, str] | None = None) -> bool:
     """Return True when running inside the TreeAudit Docker image."""
     env = os.environ if environ is None else environ

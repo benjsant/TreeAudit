@@ -205,3 +205,18 @@ def test_personal_home_flag() -> None:
     assert parse_config(minimal(personal_home=True)).personal_home is True
     with pytest.raises(ConfigError, match="personal_home"):
         parse_config(minimal(personal_home="yes"))
+
+
+def test_native_defaults_need_no_file(tmp_path: Path) -> None:
+    from treeaudit.core.config import native_defaults
+
+    config = native_defaults({"HOME": str(tmp_path)})
+    base = tmp_path.resolve() / ".local" / "share" / "treeaudit"
+    assert config.data_dir == str(base / "index")
+    assert config.archive_dir == str(base / "archives")
+    assert config.external_disks and config.personal_home
+    assert config.bind_host == "127.0.0.1" and config.roots == ()
+    xdg = native_defaults({"HOME": "/nowhere", "XDG_DATA_HOME": str(tmp_path / "xdg")})
+    assert xdg.data_dir == str(tmp_path.resolve() / "xdg" / "treeaudit" / "index")
+    relative = native_defaults({"HOME": str(tmp_path), "XDG_DATA_HOME": "relative"})
+    assert relative.data_dir == str(base / "index")

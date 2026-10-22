@@ -21,3 +21,4 @@ big_dummy_folder/
 .treeaudit-disks.json
 # Default archive folder (D-034)
 archives/
+dist/
