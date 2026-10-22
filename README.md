@@ -58,7 +58,7 @@ Double-clique sur le fichier, ou lance-le dans un terminal. Le navigateur s'ouvr
 
 - **Le noyau le garde en lecture seule** (Landlock et seccomp) : il ne peut écrire que dans son propre dossier (`~/.local/share/treeaudit/`), ne peut lancer aucun programme ni se connecter à quoi que ce soit. Il faut **Linux 6.7 ou plus**, sinon il refuse de démarrer : utilise alors Docker.
 - Son index est séparé de celui de la version Docker.
-- Pour l'instant, comme avec Docker, un disque branché après le démarrage demande de relancer.
+- **Un disque branché pendant que TreeAudit tourne apparaît** dès que tu actualises la page de choix (bouton « 🔄 Actualiser ») : plus besoin de relancer, contrairement à la version Docker.
 
 ## Utilisation
 

@@ -917,3 +917,55 @@ def test_quit_stops_the_server_and_cancels_the_job(
         assert stopped == []
         assert quitting.post("/api/quit", json={}, headers=CSRF).json() == {"stopping": True}
         assert stopped == [True]
+
+
+# --- disks seen live in the native mode (D-038) --------------------------------------------
+
+
+def test_disks_plugged_in_while_running_are_offered(
+    tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    from treeaudit.roots.external import ExternalDisk, disk_root_id
+    from treeaudit.roots.registry import RootStatus
+
+    mounts = data_disk_table(str(tmp_path))
+    base = AppConfig(data_dir=str(tmp_path / "data"), roots=())
+    plugged: list[bool] = []
+    usb_id = disk_root_id("/run/media/me/USB")
+
+    def detect() -> tuple[AppConfig, tuple[RootStatus, ...], list[ExternalDisk]]:
+        if not plugged:
+            return base, (), []
+        usb = RootConfig(
+            id=usb_id, path=str(root), label="USB", display_path="/run/media/me/USB", external=True
+        )
+        config = AppConfig(data_dir=base.data_dir, roots=(usb,))
+        return (
+            config,
+            (RootStatus(root=usb),),
+            [ExternalDisk("USB", "/run/media/me/USB", usb_id, "exfat")],
+        )
+
+    app = create_app(
+        base, (), mounts=lambda: mounts, home=lambda: None, external_enabled=True, detect=detect
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as live:
+        before = live.get("/scan/new").text
+        assert "🔄 Actualiser" in before and "🔌 USB" not in before
+        assert live.post("/api/scans", json={"root_id": usb_id}, headers=CSRF).status_code == 404
+
+        plugged.append(True)  # the disk is plugged in and opened
+        after = live.get("/scan/new").text
+        assert "🔌 USB" in after
+        snapshot = run_job(live, "/api/scans", {"root_id": usb_id, "subpath": ""})
+        assert snapshot["status"] == "complete"
+
+        plugged.clear()  # removed: no longer offered
+        assert "🔌 USB" not in live.get("/scan/new").text
+        assert live.get("/").status_code == 200  # earlier analyses stay readable
+        app.state.jobs.wait()
+
+
+def test_docker_mode_says_to_restart(client: TestClient) -> None:
+    page = client.get("/scan/new").text
+    assert "🔄 Actualiser" not in page

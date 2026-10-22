@@ -8,6 +8,7 @@ in the proposed commands (D-025) and the archive directory the user chose (D-032
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Annotated, Any
@@ -29,6 +30,7 @@ from treeaudit.roots.registry import RootStatus, current_home
 from treeaudit.roots.validation import REASON_MESSAGES
 from treeaudit.web import api, exports, pages
 from treeaudit.web.jobs import JobManager
+from treeaudit.web.live import Detection
 from treeaudit.web.security import install_security_middlewares
 
 RootId = Annotated[str, PathParam(pattern=f"^{ROOT_ID_PATTERN.pattern}$")]
@@ -73,11 +75,14 @@ def create_app(
     external_disks: Sequence[ExternalDisk] = (),
     external_enabled: bool = False,
     quit: Callable[[], None] | None = None,
+    detect: Detection | None = None,
 ) -> FastAPI:
     """Build the application for the given, already validated, roots.
 
     ``quit`` stops the server: offered as a button in the native mode, which
-    may run without a terminal (AppImage, D-038).
+    may run without a terminal (AppImage, D-038). ``detect`` finds the disks
+    plugged in now (native mode: the host's mounts are seen live); the roots
+    are then refreshed when the home and choice pages open.
     """
     prepare_data_dir(config.data_dir)
     app = FastAPI(
@@ -99,6 +104,8 @@ def create_app(
     app.state.external_enabled = external_enabled or bool(external_disks)
     app.state.jobs = JobManager(config, mounts=mounts, home=home)
     app.state.quit = quit
+    app.state.detect = detect
+    app.state.detect_lock = threading.Lock()
     # Shown on the pages; execute_archive validates the directory again before writing.
     app.state.archive_status = (
         evaluate_archive_dir(config, mounts(), home())

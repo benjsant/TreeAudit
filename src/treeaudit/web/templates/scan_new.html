@@ -41,10 +41,14 @@
       </a>
     </li>
   {% else %}
-    <li class="muted">Aucun disque externe à proposer. Branche le disque, ouvre-le dans ton gestionnaire de fichiers (il doit être monté), puis relance TreeAudit (<code>./treeaudit</code>).</li>
+    <li class="muted">Aucun disque externe à proposer. Branche le disque, ouvre-le dans ton gestionnaire de fichiers (il doit être monté), puis {% if live_disks %}actualise cette page{% else %}relance TreeAudit (<code>./treeaudit</code>){% endif %}.</li>
   {% endfor %}
   </ul>
+  {% if live_disks %}
+  <div class="actions"><a class="button small" href="/scan/new">🔄 Actualiser</a> <span class="muted">après avoir branché <strong>et ouvert</strong> un disque</span></div>
+  {% else %}
   <p class="muted">Un disque n'apparaît que s'il était branché <strong>et ouvert</strong> au démarrage de TreeAudit : sinon, relance-le.</p>
+  {% endif %}
   {% if refused_disks %}
   <details class="tech">
     <summary>Disques non proposés ({{ refused_disks | length }})</summary>

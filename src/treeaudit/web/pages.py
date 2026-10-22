@@ -40,6 +40,7 @@ from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
 from treeaudit.scanner.walker import SubpathError, parse_subpath
 from treeaudit.web import explorer, queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, browse_root, root_display
+from treeaudit.web.live import refresh_roots
 from treeaudit.web.search_form import SearchForm, spec_from_form
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -126,6 +127,7 @@ def render(request: Request, name: str, status_code: int = 200, **context: Any) 
     context.setdefault("running_job", job.snapshot() if job is not None and job.running else None)
     context.setdefault("external_enabled", request.app.state.external_enabled)
     context.setdefault("can_quit", request.app.state.quit is not None)
+    context.setdefault("live_disks", request.app.state.detect is not None)
     archive = request.app.state.archive_status
     context.setdefault(
         "archive",
@@ -166,7 +168,9 @@ def _latest_run(conn: sqlite3.Connection, scan_id: int, *, micro: bool) -> sqlit
 
 
 @router.get("/")
-def index(request: Request, conn: Db, config: Config) -> Response:
+def index(request: Request, conn: Db) -> Response:
+    refresh_roots(request.app)
+    config: AppConfig = request.app.state.config
     statuses: dict[str, RootStatus] = request.app.state.statuses
     refused = [
         {"label": s.root.label, "message": REASON_MESSAGES[s.reason]}
@@ -194,6 +198,8 @@ def new_scan(
     root: Annotated[str | None, Query(pattern=f"^{ROOT_ID_PATTERN.pattern}$")] = None,
     path: Annotated[str, Query(max_length=4096)] = "",
 ) -> Response:
+    if root is None:
+        refresh_roots(request.app)  # the disks plugged in now (native mode)
     statuses: dict[str, RootStatus] = request.app.state.statuses
     accepted = [s for s in statuses.values() if s.accepted]
     external_enabled: bool = request.app.state.external_enabled

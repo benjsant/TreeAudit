@@ -401,6 +401,12 @@ Précise la mise en œuvre de D-024.
   - **bouton « Quitter »** (natif seulement : sans terminal, pas de Ctrl+C) : `POST /api/quit`, avec la protection CSRF habituelle. Il annule d'abord la tâche en cours ; une archive retire alors son fichier partiel ;
   - **une erreur trouvée en route** : `uv` désigne Python par un lien symbolique, et la copie avait pris le lien au lieu du dossier (AppImage de 948 Ko). Le contrôle de construction vérifie désormais que le Python embarqué est bien celui de l'AppImage (`sys.prefix`) ;
   - essai réel sur l'hôte : 34 Mo ; analyse en ligne de commande et par l'interface sous bac à sable (Landlock ABI 10) ; « Quitter » arrête le serveur ; un second lancement reconnaît le TreeAudit déjà ouvert.
+- **Étape 3, faite : disques détectés à chaud** (mode natif) :
+  - le processus voit les montages de la machine en direct : à chaque ouverture de l'accueil et de la page de choix, la détection et la validation du démarrage sont refaites (D-033, D-037). Un disque branché et ouvert apparaît, un disque retiré disparaît ; un bouton « 🔄 Actualiser » est proposé ;
+  - la racine reste revalidée juste avant chaque analyse ou archive : un disque retiré entre-temps donne une erreur claire, jamais une analyse d'autre chose ;
+  - en Docker, rien ne change : le conteneur ne voit que ce qui était monté à son démarrage, et les messages disent toujours de relancer ;
+  - **choix libre d'un dossier quelconque : non fait, volontairement.** Le dossier personnel, les partitions de données et les disques couvrent les données de l'utilisateur ; le reste est le système, toujours refusé (D-009). Saisir un chemin dans l'interface irait contre une règle de l'API (aucune route n'accepte de chemin absolu). À reconsidérer si un besoin réel apparaît ;
+  - essai réel (AppImage, hôte, sous bac à sable) : la page de choix propose `Data` (partition interne) et les deux disques USB, refaits à chaque ouverture.
 
 ## D-039 — Thème clair, sombre ou automatique (2026-10-22)
 - **Demande du mainteneur** : pouvoir choisir le mode clair ou sombre.

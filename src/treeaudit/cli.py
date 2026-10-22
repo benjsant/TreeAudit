@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dataclasses
 import json
 import logging
 import os
@@ -55,6 +56,7 @@ from treeaudit.roots.external import (
 )
 from treeaudit.roots.mountinfo import MountInfoError, MountTable, parse_mountinfo, read_mountinfo
 from treeaudit.roots.registry import (
+    RootStatus,
     current_home,
     evaluate_roots,
     with_external_disks,
@@ -617,6 +619,15 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     def stop() -> None:
         servers[0].should_exit = True
 
+    declared = dataclasses.replace(config, roots=config.declared_roots)
+
+    def detect() -> tuple[AppConfig, tuple[RootStatus, ...], Sequence[ExternalDisk]]:
+        """Natively, the machine's mounts are seen live: same detection as at startup."""
+        mounts = read_mountinfo()
+        found, found_disks = with_external_disks(declared, mounts, os.environ)
+        found = with_personal_folder(found, os.environ, current_home())
+        return found, evaluate_roots(found, mounts, current_home()), found_disks
+
     app = create_app(
         config,
         statuses,
@@ -624,6 +635,8 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         external_enabled=config.external_disks or DISKS_ENV_VAR in os.environ,
         # In Docker, ./treeaudit stops the containers; natively there may be no terminal.
         quit=None if config.container_mode else stop,
+        # In Docker the container only sees what was mounted at its start.
+        detect=None if config.container_mode else detect,
     )
     servers.append(
         uvicorn.Server(

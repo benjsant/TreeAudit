@@ -122,7 +122,7 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Prototype Landlock + seccomp, prouvé par des tests et sur l'hôte.
 - [x] Étape 1 : bac à sable pour toutes les commandes natives, refus de démarrer s'il est incomplet, fichiers temporaires de SQLite dans un dossier privé.
 - [x] Étape 2 : première AppImage, construite dans Docker ; zéro configuration ; bouton « Quitter » ; essai réel sur l'hôte.
-- [ ] Étape 3 : disques détectés à chaud, choix libre des dossiers.
+- [x] Étape 3 : disques détectés à chaud (natif) ; le choix libre d'un dossier quelconque n'est pas fait (voir D-038).
 - [ ] Étape 4 : relecture de sécurité du bac à sable, décision sur Docker pour les utilisateurs.
 
 ## Phase 6 octies — Cet ordinateur (D-037)
