@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
+from urllib.parse import parse_qsl
 
 from treeaudit.archive.destination import ARCHIVE_DIR_MESSAGES, ArchiveDirRejectedError
 from treeaudit.archive.runner import (
@@ -32,9 +33,13 @@ from treeaudit.core.datadir import ArchiveLockedError, ScanLockedError
 from treeaudit.core.errors import TreeAuditError
 from treeaudit.db.connection import connect
 from treeaudit.duplicates.runner import DupOptions, DupOutcome, DupProgress, execute_duplicates
+from treeaudit.llm.client import LlmClient
+from treeaudit.llm.organize import Suggestions, SuggestionsCancelled, SuggestProgress, suggest
+from treeaudit.organize.plan import PlanTooLargeError, adjustments_from_query, make_plan
 from treeaudit.parasites.report import human_size
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.validation import REASON_MESSAGES, RootRejectedError
+from treeaudit.scanner.models import ScanStatus
 from treeaudit.scanner.runner import ScanOutcome, ScanProgress, ScanRequest, execute_scan
 from treeaudit.scanner.walker import parse_subpath
 from treeaudit.web import summaries
@@ -46,6 +51,26 @@ class JobKind(StrEnum):
     SCAN = "scan"
     DUPES = "dupes"
     ARCHIVE = "archive"
+    SUGGEST = "suggest"
+
+
+@dataclass(frozen=True, slots=True)
+class SuggestOutcome:
+    """Sub-folders suggested by the local AI for one category (D-041). Shown on
+    the tidying page only: nothing applies until the user accepts it."""
+
+    status: ScanStatus
+    scan_id: int
+    dir_id: int
+    category: str
+    query: str
+    """The page's adjustments, to come back to the same preview."""
+    suggestions: Suggestions | None = None
+
+    @property
+    def result_url(self) -> str:
+        query = f"{self.query}&" if self.query else ""
+        return f"/scans/{self.scan_id}/organize?{query}suggestions="
 
 
 class JobError(TreeAuditError):
@@ -58,10 +83,12 @@ class Job:
     kind: JobKind
     label: str
     cancel: threading.Event = field(default_factory=threading.Event)
-    progress: ScanProgress | DupProgress | ArchiveProgress = field(default_factory=ScanProgress)
+    progress: ScanProgress | DupProgress | ArchiveProgress | SuggestProgress = field(
+        default_factory=ScanProgress
+    )
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
-    outcome: ScanOutcome | DupOutcome | ArchiveOutcome | None = None
+    outcome: ScanOutcome | DupOutcome | ArchiveOutcome | SuggestOutcome | None = None
     error: str | None = None
     thread: threading.Thread | None = None
 
@@ -89,6 +116,12 @@ class Job:
                 "current_dir": progress.current_dir,
             }
             data["scan_id"] = progress.scan_id
+        elif isinstance(progress, SuggestProgress):
+            data["progress"] = {
+                "stage": progress.stage,
+                "done": progress.done,
+                "total": progress.total,
+            }
         elif isinstance(progress, ArchiveProgress):
             data["progress"] = {
                 "stage": progress.stage.value,
@@ -112,6 +145,8 @@ class Job:
             data["status"] = self.outcome.status.value
         if isinstance(self.outcome, ArchiveOutcome):
             data["archive"] = _archive_result(self.outcome)
+        if isinstance(self.outcome, SuggestOutcome):
+            data["result_url"] = self.outcome.result_url + str(self.id)
         return data
 
 
@@ -162,7 +197,9 @@ class JobManager:
         self.current: Job | None = None
 
     def _start(
-        self, job: Job, work: Callable[[Job], ScanOutcome | DupOutcome | ArchiveOutcome]
+        self,
+        job: Job,
+        work: Callable[[Job], ScanOutcome | DupOutcome | ArchiveOutcome | SuggestOutcome],
     ) -> Job:
         with self._lock:
             if self.current is not None and self.current.running:
@@ -241,6 +278,33 @@ class JobManager:
             finally:
                 conn.close()
             return outcome
+
+        return self._start(job, work)
+
+    def start_suggestions(
+        self, llm: LlmClient, scan_id: int, dir_id: int, category: str, query: str
+    ) -> Job:
+        """Sub-folder suggestions of the local AI for one category of a tidying
+        plan (D-041). The model only proposes: the result is shown, never applied."""
+        progress = SuggestProgress()
+        label = f"Suggestions de l'IA pour « {category} »"
+        job = Job(id=next(self._ids), kind=JobKind.SUGGEST, label=label, progress=progress)
+        adjustments = adjustments_from_query(parse_qsl(query, keep_blank_values=True))
+
+        def work(j: Job) -> SuggestOutcome:
+            conn = connect(self.config.data_dir)
+            try:
+                plan = make_plan(conn, scan_id, dir_id, adjustments)
+            except PlanTooLargeError as exc:
+                raise JobError("dossier trop grand : choisis un sous-dossier") from exc
+            finally:
+                conn.close()
+            moves = [move for move in plan.moves if move.category == category]
+            try:
+                found = suggest(llm, category, moves, progress=progress, cancel=j.cancel)
+            except SuggestionsCancelled:
+                return SuggestOutcome(ScanStatus.CANCELLED, scan_id, dir_id, category, query)
+            return SuggestOutcome(ScanStatus.COMPLETE, scan_id, dir_id, category, query, found)
 
         return self._start(job, work)
 

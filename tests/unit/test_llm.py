@@ -187,3 +187,21 @@ def test_suggestions_only_keep_plain_names_and_allowed_choices() -> None:
     assert len(client.calls) == 3  # one proposal, then two batches
     # The model sees short numbers and names, never a path to act on.
     assert '"id": "e1"' in client.calls[0] and "Rangé/" not in client.calls[0]
+
+
+def test_suggestions_can_be_cancelled_between_batches() -> None:
+    import threading
+
+    from treeaudit.llm.organize import BATCH, SuggestionsCancelled, SuggestProgress, suggest
+    from treeaudit.organize.plan import Move
+
+    moves = [
+        Move(i, f"Bazar/d{i}.pdf", f"Rangé/Documents/d{i}.pdf", "file", "Documents", 1, 1, 0, "r")
+        for i in range(1, 2 * BATCH + 1)
+    ]
+    cancel = threading.Event()
+    cancel.set()
+    progress = SuggestProgress()
+    with pytest.raises(SuggestionsCancelled):
+        suggest(HostileOrganizer(), "Documents", moves, progress=progress, cancel=cancel)
+    assert progress.total == 2 * BATCH and progress.done == 0

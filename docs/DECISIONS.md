@@ -524,4 +524,6 @@ Précise la mise en œuvre de D-024.
 
     Le piège échoue partout. Ministral reste le modèle retenu (et refait 16/16 sur les cas douteux) ;
   - tests : un faux modèle malveillant (noms `../../etc`, `.ssh`, `Factures/2019`, choix hors liste, élément inconnu) est neutralisé ; page : suggestions affichées sans changer le plan ni le script, aucun bouton sans le mode expert ;
-  - **limite** : le calcul se fait pendant le chargement de la page, environ 1 s par élément (environ 2 minutes pour 200 éléments). À faire passer en tâche de fond avec progression si l'usage le demande.
+  - **en tâche de fond** : le bouton lance une tâche (`POST /api/scans/<n>/organize/suggestions`, protégée comme les autres) qui se suit comme une analyse : progression « x / y éléments classés », annulation entre deux lots. À la fin, la page de suivi ramène à l'aperçu, avec les mêmes ajustements, et les suggestions affichées. Le résultat n'est relu que s'il correspond à la même analyse et au même dossier ;
+  - essai réel de bout en bout (Docker, mode expert, Ministral sur la carte graphique, sous-dossier de `dummy_folder`) : suggestions en 5 s, affichées sans rien changer ;
+  - `./treeaudit stop` arrête aussi le conteneur du LLM (`--remove-orphans`), qui restait sinon en marche.

@@ -246,7 +246,8 @@ cmd_llm_bench() {
     done
 }
 
-cmd_stop() { exec "${COMPOSE_BASE[@]}" down; }
+# --remove-orphans: also the containers of optional files (the expert mode LLM).
+cmd_stop() { exec "${COMPOSE_BASE[@]}" down --remove-orphans; }
 
 cmd_disks() {
     if [[ $EXTERNAL != 1 ]]; then

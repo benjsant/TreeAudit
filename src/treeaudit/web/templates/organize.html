@@ -44,7 +44,7 @@
   </section>
 
   <h2>Aperçu du résultat</h2>
-  {% if suggestion_error %}<p class="notice warn" role="alert">L'IA n'a pas pu proposer de sous-dossiers : {{ suggestion_error }}</p>{% endif %}
+  <p class="error-text" data-suggest-error role="alert" hidden></p>
   {% if suggestions %}
   <section class="panel ai-panel">
     <h3>💡 Suggestions de l'IA pour « {{ names.folder(suggestions.category) }} »</h3>
@@ -60,7 +60,7 @@
   {% endif %}
   {% for name, moves in by_category.items() %}
   <details class="group-band"{% if loop.first %} open{% endif %}>
-    <summary><strong>{{ plan.destination }}/{{ names.folder(name) }}</strong> — {{ moves | length | number }} élément(s){% if expert and name not in ("Projets", "Logiciels") %} <a class="button small" href="/scans/{{ scan.id }}/organize?{{ base_query }}&amp;suggerer={{ name | urlencode }}">💡 Suggestions de l'IA</a>{% endif %}</summary>
+    <summary><strong>{{ plan.destination }}/{{ names.folder(name) }}</strong> — {{ moves | length | number }} élément(s){% if expert and name not in ("Projets", "Logiciels") %} <button type="button" class="button small" data-start-suggestions data-scan="{{ scan.id }}" data-dir="{{ node.entry_id }}" data-category="{{ name }}" data-query="{{ base_query }}">💡 Suggestions de l'IA</button>{% endif %}</summary>
     <ul class="plain small organize-list">
     {% for move in (moves if shown_per_category is none else moves[:shown_per_category]) %}
       <li>

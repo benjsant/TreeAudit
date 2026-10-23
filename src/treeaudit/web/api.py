@@ -24,6 +24,7 @@ from treeaudit.db import scans as scans_db
 from treeaudit.db.connection import connect, from_sqlite_int
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.duplicates.report import SelectionError, override_keep
+from treeaudit.organize.plan import CATEGORIES, AdjustmentError
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES
@@ -362,3 +363,43 @@ def quit_server(request: Request, jobs: Jobs) -> dict[str, bool]:
     jobs.cancel()
     stop()
     return {"stopping": True}
+
+
+class SuggestionsStart(BaseModel):
+    dir: int | None = Field(default=None, ge=1)
+    category: str = Field(max_length=40)
+    query: str = Field(default="", max_length=200_000)
+    """The tidying page's adjustments, so that the suggestions fit its plan."""
+
+
+@router.post("/scans/{scan_id}/organize/suggestions", status_code=202)
+def start_suggestions(
+    scan_id: int, body: SuggestionsStart, request: Request, jobs: Jobs, conn: Db
+) -> dict[str, Any]:
+    """Expert mode (D-040, D-041): the local AI proposes sub-folders for one
+    category of a tidying plan. A job: the result is shown, never applied."""
+    llm = request.app.state.llm
+    if llm is None:
+        raise HTTPException(409, "mode expert inactif (TREEAUDIT_EXPERT=1, version Docker)")
+    if scans_db.get_scan(conn, scan_id) is None:
+        raise HTTPException(404, "scan inconnu")
+    if body.category not in CATEGORIES:
+        raise HTTPException(422, "catégorie inconnue")
+    if body.dir is None:
+        row = conn.execute(
+            "SELECT entry_id FROM entry WHERE scan_id = ? AND depth = 0", (scan_id,)
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT entry_id FROM entry WHERE scan_id = ? AND entry_id = ? AND kind = 'dir'",
+            (scan_id, body.dir),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(404, "dossier inconnu")
+    try:
+        job = jobs.start_suggestions(llm, scan_id, row["entry_id"], body.category, body.query)
+    except AdjustmentError as exc:
+        raise HTTPException(422, f"ajustement refusé : {exc}") from exc
+    except JobError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"job": job.snapshot()}

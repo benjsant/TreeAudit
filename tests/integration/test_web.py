@@ -1064,7 +1064,15 @@ def test_ai_suggestions_are_shown_never_applied(
         scan_id = snapshot["scan_id"]
         plain = expert.get(f"/scans/{scan_id}/organize").text
         assert "💡 Suggestions de l'IA" in plain and "ai-panel" not in plain
-        page = expert.get(f"/scans/{scan_id}/organize", params={"suggerer": "Documents"}).text
+        url = f"/api/scans/{scan_id}/organize/suggestions"
+        body = {"category": "Documents", "query": ""}
+        assert expert.post(url, json=body).status_code == 403  # CSRF header required
+        bad = expert.post(url, json={"category": "../../etc"}, headers=CSRF)
+        assert bad.status_code == 422
+        job = run_job(expert, url, body)
+        assert job["kind"] == "suggest" and job["status"] == "complete"
+        assert job["result_url"].startswith(f"/scans/{scan_id}/organize?suggestions=")
+        page = expert.get(job["result_url"]).text
         assert_safe_html(page)
         assert "rien ne change tant que tu ne les acceptes pas" in page
         assert 'data-suggestion="Factures"' in page
@@ -1076,6 +1084,12 @@ def test_ai_suggestions_are_shown_never_applied(
         expert.app.state.jobs.wait()  # type: ignore[attr-defined]
 
 
-def test_no_ai_button_without_expert_mode(client: TestClient, scanned: int) -> None:
-    page = client.get(f"/scans/{scanned}/organize", params={"suggerer": "Documents"}).text
+def test_no_ai_without_expert_mode(client: TestClient, scanned: int) -> None:
+    page = client.get(f"/scans/{scanned}/organize").text
     assert "💡 Suggestions de l'IA" not in page and "ai-panel" not in page
+    started = client.post(
+        f"/api/scans/{scanned}/organize/suggestions",
+        json={"category": "Documents"},
+        headers=CSRF,
+    )
+    assert started.status_code == 409 and "mode expert" in started.json()["detail"]

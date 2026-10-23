@@ -18,6 +18,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from threading import Event
 from typing import Any
 
 from treeaudit.llm.client import LlmClient, LlmError
@@ -43,6 +44,19 @@ au début : « Factures », « Impôts », « Banque », « Travail », « Sant�
 - Ne crée un sous-dossier que s'il regroupe plusieurs éléments ; laisse sans \
 sous-dossier ce qui ne va nulle part de façon évidente.
 """
+
+
+class SuggestionsCancelled(LlmError):
+    """The user cancelled the suggestions."""
+
+
+@dataclass(slots=True)
+class SuggestProgress:
+    """Written by the job's thread only; the page reads it."""
+
+    stage: str = "propositions"
+    done: int = 0
+    total: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,17 +173,31 @@ def assign(
     return chosen
 
 
-def suggest(client: LlmClient, category: str, moves: Sequence[Move]) -> Suggestions:
+def suggest(
+    client: LlmClient,
+    category: str,
+    moves: Sequence[Move],
+    *,
+    progress: SuggestProgress | None = None,
+    cancel: Event | None = None,
+) -> Suggestions:
     """Sub-folders for the elements of one category of the plan."""
+    progress = progress if progress is not None else SuggestProgress()
     considered = list(moves[:MAX_ITEMS])
+    progress.total = len(considered)
     keyed = {f"e{index}": move for index, move in enumerate(considered, start=1)}
     items = [_item(key, move) for key, move in keyed.items()]
     subfolders = propose_subfolders(client, category, items) if items else ()
     by_entry: dict[int, str] = {}
+    progress.stage = "classement"
     if subfolders:
         for start in range(0, len(items), BATCH):
+            if cancel is not None and cancel.is_set():
+                raise SuggestionsCancelled("suggestions annulées")
             batch = items[start : start + BATCH]
             for key, sub in assign(client, category, subfolders, batch).items():
                 by_entry[keyed[key].entry_id] = sub
+            progress.done = min(start + BATCH, len(items))
+    progress.done = len(items)
     used = tuple(sub for sub in subfolders if sub in by_entry.values())
     return Suggestions(category, used, by_entry, len(considered), len(moves))

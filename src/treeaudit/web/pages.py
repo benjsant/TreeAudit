@@ -32,8 +32,7 @@ from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.filters.search import Sort, search
 from treeaudit.filters.spec import FilterError, compile_filter, describe
-from treeaudit.llm.client import LlmClient, LlmError
-from treeaudit.llm.organize import suggest as suggest_subfolders
+from treeaudit.llm.client import LlmClient
 from treeaudit.organize import plan as organize_plan
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.commands import recreate_command
@@ -45,6 +44,7 @@ from treeaudit.scanner.walker import SubpathError, parse_subpath
 from treeaudit.shellcmd import host_path, safe_root
 from treeaudit.web import explorer, queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, browse_root, root_display
+from treeaudit.web.jobs import SuggestOutcome
 from treeaudit.web.live import refresh_roots
 from treeaudit.web.search_form import SearchForm, spec_from_form
 
@@ -401,7 +401,7 @@ def organize_page(
     config: Config,
     dir: Annotated[int | None, Query(ge=1)] = None,
     tout: bool = False,
-    suggerer: Annotated[str | None, Query(max_length=40)] = None,
+    suggestions: Annotated[int | None, Query(ge=1)] = None,
 ) -> Response:
     """Tidying (D-041): the plan and a preview of the result; nothing is changed.
 
@@ -430,14 +430,19 @@ def organize_page(
         for move in plan.moves:
             by_category.setdefault(move.category, []).append(move)
     llm: LlmClient | None = request.app.state.llm
-    suggestions, suggestion_error = None, None
-    if suggerer is not None and llm is not None and suggerer in by_category:
-        # The model only proposes: shown next to the elements, applied only
-        # when the user accepts them, then checked like any adjustment.
-        try:
-            suggestions = suggest_subfolders(llm, suggerer, by_category[suggerer])
-        except LlmError as exc:
-            suggestion_error = str(exc)
+    # Suggestions of the local AI come from a finished job (D-041). They are
+    # only shown next to the elements; the user accepts them or not.
+    found = None
+    job = request.app.state.jobs.current
+    if (
+        suggestions is not None
+        and job is not None
+        and job.id == suggestions
+        and isinstance(job.outcome, SuggestOutcome)
+        and job.outcome.scan_id == scan_id
+        and job.outcome.dir_id == node.entry_id
+    ):
+        found = job.outcome.suggestions
     return render(
         request,
         "organize.html",
@@ -457,11 +462,10 @@ def organize_page(
         base_query="&".join(
             f"{quote(key)}={quote(value)}"
             for key, value in request.query_params.multi_items()
-            if key != "suggerer"
+            if key not in ("suggestions", "tout")
         ),
         expert=llm is not None,
-        suggestions=suggestions,
-        suggestion_error=suggestion_error,
+        suggestions=found,
     )
 
 
