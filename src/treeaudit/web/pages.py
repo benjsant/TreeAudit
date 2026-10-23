@@ -17,6 +17,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import quote
 
 import jinja2
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -31,6 +32,8 @@ from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.filters.search import Sort, search
 from treeaudit.filters.spec import FilterError, compile_filter, describe
+from treeaudit.llm.client import LlmClient, LlmError
+from treeaudit.llm.organize import suggest as suggest_subfolders
 from treeaudit.organize import plan as organize_plan
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.commands import recreate_command
@@ -398,6 +401,7 @@ def organize_page(
     config: Config,
     dir: Annotated[int | None, Query(ge=1)] = None,
     tout: bool = False,
+    suggerer: Annotated[str | None, Query(max_length=40)] = None,
 ) -> Response:
     """Tidying (D-041): the plan and a preview of the result; nothing is changed.
 
@@ -425,6 +429,15 @@ def organize_page(
     if plan is not None:
         for move in plan.moves:
             by_category.setdefault(move.category, []).append(move)
+    llm: LlmClient | None = request.app.state.llm
+    suggestions, suggestion_error = None, None
+    if suggerer is not None and llm is not None and suggerer in by_category:
+        # The model only proposes: shown next to the elements, applied only
+        # when the user accepts them, then checked like any adjustment.
+        try:
+            suggestions = suggest_subfolders(llm, suggerer, by_category[suggerer])
+        except LlmError as exc:
+            suggestion_error = str(exc)
     return render(
         request,
         "organize.html",
@@ -441,6 +454,14 @@ def organize_page(
         show_all=tout,
         categories=organize_plan.CATEGORIES,
         query=request.url.query,
+        base_query="&".join(
+            f"{quote(key)}={quote(value)}"
+            for key, value in request.query_params.multi_items()
+            if key != "suggerer"
+        ),
+        expert=llm is not None,
+        suggestions=suggestions,
+        suggestion_error=suggestion_error,
     )
 
 

@@ -528,6 +528,24 @@ function setupTheme() {
 
 // --- tidying adjustments: only what changed goes in the address (D-041) -------------
 
+// --- AI suggestions: shown only, applied by the user's click (D-041) ----------------
+
+function setupSuggestions() {
+  const accept = (button) => {
+    const field = document.querySelector(`input[name="${CSS.escape(button.dataset.target)}"]`);
+    if (!field) return;
+    field.value = button.dataset.suggestion;
+    button.classList.add("accepted");
+    button.textContent = `✔ ${button.dataset.suggestion}`;
+  };
+  for (const button of document.querySelectorAll("[data-suggestion]")) {
+    button.addEventListener("click", () => accept(button));
+  }
+  document.querySelector("[data-accept-all-suggestions]")?.addEventListener("click", () => {
+    for (const button of document.querySelectorAll("[data-suggestion]")) accept(button);
+  });
+}
+
 function setupCompactForms() {
   for (const form of document.querySelectorAll("form[data-compact-query]")) {
     form.addEventListener("submit", () => {
@@ -566,6 +584,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupTheme();
   setupQuit();
   setupCompactForms();
+  setupSuggestions();
   setupStartButtons();
   setupArchiveButtons();
   setupJobMonitor();

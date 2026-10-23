@@ -14,6 +14,7 @@ import os
 import sqlite3
 import sys
 import threading
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,7 @@ from treeaudit.core.errors import TreeAuditError
 from treeaudit.core.sandbox import Policy, SandboxError, restrict
 from treeaudit.filters.spec import FilterSpec
 from treeaudit.llm.bench import run_bench
+from treeaudit.llm.bench_organize import run_organize_bench
 from treeaudit.llm.client import LlmClient, LlmError, client_from_environment
 from treeaudit.parasites.commands import Action
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
@@ -303,6 +305,9 @@ def build_parser() -> argparse.ArgumentParser:
     llm_bench = llm_commands.add_parser("bench", help="mesurer le modèle sur des cas connus")
     llm_bench.add_argument("--label", default="", help="nom du modèle, pour le tableau")
     llm_bench.add_argument("--wait", type=float, default=300.0, help="attente du chargement (s)")
+    llm_bench.add_argument(
+        "--organize", action="store_true", help="mesurer les suggestions de rangement"
+    )
 
     commands.add_parser("serve", help="démarrer le serveur web local")
 
@@ -663,6 +668,8 @@ def _cmd_llm_bench(args: argparse.Namespace) -> int:
     client = _llm_client()
     if not client.wait_until_ready(args.wait):
         raise LlmError("le LLM n'est pas prêt (modèle trop long à charger ?)")
+    if args.organize:
+        return _llm_bench_organize(client, args.label or client.url)
     results = run_bench(client)
     label = args.label or client.url
     for result in results:
@@ -685,6 +692,34 @@ def _cmd_llm_bench(args: argparse.Namespace) -> int:
         f"dangereux {sum(r.dangerous for r in results)}, "
         f"format respecté {len(answered)}/{len(results)}, "
         f"{speed:.0f} jetons/s, {seconds:.1f} s par avis"
+    )
+    return EXIT_OK
+
+
+def _llm_bench_organize(client: LlmClient, label: str) -> int:
+    started = time.monotonic()
+    results = run_organize_bench(client)
+    for result in results:
+        if result.suggestions is None:
+            print(f"✘ {result.case.name} : erreur : {result.error}")
+            continue
+        found = result.suggestions
+        print(
+            f"{'✔' if result.names_valid else '✘ NOMS INVALIDES'} {result.case.name} : "
+            f"ensemble {result.together[0]}/{result.together[1]}, "
+            f"séparés {result.apart[0]}/{result.apart[1]}, score {result.score:.0%}"
+        )
+        print(f"    sous-dossiers : {', '.join(found.subfolders) or '(aucun)'}")
+        for sub in found.subfolders:
+            names = [
+                f"e{entry}" for entry, chosen in sorted(found.by_entry.items()) if chosen == sub
+            ]
+            print(f"      {sub} : {' '.join(names)}")
+    scores = [r.score for r in results]
+    print(
+        f"BILAN rangement {label} : score moyen {sum(scores) / len(scores):.0%}, "
+        f"noms valides {sum(r.names_valid for r in results)}/{len(results)}, "
+        f"{time.monotonic() - started:.1f} s"
     )
     return EXIT_OK
 

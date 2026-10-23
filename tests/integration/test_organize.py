@@ -213,18 +213,22 @@ def test_adjustments_from_the_query_string() -> None:
             ("categorie_7", "Archives"),
             ("categorie_8", ""),  # unchanged
             ("nom_Photos", " Images "),
+            ("sous_9", "Factures EDF"),
             ("nom_Musique", "Musique"),  # same name: no change
             ("destination", "Classement 2026"),
             ("dir", "3"),  # not an adjustment: ignored
         ]
     )
     assert adjust.excluded == {12} and adjust.categories == {7: "Archives"}
+    assert adjust.subfolders == {9: "Factures EDF"}
     assert adjust.names == {"Photos": "Images"} and adjust.destination == "Classement 2026"
     for bad in (
         [("exclure", "../1")],
         [("categorie_7", "Mes trucs")],  # not one of the categories
         [("categorie_x", "Archives")],
         [("nom_Inconnue", "x")],
+        [("sous_9", "../../etc")],
+        [("sous_x", "Factures")],
     ):
         with pytest.raises(AdjustmentError):
             adjustments_from_query(bad)
@@ -240,6 +244,7 @@ def test_adjusted_plan_and_scripts(
     adjust = Adjustments(
         excluded=frozenset({ids["Vacances Bretagne"]}),
         categories={ids["Bazar/facture.pdf"]: "Archives"},
+        subfolders={ids["Bazar/chanson.mp3"]: "Bretagne"},
         names={"Photos": "Images", "Archives": "Papiers"},
         destination="Classement",
     )
@@ -257,6 +262,7 @@ def test_adjusted_plan_and_scripts(
     assert moves["Bazar/facture.pdf"].target == "Classement/Papiers/facture.pdf"
     assert moves["Bazar/facture.pdf"].reason == "catégorie choisie par toi"
     assert moves["Bazar/film.mkv"].target == "Classement/Vidéos/2019/film.mkv"
+    assert moves["Bazar/chanson.mp3"].target == "Classement/Musique/Bretagne/chanson.mp3"
     assert moves["photo.jpg"].target.startswith("Classement/Images/2019/")
 
     before = snapshot(messy)

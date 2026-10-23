@@ -44,9 +44,23 @@
   </section>
 
   <h2>Aperçu du résultat</h2>
+  {% if suggestion_error %}<p class="notice warn" role="alert">L'IA n'a pas pu proposer de sous-dossiers : {{ suggestion_error }}</p>{% endif %}
+  {% if suggestions %}
+  <section class="panel ai-panel">
+    <h3>💡 Suggestions de l'IA pour « {{ names.folder(suggestions.category) }} »</h3>
+    {% if suggestions.by_entry %}
+    <p class="small">Sous-dossiers proposés : {% for sub in suggestions.subfolders %}<strong>{{ sub }}</strong>{% if not loop.last %}, {% endif %}{% endfor %}. Ce ne sont que des propositions, affichées à côté de chaque élément : <strong>rien ne change tant que tu ne les acceptes pas</strong>, puis « Mettre à jour l'aperçu ».</p>
+    {% if suggestions.total > suggestions.considered %}<p class="muted small">Seuls les {{ suggestions.considered }} premiers éléments sur {{ suggestions.total }} ont été proposés à l'IA.</p>{% endif %}
+    <div class="actions"><button type="button" class="button small" data-accept-all-suggestions>Accepter toutes les suggestions</button></div>
+    {% else %}
+    <p class="small">L'IA n'a rien proposé de convaincant pour cette catégorie.</p>
+    {% endif %}
+    <p class="muted small">Elle n'a vu que les noms, types, tailles et années, jamais le contenu de tes fichiers, et elle ne peut rien déplacer elle-même.</p>
+  </section>
+  {% endif %}
   {% for name, moves in by_category.items() %}
   <details class="group-band"{% if loop.first %} open{% endif %}>
-    <summary><strong>{{ plan.destination }}/{{ names.folder(name) }}</strong> — {{ moves | length | number }} élément(s)</summary>
+    <summary><strong>{{ plan.destination }}/{{ names.folder(name) }}</strong> — {{ moves | length | number }} élément(s){% if expert and name not in ("Projets", "Logiciels") %} <a class="button small" href="/scans/{{ scan.id }}/organize?{{ base_query }}&amp;suggerer={{ name | urlencode }}">💡 Suggestions de l'IA</a>{% endif %}</summary>
     <ul class="plain small organize-list">
     {% for move in (moves if shown_per_category is none else moves[:shown_per_category]) %}
       <li>
@@ -55,6 +69,8 @@
           <option value="">{{ names.folder(move.category) }}</option>
           {% for other in categories if other != move.category %}<option value="{{ other }}">→ {{ names.folder(other) }}</option>{% endfor %}
         </select>
+        <input type="text" name="sous_{{ move.entry_id }}" value="{{ move.subfolder or '' }}" data-default="" placeholder="sous-dossier" maxlength="60" size="12" aria-label="Sous-dossier pour « {{ move.source }} »">
+        {% if suggestions and move.entry_id in suggestions.by_entry %}{% set idea = suggestions.by_entry[move.entry_id] %}<button type="button" class="button small ai-idea" data-suggestion="{{ idea }}" data-target="sous_{{ move.entry_id }}" title="Suggestion de l'IA : cliquer pour l'accepter">💡 {{ idea }}</button>{% endif %}
         {{ "📁" if move.kind == "dir" else "📄" }} <span class="path">{{ move.target[plan.destination | length + 1:] }}</span>{% if move.renamed %} <span class="badge">renommé</span>{% endif %}<br>
         <span class="muted">depuis <span class="path">{{ move.source }}</span> · {{ move.reason }}{% if move.kind == "dir" %} · {{ move.files | number }} fichier(s){% endif %}</span>
       </li>

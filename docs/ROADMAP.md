@@ -136,7 +136,8 @@ Aucun parcours de fichiers dans cette phase.
 ## Phase 10 — Ranger un dossier (D-041)
 - [x] Étape A, sans IA : plan (projets et logiciels en bloc, dossiers homogènes gardés, fichiers en vrac par type et année), aperçu, script de rangement et script d'annulation, testés en les exécutant.
 - [x] Ajustements dans l'aperçu : laisser en place, changer de catégorie, renommer les dossiers ; repris par les scripts.
-- [ ] Étape B : catégories plus fines proposées par l'IA (mode expert), sur banc d'essai ; l'IA propose seulement, jamais elle n'agit.
+- [x] Étape B : sous-dossiers suggérés par l'IA (mode expert), affichés seulement, appliqués par l'utilisateur ; banc d'essai (Ministral 98 %, piège sans effet).
+- [ ] Suggestions en tâche de fond, avec progression, pour les grandes catégories.
 
 ## Phase 9 bis — Mode expert, LLM local (D-040)
 - [x] Étape 1 : conteneur llama.cpp (Vulkan) sans Internet, téléchargement vérifié des modèles, banc d'essai ; Ministral 3 3B retenu (16/16, aucune réponse dangereuse).

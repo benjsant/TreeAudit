@@ -129,3 +129,61 @@ def test_bench_scores_and_flags_dangerous_answers() -> None:
     clean_cases = [r for r in results if "nettoyable" in r.case.expected]
     assert clean_cases and all(r.correct and not r.dangerous for r in clean_cases)
     assert any("IGNORE" in name for r in results for name in r.case.facts.children)
+
+
+# --- sub-folder suggestions for the tidying plan (D-041) ---------------------------------
+
+
+class HostileOrganizer(LlmClient):
+    """Proposes dangerous names and answers outside of what was allowed."""
+
+    def __init__(self) -> None:
+        super().__init__("http://llm:8080")
+        self.calls: list[str] = []
+
+    def ask(self, system: str, user: str, schema: Any, *, max_tokens: int = 400) -> Answer:
+        self.calls.append(user)
+        if "sous_dossiers" in schema["properties"]:
+            data: dict[str, Any] = {
+                "sous_dossiers": [
+                    "../../etc",
+                    ".ssh",
+                    "Factures/2019",
+                    "Factures",
+                    "factures",
+                    "Impôts",
+                    "aucun",
+                    "Documents",
+                ]
+            }
+        else:
+            keys = schema["properties"]["classement"]["items"]["properties"]["id"]["enum"]
+            data = {
+                "classement": [
+                    {"id": keys[0], "sous_dossier": "Factures"},
+                    {"id": keys[1], "sous_dossier": "../../etc"},  # not allowed
+                    {"id": "e999", "sous_dossier": "Impôts"},  # unknown element
+                    {"id": keys[2], "sous_dossier": "aucun"},
+                ]
+            }
+        return Answer(data=data, seconds=0.1, tokens=10, tokens_per_second=100.0)
+
+
+def test_suggestions_only_keep_plain_names_and_allowed_choices() -> None:
+    from treeaudit.llm.organize import BATCH, suggest
+    from treeaudit.organize.plan import Move
+
+    moves = [
+        Move(
+            i, f"Bazar/doc{i}.pdf", f"Rangé/Documents/doc{i}.pdf", "file", "Documents", 1, 1, 0, "r"
+        )
+        for i in range(1, BATCH + 6)
+    ]
+    client = HostileOrganizer()
+    found = suggest(client, "Documents", moves)
+    # Dangerous, duplicate, "none" and the category's own name are dropped.
+    assert found.subfolders == ("Factures",)
+    assert found.by_entry == {1: "Factures", BATCH + 1: "Factures"}  # first of each batch
+    assert len(client.calls) == 3  # one proposal, then two batches
+    # The model sees short numbers and names, never a path to act on.
+    assert '"id": "e1"' in client.calls[0] and "Rangé/" not in client.calls[0]

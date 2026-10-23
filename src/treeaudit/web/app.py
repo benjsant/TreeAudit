@@ -24,6 +24,7 @@ from treeaudit import __version__
 from treeaudit.archive.destination import evaluate_archive_dir
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig
 from treeaudit.core.datadir import prepare_data_dir
+from treeaudit.llm.client import LlmClient, client_from_environment
 from treeaudit.roots.external import ExternalDisk
 from treeaudit.roots.mountinfo import MountTable, read_mountinfo
 from treeaudit.roots.registry import RootStatus, current_home
@@ -76,6 +77,7 @@ def create_app(
     external_enabled: bool = False,
     quit: Callable[[], None] | None = None,
     detect: Detection | None = None,
+    llm: LlmClient | None = None,
 ) -> FastAPI:
     """Build the application for the given, already validated, roots.
 
@@ -105,6 +107,8 @@ def create_app(
     app.state.jobs = JobManager(config, mounts=mounts, home=home)
     app.state.quit = quit
     app.state.detect = detect
+    # Expert mode (D-040): the local LLM, which only ever proposes.
+    app.state.llm = llm if llm is not None else client_from_environment()
     app.state.detect_lock = threading.Lock()
     # Shown on the pages; execute_archive validates the directory again before writing.
     app.state.archive_status = (

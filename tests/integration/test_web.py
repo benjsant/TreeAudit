@@ -1028,3 +1028,54 @@ def test_organize_adjustments_reach_the_scripts(client: TestClient, scanned: int
     assert bad.status_code == 422
     refused = client.get(f"/scans/{scanned}/organize", params={"destination": ".cache"})
     assert "Ajustement refusé" in refused.text
+
+
+def test_ai_suggestions_are_shown_never_applied(
+    tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    from typing import Any
+
+    from treeaudit.llm.client import Answer, LlmClient
+
+    class Organizer(LlmClient):
+        def __init__(self) -> None:
+            super().__init__("http://llm:8080")
+
+        def ask(self, system: str, user: str, schema: Any, *, max_tokens: int = 400) -> Answer:
+            if "sous_dossiers" in schema["properties"]:
+                data: dict[str, Any] = {"sous_dossiers": ["Factures", "../../etc", XSS]}
+            else:
+                keys = schema["properties"]["classement"]["items"]["properties"]["id"]["enum"]
+                data = {"classement": [{"id": key, "sous_dossier": "Factures"} for key in keys]}
+            return Answer(data=data, seconds=0.1, tokens=1, tokens_per_second=1.0)
+
+    touch(root / "papiers" / "a.pdf", b"a")
+    touch(root / "papiers" / "b.txt", b"b")
+    touch(root / "papiers" / "c.mp3", b"c")  # a mixed folder: its files are proposed one by one
+    config = AppConfig(
+        data_dir=str(tmp_path / "data"),
+        roots=(RootConfig(id="main", path=str(root), label="Disque", display_path=DISPLAY),),
+    )
+    mounts = data_disk_table(str(tmp_path))
+    statuses = evaluate_roots(config, mounts, home=None)
+    app = create_app(config, statuses, mounts=lambda: mounts, home=lambda: None, llm=Organizer())
+    with TestClient(app, base_url="http://127.0.0.1:8765") as expert:
+        snapshot = run_job(expert, "/api/scans", {"root_id": "main", "subpath": ""})
+        scan_id = snapshot["scan_id"]
+        plain = expert.get(f"/scans/{scan_id}/organize").text
+        assert "💡 Suggestions de l'IA" in plain and "ai-panel" not in plain
+        page = expert.get(f"/scans/{scan_id}/organize", params={"suggerer": "Documents"}).text
+        assert_safe_html(page)
+        assert "rien ne change tant que tu ne les acceptes pas" in page
+        assert 'data-suggestion="Factures"' in page
+        assert "../../etc" not in page and "onerror" not in page.split("ai-panel")[1]
+        # Shown only: the plan itself is unchanged until the user submits.
+        assert 'name="sous_' in page and 'value="Factures"' not in page
+        script = expert.get(f"/export/scans/{scan_id}/organize.sh").text
+        assert "/Factures/" not in script
+        expert.app.state.jobs.wait()  # type: ignore[attr-defined]
+
+
+def test_no_ai_button_without_expert_mode(client: TestClient, scanned: int) -> None:
+    page = client.get(f"/scans/{scanned}/organize", params={"suggerer": "Documents"}).text
+    assert "💡 Suggestions de l'IA" not in page and "ai-panel" not in page

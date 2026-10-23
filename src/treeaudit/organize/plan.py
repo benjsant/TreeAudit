@@ -254,10 +254,13 @@ class AdjustmentError(ValueError):
 @dataclass(frozen=True, slots=True)
 class Adjustments:
     """The user's changes to the plan: elements left in place, other categories,
-    other folder names. Each one is checked again (adjustments_from_query)."""
+    a sub-folder inside the category, other folder names. Each one is checked
+    again (adjustments_from_query). Suggestions of the expert mode's AI only
+    ever reach the plan this way, once the user accepted them (D-041)."""
 
     excluded: frozenset[int] = frozenset()
     categories: Mapping[int, str] = field(default_factory=dict)
+    subfolders: Mapping[int, str] = field(default_factory=dict)
     names: Mapping[str, str] = field(default_factory=dict)
     destination: str = DESTINATION
 
@@ -267,18 +270,24 @@ class Adjustments:
     @property
     def any(self) -> bool:
         return bool(
-            self.excluded or self.categories or self.names or self.destination != DESTINATION
+            self.excluded
+            or self.categories
+            or self.subfolders
+            or self.names
+            or self.destination != DESTINATION
         )
 
 
 def adjustments_from_query(params: Iterable[tuple[str, str]]) -> Adjustments:
     """Read the adjustments from a page's query string, refusing anything odd.
 
-    ``exclure=<id>``, ``categorie_<id>=<category>``, ``nom_<category>=<name>``,
-    ``destination=<name>``. Empty values mean "unchanged"; other keys are ignored.
+    ``exclure=<id>``, ``categorie_<id>=<category>``, ``sous_<id>=<name>``,
+    ``nom_<category>=<name>``, ``destination=<name>``. Empty values mean
+    "unchanged"; other keys are ignored.
     """
     excluded: set[int] = set()
     categories: dict[int, str] = {}
+    subfolders: dict[int, str] = {}
     names: dict[str, str] = {}
     destination = DESTINATION
     for count, (key, value) in enumerate(params, start=1):
@@ -300,12 +309,18 @@ def adjustments_from_query(params: Iterable[tuple[str, str]]) -> Adjustments:
                 raise AdjustmentError(f"nom de dossier refusé : {value}")
             if name != category:
                 names[category] = name
+        elif key.startswith("sous_") and value.strip():
+            entry = key.removeprefix("sous_")
+            sub = clean_folder_name(value)
+            if not entry.isdigit() or sub is None:
+                raise AdjustmentError(f"nom de sous-dossier refusé : {value}")
+            subfolders[int(entry)] = sub
         elif key == "destination" and value.strip():
             chosen = clean_folder_name(value)
             if chosen is None:
                 raise AdjustmentError(f"nom de dossier refusé : {value}")
             destination = chosen
-    return Adjustments(frozenset(excluded), categories, names, destination)
+    return Adjustments(frozenset(excluded), categories, subfolders, names, destination)
 
 
 class PlanTooLargeError(ValueError):
@@ -326,6 +341,7 @@ class Move:
     mtime_s: int
     reason: str
     renamed: bool = False
+    subfolder: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -515,9 +531,12 @@ class _Planner:
     def _keep(self, node: _Node, reason: str) -> None:
         self.plan.kept.append(Kept(self._relative(node), reason))
 
-    def _target(self, category: str, year: int | None, name: str) -> tuple[str, bool]:
+    def _target(
+        self, category: str, year: int | None, sub: str | None, name: str
+    ) -> tuple[str, bool]:
         folder = f"{self.adjust.destination}/{self.adjust.folder(category)}"
         folder += f"/{year}" if year else ""
+        folder += f"/{sub}" if sub else ""
         target = f"{folder}/{name}"
         number = 1
         stem, dot, suffix = name.rpartition(".")
@@ -538,7 +557,8 @@ class _Planner:
             year = (
                 _year(node.mtime_ns) if node.kind != "dir" else node.years.most_common(1)[0][0]
             ) or None
-        target, renamed = self._target(category, year, node.name_display)
+        sub = self.adjust.subfolders.get(node.entry_id)
+        target, renamed = self._target(category, year, sub, node.name_display)
         self.plan.moves.append(
             Move(
                 entry_id=node.entry_id,
@@ -551,6 +571,7 @@ class _Planner:
                 mtime_s=node.mtime_ns // 1_000_000_000,
                 reason=reason,
                 renamed=renamed,
+                subfolder=sub,
             )
         )
 

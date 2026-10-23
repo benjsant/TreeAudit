@@ -176,3 +176,6 @@ td { padding: .3rem .4rem; border-bottom: 1px solid var(--line); }
 .organize-list li { padding: .45rem 0; border-bottom: 1px solid var(--line); }
 .organize-list select, .organize-list label { margin-right: .5rem; }
 .organize-list select { padding: .2rem .4rem; font-size: .9rem; }
+.ai-panel { border: 2px dashed var(--accent); margin-bottom: 1rem; }
+.ai-idea { border-style: dashed; }
+.ai-idea.accepted { border-style: solid; background: var(--accent-soft); }
