@@ -179,3 +179,7 @@ td { padding: .3rem .4rem; border-bottom: 1px solid var(--line); }
 .ai-panel { border: 2px dashed var(--accent); margin-bottom: 1rem; }
 .ai-idea { border-style: dashed; }
 .ai-idea.accepted { border-style: solid; background: var(--accent-soft); }
+.ai-opinion { margin: .5rem 0 0 2.1rem; padding: .5rem .8rem; border-radius: 10px; border-left: 4px solid var(--line); background: var(--panel); }
+.ai-opinion.ai-a_garder { border-left-color: var(--warn); }
+.ai-opinion.ai-incertain { border-left-color: var(--muted); }
+.ai-opinion.ai-nettoyable { border-left-color: var(--line); color: var(--muted); }

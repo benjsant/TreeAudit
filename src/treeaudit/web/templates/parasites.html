@@ -23,6 +23,16 @@
       {% elif f.rule.recreate_note %}<p>{{ f.rule.recreate_note }}</p>{% endif %}
     </details>
     {% if not f.displayable %}<p class="error-text small">Nom illisible : pas de commande possible pour celui-ci.</p>{% endif %}
+    {% set op = opinions.opinions.get(f.number) if opinions else none %}
+    {% if op %}
+    <div class="ai-opinion ai-{{ op.verdict }}">
+      {% if op.verdict == "a_garder" %}⚠ <strong>L'IA conseille de garder ce dossier</strong>
+      {% elif op.verdict == "incertain" %}❔ <strong>L'IA a un doute</strong>
+      {% else %}<strong>L'IA ne voit pas de raison de garder ce dossier</strong> — à toi de vérifier, ce n'est pas une recommandation
+      {% endif %}{% if op.guarded %} <span class="muted small">(avis corrigé par le garde-fou de TreeAudit)</span>{% endif %}
+      <ul class="plain small">{% for reason in op.reasons %}<li>· {{ reason }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
   </li>
 {% endfor %}
 </ul>
@@ -41,6 +51,16 @@
   <section class="group-band">
     <h2><span class="badge band-green">🟢 Sans risque</span> déjà cochés</h2>
     {{ rows_list(safe, True) }}
+  </section>
+  {% endif %}
+  {% if expert and (check or doubt) %}
+  <section class="panel ai-panel">
+    {% if opinions %}
+    <p class="small">💡 L'IA a examiné {{ opinions.considered }} dossier(s){% if opinions.total > opinions.considered %} sur {{ opinions.total }} (les premiers){% endif %}{% if opinions.failed %}, {{ opinions.failed }} sans réponse utilisable{% endif %}. Ses avis sont affichés sous chaque dossier. <strong>Ils ne cochent ni ne décochent rien</strong> : l'IA peut se tromper, c'est toi qui décides.</p>
+    {% else %}
+    <p class="small">💡 <strong>Mode expert</strong> : l'IA locale peut donner son avis sur les dossiers « à vérifier » et « douteux », à partir de leurs noms, types et tailles seulement. Elle ne coche, ne décoche et ne supprime jamais rien.</p>
+    {% endif %}
+    <div class="actions"><button type="button" class="button small" data-start-opinions data-scan="{{ scan.id }}" data-min-confidence="{{ min_confidence }}">💡 {{ "Redemander l'avis de l'IA" if opinions else "Avis de l'IA" }}</button><p class="error-text" data-error role="alert" hidden></p></div>
   </section>
   {% endif %}
   {% if check %}

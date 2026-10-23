@@ -141,8 +141,8 @@ Aucun parcours de fichiers dans cette phase.
 
 ## Phase 9 bis — Mode expert, LLM local (D-040)
 - [x] Étape 1 : conteneur llama.cpp (Vulkan) sans Internet, téléchargement vérifié des modèles, banc d'essai ; Ministral 3 3B retenu (16/16, aucune réponse dangereuse).
-- [ ] Second jeu de cas, écrit à part, pour confirmer.
-- [ ] Étape 2 : « Avis de l'IA » sur les dossiers douteux, dans l'interface.
+- [x] Second jeu de cas, jamais utilisé pour régler : 10/12, une réponse dangereuse (sauvegardes de jeu), d'où l'affichage asymétrique.
+- [x] Étape 2 : « Avis de l'IA » sur les dossiers à vérifier, en tâche de fond ; alertes mises en avant, aucune case touchée.
 
 ## Phase 6 septies — Explorateur et panier (D-036)
 - [x] Explorateur : tri, pages, dates, repères (à nettoyer, en double, protégé).

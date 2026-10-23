@@ -205,3 +205,13 @@ def test_suggestions_can_be_cancelled_between_batches() -> None:
     with pytest.raises(SuggestionsCancelled):
         suggest(HostileOrganizer(), "Documents", moves, progress=progress, cancel=cancel)
     assert progress.total == 2 * BATCH and progress.done == 0
+
+
+def test_the_second_set_is_new_and_balanced() -> None:
+    from treeaudit.llm.bench import CASES
+    from treeaudit.llm.bench_heldout import HELDOUT_CASES
+
+    assert not {c.name for c in CASES} & {c.name for c in HELDOUT_CASES}
+    assert not {c.facts.path for c in CASES} & {c.facts.path for c in HELDOUT_CASES}
+    keep = [c for c in HELDOUT_CASES if "nettoyable" not in c.expected]
+    assert len(keep) * 2 == len(HELDOUT_CASES)  # as many to keep as to clean

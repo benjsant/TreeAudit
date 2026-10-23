@@ -403,3 +403,25 @@ def start_suggestions(
     except JobError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"job": job.snapshot()}
+
+
+class OpinionsStart(BaseModel):
+    min_confidence: int = Field(default=30, ge=0, le=100)
+
+
+@router.post("/scans/{scan_id}/parasites/opinions", status_code=202)
+def start_opinions(
+    scan_id: int, body: OpinionsStart, request: Request, jobs: Jobs, conn: Db
+) -> dict[str, Any]:
+    """Expert mode (D-040): the local AI's opinion on the folders to check. A job:
+    the opinions are shown, they never change the selection nor the classes."""
+    llm = request.app.state.llm
+    if llm is None:
+        raise HTTPException(409, "mode expert inactif (TREEAUDIT_EXPERT=1, version Docker)")
+    if scans_db.get_scan(conn, scan_id) is None:
+        raise HTTPException(404, "scan inconnu")
+    try:
+        job = jobs.start_opinions(llm, scan_id, body.min_confidence)
+    except JobError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"job": job.snapshot()}

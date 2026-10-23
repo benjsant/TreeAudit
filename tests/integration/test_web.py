@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import html
 import io
 import os
 import re
@@ -1093,3 +1094,72 @@ def test_no_ai_without_expert_mode(client: TestClient, scanned: int) -> None:
         headers=CSRF,
     )
     assert started.status_code == 409 and "mode expert" in started.json()["detail"]
+
+
+# --- opinions of the local AI on the folders to check (D-040) ------------------------------
+
+
+def test_ai_opinions_are_shown_never_change_the_selection(
+    tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    from typing import Any
+
+    from treeaudit.llm.client import Answer, LlmClient
+
+    seen: list[str] = []
+
+    class Reviewer(LlmClient):
+        def __init__(self) -> None:
+            super().__init__("http://llm:8080")
+
+        def ask(self, system: str, user: str, schema: Any, *, max_tokens: int = 400) -> Answer:
+            seen.append(user)
+            personal = "IMG_" in user
+            data = {
+                "contenu_attendu": not personal,
+                "fichiers_personnels": personal,
+                "avis": "nettoyable",  # always: the guard and the display must cope
+                "confiance": 90,
+                "raisons": ["des photos" if personal else "rien de personnel"],
+            }
+            return Answer(data=data, seconds=0.1, tokens=1, tokens_per_second=1.0)
+
+    touch(root / "Images" / "venv" / "IMG_0001.jpg", b"photo")
+    touch(root / "dev" / "build" / "out.o", b"o")
+    config = AppConfig(
+        data_dir=str(tmp_path / "data"),
+        roots=(RootConfig(id="main", path=str(root), label="Disque", display_path=DISPLAY),),
+    )
+    mounts = data_disk_table(str(tmp_path))
+    statuses = evaluate_roots(config, mounts, home=None)
+    app = create_app(config, statuses, mounts=lambda: mounts, home=lambda: None, llm=Reviewer())
+    with TestClient(app, base_url="http://127.0.0.1:8765") as expert:
+        snapshot = run_job(expert, "/api/scans", {"root_id": "main", "subpath": ""})
+        scan_id = snapshot["scan_id"]
+        before = expert.get(f"/scans/{scan_id}/parasites", params={"min_confidence": 0}).text
+        assert "💡 Avis de l'IA" in html.unescape(before)
+        checked_before = before.count(" checked")
+        url = f"/api/scans/{scan_id}/parasites/opinions"
+        assert expert.post(url, json={}).status_code == 403  # CSRF header required
+        job = run_job(expert, url, {"min_confidence": 0})
+        assert job["kind"] == "opinions" and job["result_url"].endswith(f"avis={job['id']}")
+        page = expert.get(job["result_url"]).text
+        assert_safe_html(page)
+        page = html.unescape(page)
+        # The guard turned "nettoyable" into "keep" for the photos; never a recommendation.
+        assert "L'IA conseille de garder ce dossier" in page
+        assert "avis corrigé par le garde-fou de TreeAudit" in page
+        assert "ce n'est pas une recommandation" in page
+        assert page.count(" checked") == checked_before  # nothing checked nor unchecked
+        # Metadata only: names and extensions, never a file's content.
+        assert any('"IMG_0001.jpg"' in prompt for prompt in seen)
+        assert not any(
+            "photo" in prompt.split("children")[0] for prompt in seen if "IMG_" in prompt
+        )
+        expert.app.state.jobs.wait()  # type: ignore[attr-defined]
+
+
+def test_no_opinions_without_expert_mode(client: TestClient, scanned: int) -> None:
+    assert "Avis de l" not in client.get(f"/scans/{scanned}/parasites").text
+    started = client.post(f"/api/scans/{scanned}/parasites/opinions", json={}, headers=CSRF)
+    assert started.status_code == 409

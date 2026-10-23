@@ -41,7 +41,8 @@ from treeaudit.core.datadir import prepare_data_dir
 from treeaudit.core.errors import TreeAuditError
 from treeaudit.core.sandbox import Policy, SandboxError, restrict
 from treeaudit.filters.spec import FilterSpec
-from treeaudit.llm.bench import run_bench
+from treeaudit.llm.bench import CASES, run_bench
+from treeaudit.llm.bench_heldout import HELDOUT_CASES
 from treeaudit.llm.bench_organize import run_organize_bench
 from treeaudit.llm.client import LlmClient, LlmError, client_from_environment
 from treeaudit.parasites.commands import Action
@@ -307,6 +308,9 @@ def build_parser() -> argparse.ArgumentParser:
     llm_bench.add_argument("--wait", type=float, default=300.0, help="attente du chargement (s)")
     llm_bench.add_argument(
         "--organize", action="store_true", help="mesurer les suggestions de rangement"
+    )
+    llm_bench.add_argument(
+        "--heldout", action="store_true", help="second jeu de cas, jamais utilisé pour régler"
     )
 
     commands.add_parser("serve", help="démarrer le serveur web local")
@@ -670,8 +674,8 @@ def _cmd_llm_bench(args: argparse.Namespace) -> int:
         raise LlmError("le LLM n'est pas prêt (modèle trop long à charger ?)")
     if args.organize:
         return _llm_bench_organize(client, args.label or client.url)
-    results = run_bench(client)
-    label = args.label or client.url
+    results = run_bench(client, HELDOUT_CASES if args.heldout else CASES)
+    label = (args.label or client.url) + (" (second jeu)" if args.heldout else "")
     for result in results:
         mark = "✔" if result.correct else ("✘ DANGEREUX" if result.dangerous else "✘")
         verdict = (

@@ -33,9 +33,13 @@ from treeaudit.core.datadir import ArchiveLockedError, ScanLockedError
 from treeaudit.core.errors import TreeAuditError
 from treeaudit.db.connection import connect
 from treeaudit.duplicates.runner import DupOptions, DupOutcome, DupProgress, execute_duplicates
-from treeaudit.llm.client import LlmClient
+from treeaudit.llm.client import LlmClient, LlmError
+from treeaudit.llm.facts import facts_for_finding
+from treeaudit.llm.opinion import Opinion, ask_opinion
 from treeaudit.llm.organize import Suggestions, SuggestionsCancelled, SuggestProgress, suggest
 from treeaudit.organize.plan import PlanTooLargeError, adjustments_from_query, make_plan
+from treeaudit.parasites.cached import parasite_findings
+from treeaudit.parasites.detect import Band
 from treeaudit.parasites.report import human_size
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.validation import REASON_MESSAGES, RootRejectedError
@@ -52,6 +56,30 @@ class JobKind(StrEnum):
     DUPES = "dupes"
     ARCHIVE = "archive"
     SUGGEST = "suggest"
+    OPINIONS = "opinions"
+
+
+MAX_OPINIONS = 50
+"""Folders "to check" or "doubtful" given to the AI per request."""
+
+
+@dataclass(frozen=True, slots=True)
+class OpinionsOutcome:
+    """The local AI's opinions on the folders to check (D-040). Shown next to
+    them only: they never check, uncheck nor reclassify anything."""
+
+    status: ScanStatus
+    scan_id: int
+    min_confidence: int
+    opinions: dict[int, Opinion] = field(default_factory=dict)
+    """Finding number -> opinion."""
+    failed: int = 0
+    considered: int = 0
+    total: int = 0
+
+    @property
+    def result_url(self) -> str:
+        return f"/scans/{self.scan_id}/parasites?min_confidence={self.min_confidence}&avis="
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,7 +116,9 @@ class Job:
     )
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
-    outcome: ScanOutcome | DupOutcome | ArchiveOutcome | SuggestOutcome | None = None
+    outcome: ScanOutcome | DupOutcome | ArchiveOutcome | SuggestOutcome | OpinionsOutcome | None = (
+        None
+    )
     error: str | None = None
     thread: threading.Thread | None = None
 
@@ -145,7 +175,7 @@ class Job:
             data["status"] = self.outcome.status.value
         if isinstance(self.outcome, ArchiveOutcome):
             data["archive"] = _archive_result(self.outcome)
-        if isinstance(self.outcome, SuggestOutcome):
+        if isinstance(self.outcome, SuggestOutcome | OpinionsOutcome):
             data["result_url"] = self.outcome.result_url + str(self.id)
         return data
 
@@ -199,7 +229,9 @@ class JobManager:
     def _start(
         self,
         job: Job,
-        work: Callable[[Job], ScanOutcome | DupOutcome | ArchiveOutcome | SuggestOutcome],
+        work: Callable[
+            [Job], ScanOutcome | DupOutcome | ArchiveOutcome | SuggestOutcome | OpinionsOutcome
+        ],
     ) -> Job:
         with self._lock:
             if self.current is not None and self.current.running:
@@ -305,6 +337,49 @@ class JobManager:
             except SuggestionsCancelled:
                 return SuggestOutcome(ScanStatus.CANCELLED, scan_id, dir_id, category, query)
             return SuggestOutcome(ScanStatus.COMPLETE, scan_id, dir_id, category, query, found)
+
+        return self._start(job, work)
+
+    def start_opinions(self, llm: LlmClient, scan_id: int, min_confidence: int) -> Job:
+        """The local AI's opinion on each folder "to check" or "doubtful" (D-040)."""
+        progress = SuggestProgress(stage="avis")
+        label = "Avis de l'IA sur les dossiers à vérifier"
+        job = Job(id=next(self._ids), kind=JobKind.OPINIONS, label=label, progress=progress)
+
+        def work(j: Job) -> OpinionsOutcome:
+            conn = connect(self.config.data_dir)
+            try:
+                findings = [
+                    f
+                    for f in parasite_findings(conn, scan_id, min_confidence=min_confidence)
+                    if f.band is not Band.GREEN
+                ]
+                chosen = findings[:MAX_OPINIONS]
+                facts = [(f.number, facts_for_finding(conn, scan_id, f)) for f in chosen]
+            finally:
+                conn.close()
+            progress.total = len(facts)
+            opinions: dict[int, Opinion] = {}
+            failed = 0
+            for number, folder in facts:
+                if j.cancel.is_set():
+                    return OpinionsOutcome(
+                        ScanStatus.CANCELLED, scan_id, min_confidence, opinions, failed
+                    )
+                try:
+                    opinions[number] = ask_opinion(llm, folder)[0]
+                except LlmError:
+                    failed += 1  # one bad answer does not stop the others
+                progress.done += 1
+            return OpinionsOutcome(
+                ScanStatus.COMPLETE if not failed else ScanStatus.INCOMPLETE,
+                scan_id,
+                min_confidence,
+                opinions,
+                failed,
+                len(facts),
+                len(findings),
+            )
 
         return self._start(job, work)
 

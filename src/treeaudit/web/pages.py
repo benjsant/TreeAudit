@@ -44,7 +44,7 @@ from treeaudit.scanner.walker import SubpathError, parse_subpath
 from treeaudit.shellcmd import host_path, safe_root
 from treeaudit.web import explorer, queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, browse_root, root_display
-from treeaudit.web.jobs import SuggestOutcome
+from treeaudit.web.jobs import OpinionsOutcome, SuggestOutcome
 from treeaudit.web.live import refresh_roots
 from treeaudit.web.search_form import SearchForm, spec_from_form
 
@@ -483,10 +483,24 @@ def parasites_page(
     conn: Db,
     config: Config,
     min_confidence: Annotated[int, Query(ge=0, le=100)] = 30,
+    avis: Annotated[int | None, Query(ge=1)] = None,
 ) -> Response:
     scan = _scan_or_404(conn, scan_id)
     display = root_display(config, scan)
     findings = parasite_findings(conn, scan_id, min_confidence=min_confidence)
+    # Opinions of the local AI come from a finished job (D-040): shown next to
+    # the folders, never checking, unchecking nor reclassifying anything.
+    opinions = None
+    job = request.app.state.jobs.current
+    if (
+        avis is not None
+        and job is not None
+        and job.id == avis
+        and isinstance(job.outcome, OpinionsOutcome)
+        and job.outcome.scan_id == scan_id
+        and job.outcome.min_confidence == min_confidence
+    ):
+        opinions = job.outcome
     rows: list[dict[str, Any]] = [
         {"finding": f, "recreate": recreate_command(f, display)} for f in findings
     ]
@@ -499,6 +513,8 @@ def parasites_page(
         check=[r for r in rows if r["finding"].band is Band.ORANGE],
         doubt=[r for r in rows if r["finding"].band is Band.RED],
         min_confidence=min_confidence,
+        expert=request.app.state.llm is not None,
+        opinions=opinions,
     )
 
 

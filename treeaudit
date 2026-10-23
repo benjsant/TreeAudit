@@ -242,6 +242,7 @@ cmd_llm_bench() {
         TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" up -d llm >&2
         TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" run --rm -T app llm bench --label "$name" || true
         TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" run --rm -T app llm bench --organize --label "$name" || true
+        TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" run --rm -T app llm bench --heldout --label "$name" || true
         TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" rm -sf llm >&2
     done
 }

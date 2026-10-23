@@ -202,6 +202,10 @@ function setupJobMonitor() {
     if (job.kind === "scan") {
       field("progress").textContent = `${p.entries.toLocaleString("fr-FR")} éléments vus`;
       field("current").textContent = p.current_dir || "–";
+    } else if (job.kind === "opinions") {
+      field("progress").textContent =
+        `${p.done.toLocaleString("fr-FR")} / ${p.total.toLocaleString("fr-FR")} dossiers examinés par l'IA`;
+      field("current").textContent = "";
     } else if (job.kind === "suggest") {
       field("progress").textContent =
         p.stage === "propositions"
@@ -239,7 +243,11 @@ function setupJobMonitor() {
       target = `/scans/${encodeURIComponent(job.scan_id)}`;
     } else if (job.kind === "dupes" && job.run_id) {
       target = `/dupes/${encodeURIComponent(job.run_id)}`;
-    } else if (job.kind === "suggest" && job.result_url && job.result_url.startsWith("/scans/")) {
+    } else if (
+      (job.kind === "suggest" || job.kind === "opinions") &&
+      job.result_url &&
+      job.result_url.startsWith("/scans/")
+    ) {
       target = job.result_url;
     }
     if (target) {
@@ -538,6 +546,23 @@ function setupTheme() {
 
 // --- AI suggestions: shown only, applied by the user's click (D-041) ----------------
 
+function setupOpinions() {
+  for (const button of document.querySelectorAll("[data-start-opinions]")) {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await post(`/api/scans/${encodeURIComponent(button.dataset.scan)}/parasites/opinions`, {
+          min_confidence: Number(button.dataset.minConfidence || 30),
+        });
+        window.location.assign("/jobs/current");
+      } catch (error) {
+        showError(button.closest(".actions"), error.message);
+        button.disabled = false;
+      }
+    });
+  }
+}
+
 function setupSuggestions() {
   for (const button of document.querySelectorAll("[data-start-suggestions]")) {
     button.addEventListener("click", async (event) => {
@@ -614,6 +639,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupQuit();
   setupCompactForms();
   setupSuggestions();
+  setupOpinions();
   setupStartButtons();
   setupArchiveButtons();
   setupJobMonitor();
