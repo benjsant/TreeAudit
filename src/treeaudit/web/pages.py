@@ -27,6 +27,7 @@ from fastapi.templating import Jinja2Templates
 from treeaudit import __version__
 from treeaudit.archive.listing import list_archives
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig, RootConfig
+from treeaudit.core.datadir import index_size
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
@@ -157,6 +158,14 @@ def path_prefix(config: AppConfig, scan: sqlite3.Row) -> str:
     return root_display(config, scan).rstrip("/") + "/"
 
 
+def analysis_where(config: AppConfig, scan: sqlite3.Row) -> str:
+    """Where an analysis was made, as the user knows it: the disk or folder and
+    the sub-folder (an unknown root keeps its identifier)."""
+    root = config.get_root(scan["root_id"])
+    shown = root.shown_path.rstrip("/") if root is not None else f"« {scan['root_id']} »"
+    return f"{shown}/{scan['subpath']}" if scan["subpath"] else shown
+
+
 def analysis_title(config: AppConfig, scan: sqlite3.Row) -> str:
     """Short name of what was analysed: the folder name, as the user knows it."""
     shown = root_display(config, scan).rstrip("/")
@@ -184,8 +193,14 @@ def index(request: Request, conn: Db) -> Response:
         if s.reason is not None and s.reason is not RejectReason.NOT_MOUNTED and not s.root.external
     ]
     analyses = [
-        {"scan": scan, "title": analysis_title(config, scan)}
-        for scan in scans_db.list_scans(conn, limit=30)
+        {
+            "scan": scan,
+            "title": analysis_title(config, scan),
+            "where": analysis_where(config, scan),
+            "available": statuses.get(scan["root_id"]) is not None
+            and statuses[scan["root_id"]].accepted,
+        }
+        for scan in scans_db.list_scans(conn, limit=100)
     ]
     return render(
         request,
@@ -194,6 +209,8 @@ def index(request: Request, conn: Db) -> Response:
         refused=refused,
         can_analyse=any(s.accepted for s in statuses.values())
         or request.app.state.external_enabled,
+        index_size=index_size(config.data_dir),
+        compacted=request.query_params.get("compacte") is not None,
     )
 
 

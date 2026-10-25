@@ -19,6 +19,10 @@ def run() -> int:
         from treeaudit.core.datadir import prepare_temp_dir
 
         os.environ["SQLITE_TMPDIR"] = prepare_temp_dir()
+    elif os.environ.get("SQLITE_TMPDIR", "").startswith("/data/"):
+        from treeaudit.core.datadir import prepare_data_dir
+
+        prepare_data_dir(os.environ["SQLITE_TMPDIR"])  # in the data volume (compose.yaml)
     from treeaudit.cli import main
 
     return main(sandboxed=sandboxed)

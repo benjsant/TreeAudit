@@ -547,6 +547,13 @@ Précise la mise en œuvre de D-024.
   - sur **téléphone**, l'en-tête occupait un tiers de l'écran : boutons plus compacts ;
   - en **mode sombre**, les barres de taille avaient un fond blanc : elles suivent le thème.
 - **Restent à traiter** :
-  - l'accueil accumule les analyses sans moyen d'en supprimer, et une analyse ne dit pas de quel disque elle vient (« main » × 8) ;
+  - ~~l'accueil accumule les analyses sans moyen d'en supprimer, et une analyse ne dit pas de quel disque elle vient~~ : fait, voir D-043 ;
   - « Ranger » compte la taille des fichiers, l'explorateur la place occupée sur le disque : les chiffres diffèrent pour un même dossier ;
   - dans « Ranger », un dossier nommé `venv` qui ne contient qu'une note est pris pour un logiciel (sur la foi du nom) ; il est déplacé en entier, donc sans dommage, mais mal classé.
+
+## D-043 — Oublier une analyse, compacter l'index (2026-10-25)
+- **Constat de l'exploration (D-042)** : l'accueil accumulait les analyses (« main » × 8), sans dire d'où elles venaient ni permettre d'en retirer. L'index pesait 870 Mo.
+- **Origine affichée** : chaque analyse montre son chemin (disque ou dossier, puis sous-dossier), et « plus disponible » si sa racine n'est plus proposée.
+- **« Oublier »** (`POST /api/scans/<n>/forget`, protégé comme les autres, avec confirmation) : efface **ce que TreeAudit a enregistré** pour l'analyse, en une seule transaction : index, recherches de doublons et leurs empreintes (par les clés étrangères), résumés en cache. **Jamais un fichier analysé** (vérifié par test : le dossier est identique avant et après). Refusé pendant qu'une tâche tourne. Les autres analyses ne sont pas touchées. Conforme à la règle 12 : ce sont les données de TreeAudit.
+- **« Compacter l'index »** : SQLite ne rend la place au disque qu'après un `VACUUM`. Il tourne en tâche de fond, sous le verrou des analyses (jamais pendant une analyse, même lancée en ligne de commande). Le bouton reste visible même quand toutes les analyses ont été oubliées (défaut trouvé par les tests).
+- **Fichiers temporaires de SQLite en Docker** : ils allaient dans `/tmp`, limité à 256 Mo dans le conteneur ; un gros tri ou un compactage aurait échoué. Ils vont maintenant dans le volume de données (`SQLITE_TMPDIR=/data/tmp`). En natif, ils étaient déjà dans un dossier privé (D-038).

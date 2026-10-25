@@ -29,8 +29,9 @@ from treeaudit.archive.runner import (
     execute_archive,
 )
 from treeaudit.core.config import AppConfig
-from treeaudit.core.datadir import ArchiveLockedError, ScanLockedError
+from treeaudit.core.datadir import ArchiveLockedError, ScanLock, ScanLockedError, index_size
 from treeaudit.core.errors import TreeAuditError
+from treeaudit.db import scans as scans_db
 from treeaudit.db.connection import connect
 from treeaudit.duplicates.runner import DupOptions, DupOutcome, DupProgress, execute_duplicates
 from treeaudit.llm.client import LlmClient, LlmError
@@ -57,6 +58,17 @@ class JobKind(StrEnum):
     ARCHIVE = "archive"
     SUGGEST = "suggest"
     OPINIONS = "opinions"
+    COMPACT = "compact"
+
+
+@dataclass(frozen=True, slots=True)
+class CompactOutcome:
+    """The index gave its free space back to the disk (D-043)."""
+
+    status: ScanStatus
+    before: int
+    after: int
+    result_url: str = "/?compacte="
 
 
 MAX_OPINIONS = 50
@@ -105,6 +117,11 @@ class JobError(TreeAuditError):
     """The job cannot be started; the message is shown to the user."""
 
 
+Outcome = (
+    ScanOutcome | DupOutcome | ArchiveOutcome | SuggestOutcome | OpinionsOutcome | CompactOutcome
+)
+
+
 @dataclass(slots=True)
 class Job:
     id: int
@@ -116,9 +133,7 @@ class Job:
     )
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
-    outcome: ScanOutcome | DupOutcome | ArchiveOutcome | SuggestOutcome | OpinionsOutcome | None = (
-        None
-    )
+    outcome: Outcome | None = None
     error: str | None = None
     thread: threading.Thread | None = None
 
@@ -175,7 +190,7 @@ class Job:
             data["status"] = self.outcome.status.value
         if isinstance(self.outcome, ArchiveOutcome):
             data["archive"] = _archive_result(self.outcome)
-        if isinstance(self.outcome, SuggestOutcome | OpinionsOutcome):
+        if isinstance(self.outcome, SuggestOutcome | OpinionsOutcome | CompactOutcome):
             data["result_url"] = self.outcome.result_url + str(self.id)
         return data
 
@@ -229,9 +244,7 @@ class JobManager:
     def _start(
         self,
         job: Job,
-        work: Callable[
-            [Job], ScanOutcome | DupOutcome | ArchiveOutcome | SuggestOutcome | OpinionsOutcome
-        ],
+        work: Callable[[Job], Outcome],
     ) -> Job:
         with self._lock:
             if self.current is not None and self.current.running:
@@ -380,6 +393,28 @@ class JobManager:
                 len(facts),
                 len(findings),
             )
+
+        return self._start(job, work)
+
+    def start_compact(self) -> Job:
+        """VACUUM the index: only TreeAudit's own data, after analyses were forgotten."""
+        progress = SuggestProgress(stage="compactage")
+        job = Job(
+            id=next(self._ids),
+            kind=JobKind.COMPACT,
+            label="Compactage de l'index",
+            progress=progress,
+        )
+
+        def work(j: Job) -> CompactOutcome:
+            before = index_size(self.config.data_dir)
+            conn = connect(self.config.data_dir)
+            try:
+                with ScanLock(self.config.data_dir):  # never during a scan, even from the CLI
+                    scans_db.compact(conn)
+            finally:
+                conn.close()
+            return CompactOutcome(ScanStatus.COMPLETE, before, index_size(self.config.data_dir))
 
         return self._start(job, work)
 

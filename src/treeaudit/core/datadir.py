@@ -135,3 +135,14 @@ def prepare_temp_dir(environ: Mapping[str, str] | None = None) -> str:
     else:
         base = Path(env.get("HOME") or Path.home()) / ".cache" / "treeaudit"
     return str(prepare_data_dir(str(base / "tmp")))
+
+
+def index_size(data_dir: str) -> int:
+    """Bytes used by the index on the disk (database and its journal)."""
+    total = 0
+    for name in ("treeaudit.sqlite3", "treeaudit.sqlite3-wal", "treeaudit.sqlite3-shm"):
+        try:
+            total += os.stat(os.path.join(data_dir, name)).st_size
+        except OSError:
+            continue
+    return total

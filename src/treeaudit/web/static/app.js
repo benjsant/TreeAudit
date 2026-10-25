@@ -202,6 +202,9 @@ function setupJobMonitor() {
     if (job.kind === "scan") {
       field("progress").textContent = `${p.entries.toLocaleString("fr-FR")} éléments vus`;
       field("current").textContent = p.current_dir || "–";
+    } else if (job.kind === "compact") {
+      field("progress").textContent = "Compactage de l'index…";
+      field("current").textContent = "";
     } else if (job.kind === "opinions") {
       field("progress").textContent =
         `${p.done.toLocaleString("fr-FR")} / ${p.total.toLocaleString("fr-FR")} dossiers examinés par l'IA`;
@@ -244,9 +247,9 @@ function setupJobMonitor() {
     } else if (job.kind === "dupes" && job.run_id) {
       target = `/dupes/${encodeURIComponent(job.run_id)}`;
     } else if (
-      (job.kind === "suggest" || job.kind === "opinions") &&
+      (job.kind === "suggest" || job.kind === "opinions" || job.kind === "compact") &&
       job.result_url &&
-      job.result_url.startsWith("/scans/")
+      (job.result_url.startsWith("/scans/") || job.result_url.startsWith("/?"))
     ) {
       target = job.result_url;
     }
@@ -546,6 +549,38 @@ function setupTheme() {
 
 // --- AI suggestions: shown only, applied by the user's click (D-041) ----------------
 
+// --- forgetting analyses: TreeAudit's own records only (D-043) ----------------------
+
+function setupForget() {
+  for (const button of document.querySelectorAll("[data-forget-scan]")) {
+    button.addEventListener("click", async () => {
+      const question =
+        `Oublier l'analyse « ${button.dataset.name} » ?\n\n` +
+        "Seul ce que TreeAudit a enregistré est effacé (index, doublons) : tes fichiers ne sont pas touchés.";
+      if (!window.confirm(question)) return;
+      button.disabled = true;
+      try {
+        await post(`/api/scans/${encodeURIComponent(button.dataset.forgetScan)}/forget`, {});
+        button.closest("li")?.remove();
+      } catch (error) {
+        window.alert(error.message);
+        button.disabled = false;
+      }
+    });
+  }
+  document.querySelector("[data-compact-index]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await post("/api/index/compact", {});
+      window.location.assign("/jobs/current");
+    } catch (error) {
+      showError(button.closest(".actions"), error.message);
+      button.disabled = false;
+    }
+  });
+}
+
 function setupOpinions() {
   for (const button of document.querySelectorAll("[data-start-opinions]")) {
     button.addEventListener("click", async () => {
@@ -640,6 +675,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupCompactForms();
   setupSuggestions();
   setupOpinions();
+  setupForget();
   setupStartButtons();
   setupArchiveButtons();
   setupJobMonitor();

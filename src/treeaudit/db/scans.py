@@ -312,3 +312,35 @@ def list_exclusions(conn: sqlite3.Connection, scan_id: int, limit: int = 50) -> 
             (scan_id, limit),
         )
     )
+
+
+def forget_scan(conn: sqlite3.Connection, scan_id: int) -> bool:
+    """Erase what TreeAudit recorded for one analysis: its index, its duplicate
+    analyses and its cached summaries. Never the analysed files (D-043).
+
+    The rows below the scan go with it (foreign keys, ON DELETE CASCADE).
+    Returns False if there was no such analysis.
+    """
+    runs = [row[0] for row in conn.execute("SELECT id FROM dup_run WHERE scan_id = ?", (scan_id,))]
+    conn.execute("BEGIN")  # all or nothing: the connection autocommits otherwise
+    try:
+        for prefix in ("parasite-candidates", "parasites"):
+            conn.execute(
+                "DELETE FROM summary_cache WHERE key LIKE ? ESCAPE '\\'",
+                (f"{prefix}:{scan_id}:%",),
+            )
+        for run in runs:
+            conn.execute(
+                "DELETE FROM summary_cache WHERE key LIKE ? ESCAPE '\\'", (f"dupes:{run}:%",)
+            )
+        deleted = conn.execute("DELETE FROM scan WHERE id = ?", (scan_id,)).rowcount
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    conn.execute("COMMIT")
+    return deleted > 0
+
+
+def compact(conn: sqlite3.Connection) -> None:
+    """Give the free space of the index back to the disk (VACUUM)."""
+    conn.execute("VACUUM")

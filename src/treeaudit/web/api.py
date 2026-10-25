@@ -425,3 +425,25 @@ def start_opinions(
     except JobError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"job": job.snapshot()}
+
+
+@router.post("/scans/{scan_id}/forget")
+def forget_scan(scan_id: int, jobs: Jobs, conn: Db) -> dict[str, bool]:
+    """Erase what TreeAudit recorded for an analysis (D-043): its index, its
+    duplicate analyses, its summaries. Never a file of the analysed folder."""
+    job = jobs.current
+    if job is not None and job.running:
+        raise HTTPException(409, "une tâche est en cours : attends sa fin ou annule-la")
+    if not scans_db.forget_scan(conn, scan_id):
+        raise HTTPException(404, "analyse inconnue")
+    return {"forgotten": True}
+
+
+@router.post("/index/compact", status_code=202)
+def compact_index(jobs: Jobs) -> dict[str, Any]:
+    """Give the index's free space back to the disk, as a job."""
+    try:
+        job = jobs.start_compact()
+    except JobError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"job": job.snapshot()}

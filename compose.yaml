@@ -27,6 +27,9 @@ services:
     # published port (D-020). It is reached through the gateway.
     networks: [internal]
     environment:
+      # SQLite's temporary files (large sorts, VACUUM): the data volume, not
+      # the small /tmp of the container (D-043).
+      SQLITE_TMPDIR: /data/tmp
       # Host time zone, for the local time in archive names (D-032).
       TZ: "${TREEAUDIT_TZ:-UTC}"
     # The audited folders are mounted by overrides, read-only, after validation

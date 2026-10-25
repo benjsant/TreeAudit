@@ -1163,3 +1163,66 @@ def test_no_opinions_without_expert_mode(client: TestClient, scanned: int) -> No
     assert "Avis de l" not in client.get(f"/scans/{scanned}/parasites").text
     started = client.post(f"/api/scans/{scanned}/parasites/opinions", json={}, headers=CSRF)
     assert started.status_code == 409
+
+
+# --- forgetting analyses, compacting the index (D-043) -------------------------------------
+
+
+def test_forgetting_an_analysis_erases_only_treeaudits_records(
+    client: TestClient, scanned: int, root: Path
+) -> None:
+    def files_on_disk() -> dict[str, bytes]:
+        return {
+            str(p.relative_to(root)): p.read_bytes()
+            for p in sorted(root.rglob("*"))
+            if p.is_file() and not p.is_symlink()
+        }
+
+    before = files_on_disk()
+    run_job(client, f"/api/scans/{scanned}/dupes", {"micro": False})
+    client.get(f"/scans/{scanned}")  # caches the summaries
+    other = run_job(client, "/api/scans", {"root_id": "main", "subpath": "photos"})["scan_id"]
+
+    home = client.get("/").text
+    assert_safe_html(home)
+    assert f"{DISPLAY}/photos" in home and DISPLAY in home  # where each analysis comes from
+    assert "Index de TreeAudit" in home
+
+    url = f"/api/scans/{scanned}/forget"
+    assert client.post(url, json={}).status_code == 403  # CSRF header required
+    assert client.post(url, json={}, headers=CSRF).json() == {"forgotten": True}
+    assert client.post(url, json={}, headers=CSRF).status_code == 404  # already gone
+
+    data_dir = client.app.state.config.data_dir  # type: ignore[attr-defined]
+    conn = sqlite3.connect(database_path(data_dir))
+    try:
+        count = lambda sql: conn.execute(sql, (scanned,)).fetchone()[0]  # noqa: E731
+        assert count("SELECT COUNT(*) FROM entry WHERE scan_id = ?") == 0
+        assert count("SELECT COUNT(*) FROM dup_run WHERE scan_id = ?") == 0
+        assert conn.execute("SELECT COUNT(*) FROM file_hash").fetchone()[0] == 0
+        assert count("SELECT COUNT(*) FROM summary_cache WHERE key LIKE '%:' || ? || ':%'") == 0
+        kept = conn.execute("SELECT COUNT(*) FROM entry WHERE scan_id = ?", (other,)).fetchone()[0]
+        assert kept > 0  # the other analysis is untouched
+    finally:
+        conn.close()
+    assert files_on_disk() == before  # never a file of the analysed folder
+    assert client.get(f"/scans/{scanned}").status_code == 404
+
+
+def test_forgetting_waits_for_the_running_job(
+    client: TestClient, scanned: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Running:
+        running = True
+
+    monkeypatch.setattr(client.app.state.jobs, "current", Running())  # type: ignore[attr-defined]
+    refused = client.post(f"/api/scans/{scanned}/forget", json={}, headers=CSRF)
+    assert refused.status_code == 409
+
+
+def test_compacting_the_index(client: TestClient, scanned: int) -> None:
+    client.post(f"/api/scans/{scanned}/forget", json={}, headers=CSRF)
+    job = run_job(client, "/api/index/compact", {})
+    assert job["kind"] == "compact" and job["status"] == "complete"
+    assert job["result_url"] == f"/?compacte={job['id']}"
+    assert "Index compacté" in client.get(job["result_url"]).text

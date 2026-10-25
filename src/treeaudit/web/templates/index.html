@@ -11,20 +11,33 @@
   {% endif %}
 </section>
 
+{% if compacted %}<p class="notice info" role="status">Index compacté.</p>{% endif %}
 {% if analyses %}
 <section aria-labelledby="mine">
   <h2 id="mine">Mes analyses</h2>
   <ul class="cards">
   {% for item in analyses %}{% set scan = item.scan %}
-    <li>
+    <li class="analysis">
       <a class="card link" href="/scans/{{ scan.id }}">
         <span class="card-title">📁 {{ item.title }}</span>
+        <span class="muted small path">{{ item.where }}{% if not item.available %} · <span class="warn-text">plus disponible</span>{% endif %}</span>
         <span class="muted">{{ scan.started_at | date }}{% if scan.status != "complete" %} · <span class="warn-text">{{ scan.status | status }}</span>{% endif %}</span>
         <span>{{ scan.allocated_size | size }} · {{ scan.files | number }} fichiers</span>
       </a>
+      <button type="button" class="button small forget" data-forget-scan="{{ scan.id }}" data-name="{{ item.title }}">Oublier</button>
     </li>
   {% endfor %}
   </ul>
+  <p class="muted small">« Oublier » efface seulement ce que TreeAudit a enregistré pour cette analyse (index, doublons), jamais tes fichiers.</p>
+</section>
+{% endif %}
+
+{% if index_size %}
+<section class="actions" aria-label="Index de TreeAudit">
+  <span class="muted small">Index de TreeAudit : {{ index_size | size }} sur le disque.</span>
+  <button type="button" class="button small" data-compact-index>Compacter l'index</button>
+  <span class="muted small">rend au disque la place des analyses oubliées</span>
+  <p class="error-text" data-error role="alert" hidden></p>
 </section>
 {% endif %}
 
