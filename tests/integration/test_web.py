@@ -1226,3 +1226,24 @@ def test_compacting_the_index(client: TestClient, scanned: int) -> None:
     assert job["kind"] == "compact" and job["status"] == "complete"
     assert job["result_url"] == f"/?compacte={job['id']}"
     assert "Index compacté" in client.get(job["result_url"]).text
+
+
+def test_projects_page(client: TestClient, scanned: int) -> None:
+    page = client.get(f"/scans/{scanned}/projects")
+    assert page.status_code == 200
+    assert_safe_html(page.text)
+    assert "📦 Projets et logiciels" in page.text and "Rien n'est modifié" in page.text
+    assert "JavaScript / TypeScript" in page.text
+    assert "&lt;svg onload=alert(2)&gt;" in page.text  # a hostile project name, escaped
+    # Its node_modules is offered checked, with the cleanup page's number.
+    numbers = re.findall(r'data-pick="(\d+)" data-band="green"\s+checked', page.text)
+    assert numbers
+    url = f"/api/scans/{scanned}/parasites/command"
+    command = client.post(
+        url, json={"numbers": [int(n) for n in numbers], "action": "trash"}, headers=CSRF
+    ).json()["command"]
+    assert f"'{DISPLAY}/app/node_modules'" in command
+    oldest = client.get(f"/scans/{scanned}/projects?tri=date&voir=logiciel")
+    assert oldest.status_code == 200 and "Aucun projet ni logiciel" in oldest.text
+    assert client.get(f"/scans/{scanned}/projects?tri=rm").status_code == 422
+    assert f'href="/scans/{scanned}/projects"' in client.get(f"/scans/{scanned}").text

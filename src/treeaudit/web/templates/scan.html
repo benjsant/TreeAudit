@@ -56,6 +56,12 @@
     </ul>
     <div class="actions"><a class="button primary" href="/scans/{{ scan.id }}/space">📂 Explorer les fichiers</a> <a class="button small" href="/scans/{{ scan.id }}/organize">🗂️ Ranger</a></div>
   </section>
+
+  <section class="tile">
+    <h2>📦 Projets et logiciels</h2>
+    <p>Projets informatiques, jeux et logiciels de ce dossier : leur taille, leur ancienneté et la place que leurs dépendances recréables occupent.</p>
+    <a class="button primary" href="/scans/{{ scan.id }}/projects">Voir les projets</a>
+  </section>
 </div>
 
 <form class="search-simple" method="get" action="/scans/{{ scan.id }}/search" role="search">

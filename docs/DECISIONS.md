@@ -557,3 +557,17 @@ Précise la mise en œuvre de D-024.
 - **« Oublier »** (`POST /api/scans/<n>/forget`, protégé comme les autres, avec confirmation) : efface **ce que TreeAudit a enregistré** pour l'analyse, en une seule transaction : index, recherches de doublons et leurs empreintes (par les clés étrangères), résumés en cache. **Jamais un fichier analysé** (vérifié par test : le dossier est identique avant et après). Refusé pendant qu'une tâche tourne. Les autres analyses ne sont pas touchées. Conforme à la règle 12 : ce sont les données de TreeAudit.
 - **« Compacter l'index »** : SQLite ne rend la place au disque qu'après un `VACUUM`. Il tourne en tâche de fond, sous le verrou des analyses (jamais pendant une analyse, même lancée en ligne de commande). Le bouton reste visible même quand toutes les analyses ont été oubliées (défaut trouvé par les tests).
 - **Fichiers temporaires de SQLite en Docker** : ils allaient dans `/tmp`, limité à 256 Mo dans le conteneur ; un gros tri ou un compactage aurait échoué. Ils vont maintenant dans le volume de données (`SQLITE_TMPDIR=/data/tmp`). En natif, ils étaient déjà dans un dossier privé (D-038).
+
+## D-044 — « Projets et logiciels » : inventaire, vieux projets, place recréable (2026-10-25)
+- **Demande du mainteneur** (« vitale ») : détecter les logiciels et les projets informatiques, pour en faire l'**inventaire**, repérer les **vieux projets** et **faire de la place**. Priorité avant l'aperçu des images.
+- **Détection sur l'index seulement**, sans relire le disque (`treeaudit/projects/`) :
+  - projet : un dossier qui contient un fichier marqueur (`package.json`, `pyproject.toml`, `setup.py`, `requirements.txt`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle`, `*.csproj`, `*.sln`, `CMakeLists.txt`, `Makefile`, `meson.build`, `composer.json`, `Gemfile`, `pubspec.yaml`, `mix.exs`, `Package.swift`, `project.godot`, `*.uproject`, Unity…) ou un dépôt `.git` ; ses types sont tous ceux dont il a les marqueurs ;
+  - logiciel ou jeu : bibliothèque Steam, jeu GOG, préfixe Wine, copie de `Program Files`, programme Windows (`.exe` et `.dll` côte à côte), application macOS (`.app`), fichier AppImage ;
+  - seul le dossier le plus haut compte : rien n'est cherché dans un projet ou un logiciel déjà trouvé, ni dans un dossier de dépendances ou caché (un `package.json` au fond de `node_modules` n'est pas un projet).
+- **Pour chaque élément** : types, taille sur le disque, nombre de fichiers, et dernière modification de son **contenu propre**, calculée sans ses dossiers recréables (un `node_modules` réinstallé ne rajeunit pas un projet).
+- **Faire de la place** : la liste des dossiers recréables du projet (les détections des règles de nettoyage, D-023) ; les sûrs sont cochés ; la commande est produite par le mécanisme existant, jamais exécutée (D-025).
+- **Vieux projets** : tri par date, et mention de l'ancienneté.
+- **Logiciels dans un dossier caché** : un projet n'est pas cherché dans un dossier caché (`~/.cache`, `~/.cargo` sont pleins de paquets d'autres personnes), mais un logiciel l'est (`~/.local/share/Steam`, `~/.wine`).
+- **La racine analysée peut être elle-même un projet** : tout ce qu'elle contient compte alors comme sous-projet.
+- **Coût** : aucune mise en cache. Sur un million d'entrées, la page se calcule en 1,9 s.
+- **Rien n'est décidé par les noms** : ils disent seulement où regarder. Les commandes passent par les vérifications du nettoyage (D-023, D-025).

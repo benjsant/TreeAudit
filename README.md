@@ -69,8 +69,9 @@ Double-clique sur le fichier, ou lance-le dans un terminal. Le navigateur s'ouvr
 3. **Bilan** : ce qui peut être nettoyé sans risque, les doublons, où va la place, et une recherche.
 4. **Explorer** : « 📂 Explorer les fichiers » se parcourt comme un gestionnaire de fichiers. Chaque élément porte ses repères (🧹 à nettoyer, 📑 en double, 🛡 protégé), et ⓘ ouvre sa fiche. Coche ce que tu veux dans n'importe quels dossiers : tout va dans le **🧺 panier**, qui prépare la commande.
 5. **Ranger** : « 🗂 Ranger ce dossier » (dans l'explorateur) propose un rangement par catégories (Photos/2019, Documents, Projets…), avec un aperçu du résultat. Tu télécharges le script qui fait le rangement, et celui qui l'annule. Rien n'est écrasé, et un fichier modifié depuis l'analyse est laissé en place.
-6. **Archiver si besoin** : « 🗜 Archiver » crée une copie compressée et vérifiée du dossier. Tu la retrouves dans « 🗜 Mes archives ».
-7. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
+6. **Projets et logiciels** : la tuile « 📦 Projets et logiciels » du bilan liste les projets informatiques (JavaScript, Python, Rust, .NET, dépôts git…), les jeux et les logiciels, avec leur taille et la date de leur dernière modification réelle. Les dépendances réinstallées n'en tiennent pas compte. Trie par ancienneté pour retrouver les vieux projets. Leurs dossiers recréables (`node_modules`, environnements Python, compilations) sont proposés, et les sûrs sont déjà cochés.
+7. **Archiver si besoin** : « 🗜 Archiver » crée une copie compressée et vérifiée du dossier. Tu la retrouves dans « 🗜 Mes archives ».
+8. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
 
 ### Qu'est-ce qui est proposé ?
 

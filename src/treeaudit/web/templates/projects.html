@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Projets et logiciels · {{ title }}{% endblock %}
+{% block content %}
+<p class="back"><a href="/scans/{{ scan.id }}">← Bilan de {{ title }}</a></p>
+<h1>📦 Projets et logiciels</h1>
+<p class="lead">{{ counts["projet"] | number }} projet(s) informatique(s) et {{ counts["logiciel"] | number }} logiciel(s) ou jeu(x) trouvés{% if recreatable_size %}, dont <strong>{{ recreatable_size | size }}</strong> recréables (dépendances, compilations, caches){% endif %}. Rien n'est modifié.</p>
+{% if scan.status != "complete" %}<p class="notice warn" role="alert">L'analyse n'a pas pu tout voir : la liste peut être incomplète.</p>{% endif %}
+
+<nav class="links" aria-label="Affichage">
+  Voir :
+  {% for value, label in (("tout", "tout"), ("projet", "les projets"), ("logiciel", "les logiciels et jeux")) %}{% if value == voir %}<strong>{{ label }}</strong>{% else %}<a href="?voir={{ value }}&amp;tri={{ tri }}">{{ label }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}
+  — Trier par :
+  {% for value, label in (("taille", "taille"), ("date", "ancienneté")) %}{% if value == tri %}<strong>{{ label }}</strong>{% else %}<a href="?voir={{ voir }}&amp;tri={{ value }}">{{ label }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}
+</nav>
+
+{% if not found %}
+  <p class="notice info">Aucun projet ni logiciel trouvé ici.</p>
+{% else %}
+<div data-command-builder data-endpoint="/api/scans/{{ scan.id }}/parasites/command" data-min-confidence="{{ min_confidence }}">
+  <ul class="items">
+  {% for f in found %}
+    <li class="item">
+      <div class="item-text">
+        <strong>{{ "📁" if f.is_dir else "📄" }} {{ f.name or title }}</strong>
+        <span class="size">{{ f.size | size if f.size is not none else "?" }}</span>
+        {% for kind in f.kinds %}<span class="badge">{{ kind }}</span> {% endfor %}<br>
+        <span class="path">{{ f.rel_path_display or "(dossier analysé)" }}</span><br>
+        <span class="muted small">{{ "Modifié pour la dernière fois" if f.group == "projet" else "Dernière modification" }} le {{ f.last_change_ns | date }} ({{ f.last_change_ns | age }}){% if f.is_dir %} · {{ f.files | number }} fichier(s){% endif %}{% if f.nested %} · contient {{ f.nested }} autre(s) projet(s) ou logiciel(s){% endif %}</span>
+        · <a class="small" href="{{ '/scans/%d/space?dir=%d' % (scan.id, f.entry_id) if f.is_dir else '/scans/%d/entries/%d' % (scan.id, f.entry_id) }}">Explorer</a>
+      </div>
+      {% if f.recreatable %}
+      <details class="why">
+        <summary>♻️ {{ f.recreatable_size | size }} recréables</summary>
+        <ul class="plain small">
+        {% for r in f.recreatable %}
+          <li>
+            <label><input type="checkbox" data-pick="{{ r.number }}" data-band="{{ r.band.value }}" {% if r.band.value == "green" and r.displayable %}checked{% endif %} {% if not r.displayable %}disabled{% endif %}>
+            <span class="badge band-{{ r.band.value }}">{{ r.confidence }} % sûr</span> {{ r.rule.label }} <span class="size">{{ r.allocated_size | size if r.allocated_size is not none else "" }}</span> <span class="path">{{ r.rel_path_display }}</span></label>
+            {% if recreate[r.number] %}<br><span class="muted">Pour le recréer : <code class="cmd">{{ recreate[r.number] }}</code></span>{% endif %}
+          </li>
+        {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+  {% if recreatable_size %}
+    <p class="muted small">Les dossiers recréables « sans risque » sont déjà cochés. Dates : celles du contenu du projet lui-même, sans ses dossiers recréables.</p>
+    <div class="actions"><button type="button" class="button small" data-select-none>Tout décocher</button></div>
+    {% set allow_archive = false %}
+    {% include "command_panel.html" %}
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

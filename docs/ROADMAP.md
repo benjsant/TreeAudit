@@ -133,6 +133,12 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Messages : disques trouvés au démarrage ; « branché et ouvert ».
 - [x] Essai réel : `/mnt/Data` proposé comme partition interne, `data/` reconnu par identité ; dossier personnel monté en lecture seule, `.ssh` et `.mozilla` cachés.
 
+## Phase 11 — Projets et logiciels (D-044)
+- [x] Détection sur l'index : projets par fichiers marqueurs ou dépôt git, logiciels et jeux (Steam, GOG, Wine, programmes Windows, `.app`, AppImage). Seul le dossier le plus haut est retenu, et rien n'est cherché dans les dépendances ni les dossiers cachés.
+- [x] Taille, fichiers, dernière modification du contenu propre ; tri par taille ou par ancienneté.
+- [x] Dossiers recréables de chaque projet : commande par le mécanisme du nettoyage, avec les mêmes numéros.
+- [x] Essai réel : `big_dummy_folder` (un million d'entrées), détection en 1,9 s.
+
 ## Phase 10 — Ranger un dossier (D-041)
 - [x] Étape A, sans IA : plan (projets et logiciels en bloc, dossiers homogènes gardés, fichiers en vrac par type et année), aperçu, script de rangement et script d'annulation, testés en les exécutant.
 - [x] Ajustements dans l'aperçu : laisser en place, changer de catégorie, renommer les dossiers ; repris par les scripts.

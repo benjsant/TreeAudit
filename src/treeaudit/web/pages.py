@@ -37,8 +37,9 @@ from treeaudit.llm.client import LlmClient
 from treeaudit.organize import plan as organize_plan
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.commands import recreate_command
-from treeaudit.parasites.detect import Band
+from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE, Band
 from treeaudit.parasites.report import human_size
+from treeaudit.projects.detect import PROJECT, SOFTWARE, find_projects
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
 from treeaudit.scanner.walker import SubpathError, parse_subpath
@@ -98,6 +99,19 @@ def _datetime(value: int) -> str:
     return f"{moment.day} {_MONTHS[moment.month - 1]} {moment.year} à {moment:%H:%M}"
 
 
+def _age(value: int | None) -> str:
+    """'il y a 3 ans' from an mtime in nanoseconds."""
+    if value is None:
+        return "date inconnue"
+    days = (datetime.now(UTC).timestamp() - value / 1e9) / 86_400
+    if days < 31:
+        return "ce mois-ci"
+    if days < 365:
+        return f"il y a {int(days // 30.4)} mois"
+    years = int(days // 365.25)
+    return "il y a 1 an" if years == 1 else f"il y a {years} ans"
+
+
 _THIN_SPACE = chr(0x202F)  # French thousands separator
 
 
@@ -118,6 +132,7 @@ def _environment() -> jinja2.Environment:
     env.filters["date"] = _date
     env.filters["datetime"] = _datetime
     env.filters["number"] = _number
+    env.filters["age"] = _age
     env.filters["status"] = lambda value: STATUS_LABELS.get(value, value)
     env.globals["version"] = __version__
     return env
@@ -407,6 +422,42 @@ def entry_page(request: Request, scan_id: int, entry_id: int, conn: Db, config: 
         parent=parent,
         crumbs=queries.breadcrumb(conn, scan_id, parent) if parent is not None else [],
         dupes_run=explorer.latest_dupes_run(conn, scan_id),
+    )
+
+
+@router.get("/scans/{scan_id}/projects")
+def projects_page(
+    request: Request,
+    scan_id: int,
+    conn: Db,
+    config: Config,
+    tri: Annotated[str, Query(pattern="^(taille|date)$")] = "taille",
+    voir: Annotated[str, Query(pattern="^(tout|projet|logiciel)$")] = "tout",
+) -> Response:
+    """Projects and software (D-044): inventory, old projects, recreatable space."""
+    scan = _scan_or_404(conn, scan_id)
+    found = find_projects(conn, scan_id)
+    counts = {group: sum(f.group == group for f in found) for group in (PROJECT, SOFTWARE)}
+    shown = [f for f in found if voir == "tout" or f.group == voir]
+    if tri == "date":  # the oldest first; unknown dates last
+        shown.sort(key=lambda f: (f.last_change_ns is None, f.last_change_ns or 0))
+    display = root_display(config, scan)
+    return render(
+        request,
+        "projects.html",
+        scan=scan,
+        title=analysis_title(config, scan),
+        found=shown,
+        counts=counts,
+        recreatable_size=sum(f.recreatable_size for f in found),
+        recreate={
+            finding.number: recreate_command(finding, display)
+            for f in found
+            for finding in f.recreatable
+        },
+        tri=tri,
+        voir=voir,
+        min_confidence=DEFAULT_MIN_CONFIDENCE,
     )
 
 
