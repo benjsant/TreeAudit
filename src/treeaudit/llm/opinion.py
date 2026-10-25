@@ -22,6 +22,8 @@ MAX_REASONS = 3
 MAX_REASON_LENGTH = 200
 MAX_NAMES = 20
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_MARKDOWN = re.compile(r"\*\*|__|`")
+"""Emphasis and code marks the models add: shown raw, they clutter the page."""
 
 # The two questions come first: the model answers them before its verdict (the
 # grammar follows this order), and TreeAudit applies them itself (see guard()).
@@ -143,7 +145,7 @@ def parse_opinion(data: dict[str, Any]) -> Opinion:
     if not isinstance(reasons, list) or not reasons:
         raise LlmError("raisons manquantes")
     cleaned = tuple(
-        _CONTROL.sub(" ", reason).strip()[:MAX_REASON_LENGTH]
+        _MARKDOWN.sub("", _CONTROL.sub(" ", reason)).strip()[:MAX_REASON_LENGTH]
         for reason in reasons[:MAX_REASONS]
         if isinstance(reason, str) and reason.strip()
     )

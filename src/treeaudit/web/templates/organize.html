@@ -2,7 +2,7 @@
 {% block title %}Ranger · {{ title }}{% endblock %}
 {% block content %}
 <p class="back"><a href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}">← Explorateur</a></p>
-<h1>🗂 Ranger</h1>
+<h1>🗂️ Ranger</h1>
 <nav class="crumbs" aria-label="Dossier à ranger">
   {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/organize?dir={{ crumb.entry_id }}">{{ crumb.name or title }}</a>{% endfor %}
 </nav>
@@ -59,7 +59,7 @@
   </section>
   {% endif %}
   {% for name, moves in by_category.items() %}
-  <details class="group-band"{% if loop.first %} open{% endif %}>
+  <details class="group-band"{% if (suggestions and name == suggestions.category) or (not suggestions and loop.first) %} open{% endif %}>
     <summary><strong>{{ plan.destination }}/{{ names.folder(name) }}</strong> — {{ moves | length | number }} élément(s){% if expert and name not in ("Projets", "Logiciels") %} <button type="button" class="button small" data-start-suggestions data-scan="{{ scan.id }}" data-dir="{{ node.entry_id }}" data-category="{{ name }}" data-query="{{ base_query }}">💡 Suggestions de l'IA</button>{% endif %}</summary>
     <ul class="plain small organize-list">
     {% for move in (moves if shown_per_category is none else moves[:shown_per_category]) %}

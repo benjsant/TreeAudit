@@ -1,5 +1,5 @@
 {% macro badges(m) %}
 {% if m.parasite %}<span class="badge band-{{ m.parasite.band.value }}" title="{{ m.parasite.rule.label }}">🧹 {{ m.parasite.rule.label }}</span>{% endif %}
 {% if m.copies > 1 %}<span class="badge" title="Fichier identique trouvé ailleurs">📑 {{ m.copies }} copies</span>{% endif %}
-{% if m.protection %}<span class="badge" title="{{ m.protection }}">🛡 protégé</span>{% endif %}
+{% if m.protection %}<span class="badge" title="{{ m.protection }}">🛡️ protégé</span>{% endif %}
 {% endmacro %}

@@ -62,6 +62,13 @@ class LlmClient:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
                 raw = response.read(MAX_RESPONSE_BYTES + 1)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read(10_000).decode("utf-8", "replace")
+            if "context" in detail:
+                raise LlmError(
+                    "demande trop longue pour le modèle (trop d'éléments à la fois)"
+                ) from exc
+            raise LlmError(f"le LLM a refusé la demande (HTTP {exc.code})") from exc
         except (urllib.error.URLError, OSError) as exc:
             raise LlmError(f"le LLM ne répond pas : {exc}") from exc
         if len(raw) > MAX_RESPONSE_BYTES:

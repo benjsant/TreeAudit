@@ -17,12 +17,12 @@
       {% if key == sort %}<strong aria-current="true">{{ label }}</strong>{% else %}<a href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ key.value }}">{{ label }}</a>{% endif %}
     {% endfor %}
   </p>
-  <p class="legend muted small">🧹 à nettoyer · 📑 en double{% if not dupes_run %} (doublons pas encore cherchés){% endif %} · 🛡 protégé (projet, logiciel)</p>
+  <p class="legend muted small">🧹 à nettoyer · 📑 en double{% if not dupes_run %} (doublons pas encore cherchés){% endif %} · 🛡️ protégé (projet, logiciel)</p>
 </div>
-<div class="actions"><a class="button small" href="/scans/{{ scan.id }}/organize?dir={{ node.entry_id }}">🗂 Ranger ce dossier</a> <span class="muted">aperçu, puis un script à relancer toi-même</span></div>
+<div class="actions"><a class="button small" href="/scans/{{ scan.id }}/organize?dir={{ node.entry_id }}">🗂️ Ranger ce dossier</a> <span class="muted">aperçu, puis un script à relancer toi-même</span></div>
 {% if archive.enabled %}
 <div class="actions">
-  <button type="button" class="button small" data-start-archive data-endpoint="/api/scans/{{ scan.id }}/entries/{{ node.entry_id }}/archive" data-name="{{ node.name or title }}" data-where="{{ archive.where }}">🗜 Archiver ce dossier</button>
+  <button type="button" class="button small" data-start-archive data-endpoint="/api/scans/{{ scan.id }}/entries/{{ node.entry_id }}/archive" data-name="{{ node.name or title }}" data-where="{{ archive.where }}">🗜️ Archiver ce dossier</button>
   <span class="muted">copie compressée et vérifiée, l'original n'est pas modifié</span>
   <p class="error-text" data-error role="alert" hidden></p>
 </div>

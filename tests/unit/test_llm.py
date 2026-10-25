@@ -186,7 +186,8 @@ def test_suggestions_only_keep_plain_names_and_allowed_choices() -> None:
     assert found.by_entry == {1: "Factures", BATCH + 1: "Factures"}  # first of each batch
     assert len(client.calls) == 3  # one proposal, then two batches
     # The model sees short numbers and names, never a path to act on.
-    assert '"id": "e1"' in client.calls[0] and "Rangé/" not in client.calls[0]
+    assert '"id": "e1"' in client.calls[1]
+    assert not any("Rangé/" in call for call in client.calls)
 
 
 def test_suggestions_can_be_cancelled_between_batches() -> None:
@@ -215,3 +216,33 @@ def test_the_second_set_is_new_and_balanced() -> None:
     assert not {c.facts.path for c in CASES} & {c.facts.path for c in HELDOUT_CASES}
     keep = [c for c in HELDOUT_CASES if "nettoyable" not in c.expected]
     assert len(keep) * 2 == len(HELDOUT_CASES)  # as many to keep as to clean
+
+
+def test_markdown_marks_are_removed_from_reasons() -> None:
+    opinion = parse_opinion(answer("incertain", 1, ["Seule une extension **.dll** et `bundle.js`"]))
+    assert opinion.reasons == ("Seule une extension .dll et bundle.js",)
+
+
+def test_a_large_category_is_sampled_for_the_proposal() -> None:
+    from treeaudit.llm.organize import MAX_ITEMS, PROPOSAL_SAMPLE, suggest
+    from treeaudit.organize.plan import Move
+
+    moves = [
+        Move(
+            i,
+            f"Bazar/document-{i}.pdf",
+            f"Rangé/Documents/d{i}.pdf",
+            "file",
+            "Documents",
+            1,
+            1,
+            0,
+            "r",
+        )
+        for i in range(1, MAX_ITEMS + 1)
+    ]
+    client = HostileOrganizer()
+    suggest(client, "Documents", moves)
+    proposal = client.calls[0]
+    assert f"({PROPOSAL_SAMPLE} sur {MAX_ITEMS}, en JSON)" in proposal
+    assert '"taille"' not in proposal  # names only for the proposal

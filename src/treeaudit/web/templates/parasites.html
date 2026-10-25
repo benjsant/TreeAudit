@@ -70,7 +70,7 @@
   </section>
   {% endif %}
   {% if doubt %}
-  <details class="group-band">
+  <details class="group-band"{% if opinions %} open{% endif %}>
     <summary><span class="badge band-red">🔴 Douteux</span> {{ doubt | length }} élément(s) : ne coche que si tu es sûr</summary>
     {{ rows_list(doubt, False) }}
   </details>

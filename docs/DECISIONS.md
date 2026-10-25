@@ -535,3 +535,18 @@ Précise la mise en œuvre de D-024.
   - **en tâche de fond** : le bouton lance une tâche (`POST /api/scans/<n>/organize/suggestions`, protégée comme les autres) qui se suit comme une analyse : progression « x / y éléments classés », annulation entre deux lots. À la fin, la page de suivi ramène à l'aperçu, avec les mêmes ajustements, et les suggestions affichées. Le résultat n'est relu que s'il correspond à la même analyse et au même dossier ;
   - essai réel de bout en bout (Docker, mode expert, Ministral sur la carte graphique, sous-dossier de `dummy_folder`) : suggestions en 5 s, affichées sans rien changer ;
   - `./treeaudit stop` arrête aussi le conteneur du LLM (`--remove-orphans`), qui restait sinon en marche.
+
+## D-042 — Exploration de l'interface par captures d'écran (2026-10-25)
+- **Proposition du mainteneur** : explorer l'interface soi-même. Méthode : la version Docker en mode expert sur un port à part, l'analyse complète de `dummy_folder` (jamais un dossier réel), puis des captures de chaque page par un Firefox sans écran, avec un profil jetable (clair, sombre, largeur de téléphone).
+- **Défauts trouvés et corrigés** :
+  - **suggestions de l'IA en échec sur une vraie catégorie** : 200 documents faisaient une demande de 11 285 jetons pour un modèle limité à 8 192 (le banc d'essai n'en avait que 19). La proposition des sous-dossiers ne reçoit plus que les noms, 80 au plus, répartis sur la liste ; la fenêtre du modèle passe à 16 384 jetons ; une demande trop longue donne un message clair au lieu de « HTTP Error 400 ». Essai : 200 documents en 89 s ;
+  - 🗂 🗜 🛡 s'affichaient en **carré vide** : ces emojis sont « texte » par défaut en Unicode. Ils portent désormais le sélecteur `U+FE0F` (un test le vérifie) ;
+  - les raisons de l'IA montraient du **Markdown brut** (`**.dll**`, accents graves) : retiré ;
+  - la section « Douteux » restait **repliée** alors que l'IA y avait donné ses avis : ouverte dans ce cas ; de même, la catégorie qui a reçu des suggestions s'ouvre ;
+  - « Ranger » n'était accessible que depuis l'explorateur : bouton ajouté au bilan ;
+  - sur **téléphone**, l'en-tête occupait un tiers de l'écran : boutons plus compacts ;
+  - en **mode sombre**, les barres de taille avaient un fond blanc : elles suivent le thème.
+- **Restent à traiter** :
+  - l'accueil accumule les analyses sans moyen d'en supprimer, et une analyse ne dit pas de quel disque elle vient (« main » × 8) ;
+  - « Ranger » compte la taille des fichiers, l'explorateur la place occupée sur le disque : les chiffres diffèrent pour un même dossier ;
+  - dans « Ranger », un dossier nommé `venv` qui ne contient qu'une note est pris pour un logiciel (sur la foi du nom) ; il est déplacé en entier, donc sans dommage, mais mal classé.

@@ -737,7 +737,7 @@ def test_entry_page(client: TestClient, scanned: int) -> None:
     link = client.get(f"/scans/{scanned}/entries/{ids[b'link-to-tmp']}")
     assert "Pointe vers" in link.text and "non suivi" in link.text
     protected = client.get(f"/scans/{scanned}/entries/{ids[b'app/node_modules/dep/index.js']}")
-    assert "🛡 Protégé" in protected.text
+    assert "🛡️ Protégé" in protected.text
     root = client.get(f"/scans/{scanned}/entries/{ids[b'']}")
     assert root.status_code == 200 and "data-basket-item" not in root.text
     assert client.get(f"/scans/{scanned}/entries/999999").status_code == 404
@@ -874,7 +874,7 @@ def test_personal_folder_scan_marks_what_holds_hidden_folders(
     assert "dossier de TreeAudit" in summary.text
     space = computer_client.get(f"/scans/{scan_id}/space")
     assert_safe_html(space.text)
-    assert space.text.count("🛡 protégé") >= 2  # .config and .local
+    assert space.text.count("🛡️ protégé") >= 2  # .config and .local
     command = computer_client.post(
         f"/api/scans/{scan_id}/basket/command",
         json={"entries": [ids[b".config"], ids[b".local"], ids[b"Documents"]]},
@@ -1007,7 +1007,7 @@ def test_organize_preview_and_scripts(client: TestClient, scanned: int) -> None:
     assert client.get(f"/scans/{scanned}/organize?dir=999999").status_code == 404
     assert client.get(f"/export/scans/{scanned}/organize.sh?dir=999999").status_code == 404
     space = client.get(f"/scans/{scanned}/space").text
-    assert "🗂 Ranger ce dossier" in space
+    assert "🗂️ Ranger ce dossier" in space
 
 
 def test_organize_adjustments_reach_the_scripts(client: TestClient, scanned: int) -> None:

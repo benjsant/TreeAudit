@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Mes archives{% endblock %}
 {% block content %}
-<h1>🗜 Mes archives</h1>
+<h1>🗜️ Mes archives</h1>
 {% if not archive.enabled %}
   <p class="notice warn">Archivage indisponible : {{ archive.message }}.</p>
 {% else %}
@@ -16,7 +16,7 @@
       <span class="bar-size">{{ file.size | size }} · {{ file.mtime_ns | date }}</span>
     </li>
   {% else %}
-    <li class="muted">Aucune archive pour l'instant. Pour en créer une, choisis un dossier puis « 🗜 Archiver ».</li>
+    <li class="muted">Aucune archive pour l'instant. Pour en créer une, choisis un dossier puis « 🗜️ Archiver ».</li>
   {% endfor %}
   </ul>
   {% if listing.total > listing.files | length %}<p class="muted">Les {{ listing.files | length }} plus récentes sur {{ listing.total | number }} sont affichées.</p>{% endif %}

@@ -40,7 +40,7 @@ services:
       - --gpu-layers
       - "999"
       - --ctx-size
-      - "8192"
+      - "16384"
       - --parallel
       - "1"
       - --no-webui

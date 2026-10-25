@@ -389,7 +389,7 @@ function setupBasketView() {
       if (item.protection) {
         const warn = document.createElement("span");
         warn.className = "warn-text small";
-        warn.textContent = ` · 🛡 protégé (${item.protection})`;
+        warn.textContent = ` · 🛡️ protégé (${item.protection})`;
         text.append(warn);
       }
       if (!item.readable) {

@@ -183,3 +183,17 @@ td { padding: .3rem .4rem; border-bottom: 1px solid var(--line); }
 .ai-opinion.ai-a_garder { border-left-color: var(--warn); }
 .ai-opinion.ai-incertain { border-left-color: var(--muted); }
 .ai-opinion.ai-nettoyable { border-left-color: var(--line); color: var(--muted); }
+
+/* phones: the header stays on one or two short lines */
+@media (max-width: 40rem) {
+  header.top { flex-wrap: wrap; gap: .4rem; padding: .6rem .9rem; }
+  .top-links { gap: .3rem; }
+  .top-links .button { font-size: .8rem; padding: .25rem .6rem; }
+  main { padding: 1rem .9rem 3rem; }
+}
+
+/* size bars follow the theme (the browser's default track is white in dark mode) */
+meter { appearance: none; -webkit-appearance: none; background: var(--line); border: 0; border-radius: 999px; overflow: hidden; }
+meter::-moz-meter-bar { background: var(--accent); border-radius: 999px; }
+meter::-webkit-meter-bar { background: var(--line); border: 0; border-radius: 999px; }
+meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 999px; }

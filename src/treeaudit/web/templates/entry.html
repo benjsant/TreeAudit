@@ -17,7 +17,7 @@
   {% endif %}
   {% if entry.kind == "dir" %}<a class="button small" href="/scans/{{ scan.id }}/space?dir={{ entry.entry_id }}">📂 Ouvrir dans l'explorateur</a>{% endif %}
   {% if entry.kind == "dir" and archive.enabled %}
-  <button type="button" class="button small" data-start-archive data-endpoint="/api/scans/{{ scan.id }}/entries/{{ entry.entry_id }}/archive" data-name="{{ entry.name or title }}" data-where="{{ archive.where }}">🗜 Archiver ce dossier</button>
+  <button type="button" class="button small" data-start-archive data-endpoint="/api/scans/{{ scan.id }}/entries/{{ entry.entry_id }}/archive" data-name="{{ entry.name or title }}" data-where="{{ archive.where }}">🗜️ Archiver ce dossier</button>
   <p class="error-text" data-error role="alert" hidden></p>
   {% endif %}
 </div>
@@ -65,7 +65,7 @@
 
 {% if entry.marks.protection %}
 <section>
-  <h2>🛡 Protégé</h2>
+  <h2>🛡️ Protégé</h2>
   <p>Raison : {{ entry.marks.protection }}. Cet élément fait sans doute partie d'un projet ou d'un logiciel installé. Le retirer peut le casser.</p>
 </section>
 {% endif %}

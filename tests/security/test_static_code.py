@@ -249,3 +249,13 @@ def test_checker_detects_forbidden_patterns(snippet: str) -> None:
 )
 def test_checker_allows_read_only_patterns(snippet: str) -> None:
     assert find_violations(snippet, "some/module.py") == []
+
+
+def test_text_default_emojis_get_their_emoji_variant() -> None:
+    """🗂 🗜 🛡 are text by default in Unicode: without U+FE0F some fonts show a box."""
+    web = SRC / "web"
+    for path in [*web.glob("templates/*.html"), web / "static" / "app.js"]:
+        text = path.read_text(encoding="utf-8")
+        for index, char in enumerate(text):
+            if char in "\U0001f5c2\U0001f5dc\U0001f6e1":
+                assert text[index + 1 : index + 2] == "️", f"{path.name}: {char!r} at {index}"

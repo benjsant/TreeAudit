@@ -29,6 +29,7 @@ MAX_SUBFOLDERS = 10
 MAX_ITEMS = 200
 """Elements considered per category: beyond, the first ones only (and said so)."""
 BATCH = 40
+PROPOSAL_SAMPLE = 80
 NONE = "aucun"
 
 SYSTEM_PROMPT = """\
@@ -119,9 +120,16 @@ def propose_subfolders(
         "required": ["sous_dossiers"],
         "additionalProperties": False,
     }
+    # Names only, and at most PROPOSAL_SAMPLE of them spread over the list: 200
+    # full descriptions overflowed the model's context (found while exploring).
+    step = max(1, len(items) // PROPOSAL_SAMPLE)
+    sample = [{"nom": item["nom"], "vient_de": item["vient_de"]} for item in items[::step]][
+        :PROPOSAL_SAMPLE
+    ]
     user = (
         f"Catégorie : {category}. Propose au plus {MAX_SUBFOLDERS} sous-dossiers pour "
-        "ranger ces éléments (JSON) :\n" + json.dumps(list(items), ensure_ascii=False)
+        f"ranger ces éléments ({len(sample)} sur {len(items)}, en JSON) :\n"
+        + json.dumps(sample, ensure_ascii=False)
     )
     answer = client.ask(SYSTEM_PROMPT, user, schema, max_tokens=300)
     return _clean_subfolders(answer.data.get("sous_dossiers"), category)
