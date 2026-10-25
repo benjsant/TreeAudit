@@ -583,3 +583,13 @@ Précise la mise en œuvre de D-024.
 - **Refus visibles** : chaque cible refusée est listée avec sa raison. Si le texte relu ne correspond pas exactement à ce qui a été construit, aucune commande n'est donnée, et l'erreur est journalisée.
 - **Au-delà des commandes** : les commandes de recréation du catalogue ne peuvent contenir ni programme privilégié ni programme destructeur ; les scripts de rangement refusent tout chemin absolu ou avec `..`.
 
+## D-046 — Aperçu des images : fiche et galerie (2026-10-25)
+- **Demande** : voir les photos dans TreeAudit pour trier sans ouvrir un autre programme (étape prévue en D-036).
+- **Sans décodage côté serveur, sans dépendance** : Pillow aurait permis des vignettes, mais il décode des fichiers non fiables (failles connues) et ajoute une dépendance. Le serveur envoie donc l'image d'origine, et c'est le navigateur qui la décode. La galerie est réduite par CSS (`object-fit`), et Firefox décode à la taille affichée.
+- **Lecture** : `preview/images.py` réutilise `TreeReader` (D-015), avec la même vérification d'identité avant et après la lecture. Le type est reconnu aux premiers octets. Liste fermée : JPEG, PNG, GIF, WebP, BMP, AVIF ; jamais de SVG.
+- **Route** : `GET /api/scans/{id}/entries/{entry}/image`. Elle est servie seulement pour un fichier de l'index, d'une racine acceptée et inchangée. Elle répond avec une CSP `sandbox`. Un refus est donné avec sa raison : 409 si modifiée ou pas une image, 422 si ce n'est pas une image d'après l'index.
+- **Mémoire** : 20 Mio au plus par image, et 40 images par page de galerie, chargées à l'affichage (`loading="lazy"`). La mémoire du navigateur a déjà été un souci (Firefox saturé).
+- **Pas de cache** : aucune vignette n'est écrite dans le dossier de données, et les réponses restent en `no-store`. Les photos ne sont pas recopiées par TreeAudit.
+- **Interface** : la fiche d'une image la montre. Un dossier qui contient des images propose « 🖼️ Galerie », et chaque vignette garde sa case du panier. Une image refusée est remplacée par « Aperçu impossible ».
+- **Bogue trouvé en explorant** : une galerie demande ses images en parallèle. FastAPI peut alors ouvrir la connexion SQLite d'une requête dans un fil et exécuter la route dans un autre, ce qui donnait des erreurs 500 sur 13 images sur 26. La connexion par requête est désormais ouverte avec `check_same_thread=False` : elle n'appartient qu'à cette requête, et un seul fil l'utilise à la fois. Un test envoie 12 requêtes simultanées ; il échoue sans le correctif.
+

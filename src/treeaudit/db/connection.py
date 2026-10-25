@@ -46,11 +46,16 @@ def _create_private_file(path: Path) -> None:
     os.close(fd)
 
 
-def connect(data_dir: str) -> sqlite3.Connection:
-    """Open (and create or migrate) the index database."""
+def connect(data_dir: str, *, check_same_thread: bool = True) -> sqlite3.Connection:
+    """Open (and create or migrate) the index database.
+
+    ``check_same_thread=False`` only for a connection handed from one thread
+    to another but never used by two at once (one web request).
+    """
     path = database_path(data_dir)
     _create_private_file(path)
-    conn = sqlite3.connect(path, isolation_level=None)  # explicit transactions
+    # isolation_level=None: explicit transactions
+    conn = sqlite3.connect(path, isolation_level=None, check_same_thread=check_same_thread)
     try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")

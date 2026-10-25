@@ -670,7 +670,24 @@ function setupQuit() {
   });
 }
 
+// An image TreeAudit refused to show (modified since the analysis, not an
+// image...) gets a short message instead of the browser's broken icon.
+function setupPreviews() {
+  const replace = (img) => {
+    const note = document.createElement("span");
+    note.className = "preview-failed muted small";
+    note.textContent = "Aperçu impossible (modifiée, déplacée, ou pas une image)";
+    img.replaceWith(note);
+  };
+  for (const img of document.querySelectorAll(".preview img, .gallery img")) {
+    // A lazy image not loaded yet may also report no size: only the others are checked now.
+    if (img.loading !== "lazy" && img.complete && img.naturalWidth === 0) replace(img);
+    else img.addEventListener("error", () => replace(img), { once: true });
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  setupPreviews();
   setupTheme();
   setupQuit();
   setupCompactForms();

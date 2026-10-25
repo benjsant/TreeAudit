@@ -21,6 +21,12 @@
   <p class="error-text" data-error role="alert" hidden></p>
   {% endif %}
 </div>
+{% if image %}
+<figure class="preview">
+  <img src="/api/scans/{{ scan.id }}/entries/{{ entry.entry_id }}/image" alt="Aperçu de « {{ entry.name }} »" decoding="async">
+  <figcaption class="muted small">Lue sur le disque à l'instant, telle que l'analyse l'a vue. Si elle a été modifiée ou déplacée depuis, elle n'est pas montrée.</figcaption>
+</figure>
+{% endif %}
 {% if not entry.readable_name %}<p class="notice warn">Ce nom contient des caractères qui ne s'affichent pas sans ambiguïté : TreeAudit ne proposera pas de commande pour lui.</p>{% endif %}
 
 <section class="panel">

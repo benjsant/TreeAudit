@@ -306,7 +306,9 @@ class _Analysis:
         ]
 
 
-def _expected_root(conn: sqlite3.Connection, scan: sqlite3.Row, root_path: str) -> tuple[int, int]:
+def expected_root_of(
+    conn: sqlite3.Connection, scan: sqlite3.Row, root_path: str
+) -> tuple[int, int]:
     """Identity the root must still have: the one recorded by the scan when known."""
     if not scan["subpath"]:
         start = conn.execute(
@@ -336,7 +338,7 @@ def run_duplicates(
     if scan["root_id"] != root.id or scan["root_path"] != root.path:
         raise DuplicateAnalysisError(f"scan {scan_id} was made on another root ({scan['root_id']})")
     validate_configured_root(root, ctx)
-    expected_root = _expected_root(conn, scan, root.path)
+    expected_root = expected_root_of(conn, scan, root.path)
 
     progress = progress if progress is not None else DupProgress()
     candidates = dupes.load_candidates(

@@ -14,9 +14,12 @@
 <div class="explorer-tools">
   <p class="sort">Trier par :
     {% for key, label in sorts.items() %}
-      {% if key == sort %}<strong aria-current="true">{{ label }}</strong>{% else %}<a href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ key.value }}">{{ label }}</a>{% endif %}
+      {% if key == sort %}<strong aria-current="true">{{ label }}</strong>{% else %}<a href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ key.value }}&amp;vue={{ vue }}">{{ label }}</a>{% endif %}
     {% endfor %}
   </p>
+  {% if image_count %}
+  <p class="view-switch">{% if gallery %}<a class="button small" href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ sort.value }}">☰ Liste</a> <strong>🖼️ Galerie ({{ image_count | number }} image{{ "s" if image_count > 1 else "" }})</strong>{% else %}<a class="button small" href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ sort.value }}&amp;vue=galerie">🖼️ Galerie ({{ image_count | number }} image{{ "s" if image_count > 1 else "" }})</a>{% endif %}</p>
+  {% endif %}
   <p class="legend muted small">🧹 à nettoyer · 📑 en double{% if not dupes_run %} (doublons pas encore cherchés){% endif %} · 🛡️ protégé (projet, logiciel)</p>
 </div>
 <div class="actions"><a class="button small" href="/scans/{{ scan.id }}/organize?dir={{ node.entry_id }}">🗂️ Ranger ce dossier</a> <span class="muted">aperçu, puis un script à relancer toi-même</span></div>
@@ -31,6 +34,18 @@
 {% if children %}
 <div class="actions"><button type="button" class="button small" data-basket-page="add">Tout cocher (cette page)</button> <button type="button" class="button small" data-basket-page="remove">Tout décocher (cette page)</button></div>
 {% endif %}
+{% if gallery %}
+<ul class="gallery">
+{% for child in children %}{% set m = marks[child.entry_id] %}
+  <li class="gallery-item">
+    <a href="/scans/{{ scan.id }}/entries/{{ child.entry_id }}" title="{{ child.name }}"><img src="/api/scans/{{ scan.id }}/entries/{{ child.entry_id }}/image" alt="{{ child.name }}" loading="lazy" decoding="async"></a>
+    <label class="gallery-caption"><input type="checkbox" data-basket-item value="{{ child.entry_id }}" aria-label="Mettre « {{ child.name }} » au panier"> <span class="path small">{{ child.name }}</span></label>
+    <span class="muted small">{{ child.size | size }} · {{ child.mtime_ns | date }} {{ badges(m) }}</span>
+  </li>
+{% endfor %}
+</ul>
+<p class="muted small">Les images sont lues sur le disque à l'affichage, telles que l'analyse les a vues ; une image modifiée depuis n'est pas montrée.</p>
+{% else %}
 <ul class="files">
 {% for child in children %}{% set m = marks[child.entry_id] %}
   <li class="file-row">
@@ -50,11 +65,12 @@
   <li class="muted">Dossier vide.</li>
 {% endfor %}
 </ul>
+{% endif %}
 {% if pages > 1 %}
 <nav class="pager" aria-label="Pages">
-  {% if page > 1 %}<a class="button small" href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ sort.value }}&amp;page={{ page - 1 }}">← Précédente</a>{% endif %}
+  {% if page > 1 %}<a class="button small" href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ sort.value }}&amp;vue={{ vue }}&amp;page={{ page - 1 }}">← Précédente</a>{% endif %}
   <span class="muted">Page {{ page }} sur {{ pages }}</span>
-  {% if page < pages %}<a class="button small" href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ sort.value }}&amp;page={{ page + 1 }}">Suivante →</a>{% endif %}
+  {% if page < pages %}<a class="button small" href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}&amp;sort={{ sort.value }}&amp;vue={{ vue }}&amp;page={{ page + 1 }}">Suivante →</a>{% endif %}
 </nav>
 {% endif %}
 {% endblock %}

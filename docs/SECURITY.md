@@ -114,6 +114,14 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Les scripts de rangement (D-041) refusent d'être produits si un chemin du plan est absolu ou contient `..`. Ils ne suppriment rien : `mv -n`, et `rmdir` des seuls dossiers vides.
 - **Panier de l'explorateur (D-036)** : le navigateur n'envoie que des numéros d'éléments. Le serveur relit chaque chemin dans l'index de l'analyse ; un numéro inconnu est ignoré et signalé. Le dossier analysé entier n'est jamais proposé, un élément déjà compris dans un dossier sélectionné est retiré, et un élément protégé (dépôt git, logiciel installé) est signalé. Les noms sont affichés par `textContent` uniquement.
 
+## Aperçu des images (D-046)
+- Seule lecture de contenu en dehors des doublons et des archives. Le serveur envoie les **octets d'origine**, sans rien décoder : pas de bibliothèque d'images côté serveur, c'est le navigateur, isolé, qui affiche l'image.
+- Lecture par le lecteur des doublons : chaque dossier est ouvert depuis la racine avec `O_NOFOLLOW`. Le fichier doit être celui de l'index (périphérique, inode, taille, date) avant et après la lecture, sinon rien n'est envoyé. Un dossier remplacé par un lien symbolique n'est jamais suivi.
+- **Type reconnu au contenu**, jamais au nom : JPEG, PNG, GIF, WebP, BMP, AVIF. Le **SVG**, qui peut contenir du script, n'est jamais servi. Un fichier `.jpg` qui contient du HTML est refusé.
+- Réponse servie avec `Content-Security-Policy: default-src 'none'; sandbox` et `X-Content-Type-Options: nosniff`. Ouverte seule, elle ne peut rien exécuter. Elle n'est jamais mise en cache (`no-store`).
+- Taille plafonnée à 20 Mio : l'image est lue entièrement en mémoire. La galerie montre 40 images par page, chargées à l'affichage, pour ne pas saturer la mémoire du navigateur.
+- Une racine refusée, un fichier hors de l'index, un dossier privé (secrets du dossier personnel) ou une racine qui a changé depuis l'analyse ne donnent aucun aperçu.
+
 ## Archives vérifiées (D-024, D-032)
 - Par défaut, le dossier d'archives est `archives/`, dans le dossier de TreeAudit (D-034). C'est un dossier dédié, que TreeAudit possède, et non un disque choisi dans l'interface : cela évite de monter un disque externe en écriture.
 - C'est la seule fonction qui écrit en dehors du dossier de données. Tout passe par un descripteur du dossier d'archives, ouvert sans suivre de lien juste après sa validation. Le code est dans un seul module, `archive/output.py`, le seul ajouté à la liste blanche du test statique.

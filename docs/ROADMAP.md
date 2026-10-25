@@ -155,7 +155,7 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Fiche d'un élément (autres copies, raison des repères).
 - [x] Panier : sélection entre dossiers, commande construite par le serveur depuis l'index.
 - [x] Essai réel sur `dummy_folder` : 30 000 éléments par dossier, 0,13 s par page.
-- [ ] Aperçu des images (étape dédiée, lecture du contenu).
+- [x] Aperçu des images (D-046) : fiche et vue galerie, octets d'origine lus comme pour les doublons, type reconnu au contenu, SVG exclu.
 
 ## Phase 6 sexies — Sans make (D-035)
 - [x] Lanceur `./treeaudit` (bash) à la place du `Makefile`, mêmes validations avant montage.

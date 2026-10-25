@@ -104,7 +104,11 @@ class InlineCodeFinder(HTMLParser):
         names = {name for name, _ in attrs}
         if tag == "script":
             self._in_script = "src" not in names
-        if tag in ("img", "svg", "iframe", "object", "embed"):
+        if tag == "img":  # only the previews TreeAudit serves itself (D-046)
+            src = dict(attrs).get("src") or ""
+            if not re.fullmatch(r"/api/scans/\d+/entries/\d+/image", src):
+                self.problems.append(f"unexpected <img src={src!r}>")
+        if tag in ("svg", "iframe", "object", "embed"):
             self.problems.append(f"unexpected <{tag}>")
         for name in names:
             if name.startswith("on") or name == "style":

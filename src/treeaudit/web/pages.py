@@ -39,6 +39,7 @@ from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.commands import recreate_command
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE, Band
 from treeaudit.parasites.report import human_size
+from treeaudit.preview.images import looks_like_image
 from treeaudit.projects.detect import PROJECT, SOFTWARE, find_projects
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
@@ -111,6 +112,8 @@ def _age(value: int | None) -> str:
     years = int(days // 365.25)
     return "il y a 1 an" if years == 1 else f"il y a {years} ans"
 
+
+GALLERY_PAGE_SIZE = 40
 
 _THIN_SPACE = chr(0x202F)  # French thousands separator
 
@@ -369,8 +372,10 @@ def space_page(
     dir: Annotated[int | None, Query(ge=1)] = None,
     sort: explorer.Sort = explorer.Sort.SIZE,
     page: Annotated[int, Query(ge=1, le=1_000_000)] = 1,
+    vue: Annotated[str, Query(pattern="^(liste|galerie)$")] = "liste",
 ) -> Response:
-    """The explorer (D-036): browse the analysed folder like a file manager."""
+    """The explorer (D-036): browse the analysed folder like a file manager;
+    its images as a gallery (D-046)."""
     scan = _scan_or_404(conn, scan_id)
     if dir is None:
         node = queries.start_node(conn, scan_id)
@@ -379,9 +384,16 @@ def space_page(
     if node is None or node.kind != "dir":
         raise HTTPException(404, "Ce dossier n'existe pas dans cette analyse.")
     nodes = explorer.sort_nodes(queries.all_children(conn, scan_id, node.entry_id), sort)
-    pages = max(1, -(-len(nodes) // explorer.PAGE_SIZE))
+    images = [n for n in nodes if looks_like_image(n.kind, n.raw_path, n.size)]
+    gallery = vue == "galerie" and bool(images)
+    if gallery:
+        # Few per page: a browser holds every decoded photo of the page in memory.
+        listed, page_size = images, GALLERY_PAGE_SIZE
+    else:
+        listed, page_size = nodes, explorer.PAGE_SIZE
+    pages = max(1, -(-len(listed) // page_size))
     page = min(page, pages)
-    shown = nodes[(page - 1) * explorer.PAGE_SIZE : page * explorer.PAGE_SIZE]
+    shown = listed[(page - 1) * page_size : page * page_size]
     source = explorer.MarkSource(conn, scan_id)
     marks = source.marks([(n.entry_id, n.raw_path, n.kind) for n in shown])
     return render(
@@ -399,6 +411,9 @@ def space_page(
         page=page,
         pages=pages,
         dupes_run=source.dupes_run,
+        image_count=len(images),
+        gallery=gallery,
+        vue="galerie" if gallery else "liste",
     )
 
 
@@ -422,6 +437,7 @@ def entry_page(request: Request, scan_id: int, entry_id: int, conn: Db, config: 
         parent=parent,
         crumbs=queries.breadcrumb(conn, scan_id, parent) if parent is not None else [],
         dupes_run=explorer.latest_dupes_run(conn, scan_id),
+        image=looks_like_image(details.kind, details.rel_path, details.size),
     )
 
 

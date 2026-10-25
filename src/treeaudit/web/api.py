@@ -12,7 +12,7 @@ import sqlite3
 from collections.abc import Iterator
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
@@ -23,9 +23,12 @@ from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
 from treeaudit.db.connection import connect, from_sqlite_int
 from treeaudit.duplicates.groups import load_groups
+from treeaudit.duplicates.reader import Expected
 from treeaudit.duplicates.report import SelectionError, override_keep
+from treeaudit.duplicates.runner import expected_root_of
 from treeaudit.organize.plan import CATEGORIES, AdjustmentError
 from treeaudit.parasites.cached import parasite_findings
+from treeaudit.preview.images import PreviewError, previewable, read_image
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES
 from treeaudit.scanner.browse import Listing, list_folders
@@ -51,7 +54,10 @@ def get_jobs(request: Request) -> JobManager:
 
 
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:
-    conn = connect(get_config(request).data_dir)
+    # FastAPI may open this in one worker thread and run the route in another:
+    # found when a gallery asked for many images at once (D-046). The
+    # connection belongs to this request alone, used by one thread at a time.
+    conn = connect(get_config(request).data_dir, check_same_thread=False)
     try:
         yield conn
     finally:
@@ -212,6 +218,52 @@ def refused_warnings(result: CleanupCommand[Any]) -> list[str]:
         f" — {reason}"
         for target, reason in result.refused
     ]
+
+
+# An image is shown, never run: no script, no plugin, no frame, even if opened alone.
+IMAGE_HEADERS = {
+    "Content-Security-Policy": "default-src 'none'; sandbox",
+    "Content-Disposition": "inline",
+}
+
+
+@router.get("/scans/{scan_id}/entries/{entry_id}/image")
+def entry_image(
+    request: Request, scan_id: int, entry_id: int, conn: Db, config: Config
+) -> Response:
+    """The original bytes of an image of the analysis (D-046), read safely."""
+    scan = scans_db.get_scan(conn, scan_id)
+    if scan is None:
+        raise HTTPException(404, "scan inconnu")
+    row = conn.execute(
+        "SELECT rel_path, kind, extension, size, mtime_ns, dev, ino FROM entry "
+        "WHERE scan_id = ? AND entry_id = ?",
+        (scan_id, entry_id),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "élément inconnu")
+    if not previewable(row["kind"], row["extension"], row["size"]):
+        raise HTTPException(422, "pas d'aperçu pour cet élément")
+    root = accepted_root(request, scan["root_id"]).root
+    if root.path != scan["root_path"]:
+        raise HTTPException(409, "la racine a changé depuis l'analyse")
+    expected = Expected(
+        dev=from_sqlite_int(row["dev"]),
+        ino=from_sqlite_int(row["ino"]),
+        size=row["size"],
+        mtime_ns=row["mtime_ns"],
+    )
+    try:
+        image = read_image(
+            root.path,
+            expected_root_of(conn, scan, root.path),
+            bytes(row["rel_path"]),
+            expected,
+            private_paths=root.private_paths,
+        )
+    except (PreviewError, OSError) as exc:
+        raise HTTPException(409, str(exc) or "aperçu impossible") from exc
+    return Response(image.content, media_type=image.media_type, headers=IMAGE_HEADERS)
 
 
 class ParasiteCommand(BaseModel):
