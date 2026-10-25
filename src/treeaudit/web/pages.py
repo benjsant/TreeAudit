@@ -28,6 +28,7 @@ from treeaudit import __version__
 from treeaudit.archive.listing import list_archives
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig, RootConfig
 from treeaudit.core.datadir import index_size
+from treeaudit.core.sizes import is_sparse
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
@@ -438,6 +439,7 @@ def entry_page(request: Request, scan_id: int, entry_id: int, conn: Db, config: 
         crumbs=queries.breadcrumb(conn, scan_id, parent) if parent is not None else [],
         dupes_run=explorer.latest_dupes_run(conn, scan_id),
         image=looks_like_image(details.kind, details.rel_path, details.size),
+        sparse=details.kind == "file" and is_sparse(details.size, details.allocated_size),
     )
 
 

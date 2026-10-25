@@ -313,3 +313,20 @@ def test_sizes_follow_the_explorer(
             assert move.space == shown[move.source], move.source
     album = next(m for m in plan.moves if m.source == "Vacances Bretagne")
     assert album.space >= album.size  # a folder: the place it uses, not just its bytes
+
+
+def test_a_sparse_file_counts_the_place_it_uses(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    """1 GiB that takes nothing on the disk is not 1 GiB to tidy (D-047)."""
+    root = tmp_path / "disque"
+    root.mkdir()
+    with open(root / "vm.img", "wb") as image:
+        image.truncate(1024**3)
+    if os.stat(root / "vm.img").st_blocks * 512 > 1024**2:
+        pytest.skip("this filesystem does not keep sparse files")
+    plan, _ = scan_and_plan(tmp_path, root, data_disk_table)
+    (move,) = plan.moves
+    assert move.size == 1024**3  # what the script checks before moving
+    assert move.space < 1024**2  # what the page adds up
+    assert sum(total[2] for total in plan.categories().values()) == move.space

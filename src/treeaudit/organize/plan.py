@@ -21,6 +21,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from treeaudit.core.sizes import shown_file_size
 from treeaudit.duplicates.groups import SOFTWARE_DIRS
 from treeaudit.shellcmd import is_displayable
 
@@ -599,7 +600,9 @@ class _Planner:
                 reason=reason,
                 renamed=renamed,
                 subfolder=sub,
-                space=node.space if node.kind == "dir" else node.size,
+                space=node.space
+                if node.kind == "dir"
+                else shown_file_size(node.size, node.allocated),
             )
         )
 

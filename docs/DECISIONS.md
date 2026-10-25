@@ -598,3 +598,9 @@ Précise la mise en œuvre de D-024.
   - un aperçu impossible ne prend plus toute la hauteur de la fiche ;
   - la galerie montre deux images par ligne sur téléphone.
 
+## D-047 — Fichiers creux : la place réellement occupée (2026-10-25)
+- **Constat** (exploration de `dummy_folder`) : « Ranger » annonçait « Archives : 1,0 Gio » pour `sparse-1GiB.img`, un fichier creux qui n'occupe rien sur le disque. L'explorateur le classait aussi en tête du tri par taille.
+- **Décision** : la convention de D-042 reste (un fichier montre sa taille, un dossier sa place), avec une exception. Un fichier qui occupe moins de la moitié de sa taille, avec au moins 1 Mio d'écart (`core/sizes.py`), montre la place qu'il occupe et le badge « creux ». Sa taille apparente reste dans l'infobulle et sur la fiche (« Il paraît faire 1,0 Gio mais n'occupe que 0 o ; le supprimer ne libérerait que 0 o »). Un fichier compressé par le système de fichiers est traité de la même façon, et à raison : c'est sa place qui compte.
+- **Où** : l'explorateur (liste, tri, galerie, barres du bilan), les totaux de « Ranger » et la fiche. Le script de rangement vérifie toujours la taille exacte.
+- **Inchangé** : la recherche, qui filtre et affiche la taille des fichiers (un critère « plus de 100 Mo » porte sur la taille). Les petits fichiers gardent leur taille : 32 o, et non les 4 Kio d'un bloc.
+

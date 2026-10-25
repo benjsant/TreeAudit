@@ -5,6 +5,8 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from treeaudit.core.sizes import is_sparse, shown_file_size
+
 MAX_CHILDREN = 300
 
 
@@ -20,6 +22,8 @@ class Node:
     """Files: their size. Folders: space used by their subtree (None if not fully scanned)."""
     files: int | None
     mtime_ns: int
+    apparent: int | None = None
+    """A sparse file's apparent size (``size`` is then the place it uses, D-047)."""
 
 
 _NODE_SQL = (
@@ -34,8 +38,10 @@ def _node(row: sqlite3.Row) -> Node:
     if row["kind"] == "dir":
         size = None if row["subtree"] is None else row["subtree"] + row["allocated_size"]
         files = row["subtree_files"]
+        sparse = None
     else:
-        size, files = row["size"], None
+        size, files = shown_file_size(row["size"], row["allocated_size"]), None
+        sparse = row["size"] if is_sparse(row["size"], row["allocated_size"]) else None
     return Node(
         entry_id=row["entry_id"],
         parent_id=row["parent_id"],
@@ -46,6 +52,7 @@ def _node(row: sqlite3.Row) -> Node:
         size=size,
         files=files,
         mtime_ns=row["mtime_ns"],
+        apparent=sparse,
     )
 
 

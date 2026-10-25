@@ -119,6 +119,8 @@ def photos(tmp_path: Path) -> Path:
         (root / "Photos" / f"IMG_{i:02}.png").write_bytes(PNG)
     (root / "Photos" / "faux.jpg").write_bytes(b"<svg onload=alert(1)>")
     (root / "Photos" / "notes.txt").write_bytes(b"texte")
+    with open(root / "vm.img", "wb") as image:  # sparse: 1 GiB that uses nothing (D-047)
+        image.truncate(1024**3)
     return root
 
 
@@ -196,3 +198,16 @@ def test_many_images_at_once(client: TestClient) -> None:
     with ThreadPoolExecutor(max_workers=12) as pool:
         codes = list(pool.map(lambda url: client.get(url).status_code, urls * 3))
     assert codes == [200] * len(urls) * 3
+
+
+def test_a_sparse_file_shows_the_place_it_uses(client: TestClient, tmp_path: Path) -> None:
+    if os.stat(tmp_path / "disque" / "vm.img").st_blocks * 512 > 1024**2:
+        pytest.skip("this filesystem does not keep sparse files")
+    scan_id = client.get("/api/jobs/current").json()["job"]["scan_id"]
+    page = client.get(f"/scans/{scan_id}/space").text
+    row = re.search(r'entries/(\d+)">📄 vm.img</a>.*?</li>', page, re.S)
+    assert row is not None
+    assert ">creux</span>" in row.group(0) and "1.0 Gio en apparence" in row.group(0)
+    assert "1.0 Gio</span>" not in row.group(0)
+    fiche = client.get(f"/scans/{scan_id}/entries/{row.group(1)}").text
+    assert "Fichier creux" in fiche and "Il paraît faire 1.0 Gio" in fiche

@@ -56,7 +56,7 @@
       {% else %}<a href="/scans/{{ scan.id }}/entries/{{ child.entry_id }}">📄 {{ child.name }}</a>{% endif %}
       {{ badges(m) }}
     </span>
-    <span class="file-size">{{ child.size | size if child.size is not none else "?" }}{% if child.files %}<span class="muted small"> · {{ child.files | number }} fichiers</span>{% endif %}</span>
+    <span class="file-size">{{ child.size | size if child.size is not none else "?" }}{% if child.apparent %} <span class="badge" title="Fichier creux : {{ child.apparent | size }} en apparence, {{ child.size | size }} réellement occupés sur le disque">creux</span>{% endif %}{% if child.files %}<span class="muted small"> · {{ child.files | number }} fichiers</span>{% endif %}</span>
     <span class="file-date muted small">{{ child.mtime_ns | date }}</span>
     <a class="file-info" href="/scans/{{ scan.id }}/entries/{{ child.entry_id }}" aria-label="Détails de « {{ child.name }} »" title="Détails">ⓘ</a>
     {% if sort.value == "size" and node.size and child.size is not none %}<meter min="0" max="{{ node.size }}" value="{{ child.size }}"></meter>{% endif %}

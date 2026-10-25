@@ -41,6 +41,7 @@
       <dt>Contenu</dt><dd>inconnu (dossier pas entièrement lu)</dd>
       {% endif %}
     {% else %}
+      {% if sparse %}<dt>Fichier creux</dt><dd>Il paraît faire {{ entry.size | size }} mais n'occupe que {{ entry.allocated_size | size }} sur le disque (image disque, machine virtuelle…). Le supprimer ne libérerait que {{ entry.allocated_size | size }}.</dd>{% endif %}
       <dt>Taille</dt><dd>{{ entry.size | size }} ({{ entry.size | number }} octets) · place occupée : {{ entry.allocated_size | size }}</dd>
     {% endif %}
     <dt>Modifié le</dt><dd>{{ entry.mtime_ns | datetime }}</dd>
