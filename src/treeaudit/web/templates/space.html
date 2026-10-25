@@ -6,7 +6,7 @@
 <h1>📂 Explorateur</h1>
 {% include "basket_bar.html" %}
 <nav class="crumbs" aria-label="Dossier affiché">
-  {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/space?dir={{ crumb.entry_id }}&amp;sort={{ sort.value }}">{{ crumb.name or title }}</a>{% endfor %}
+  {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/space?dir={{ crumb.entry_id }}&amp;sort={{ sort.value }}">{{ title if loop.first else crumb.name }}</a>{% endfor %}
 </nav>
 <p class="lead">{{ node.size | size if node.size is not none else "Taille inconnue (dossier pas entièrement lu)" }} dans ce dossier, {{ total_children | number }} élément{{ "s" if total_children > 1 else "" }}. Coche ce que tu veux mettre au panier ; rien n'est modifié sur le disque.</p>
 {% if scan.status != "complete" %}<p class="notice warn" role="alert">L'analyse n'a pas pu tout voir : certains dossiers peuvent être incomplets.</p>{% endif %}
@@ -25,7 +25,7 @@
 <div class="actions"><a class="button small" href="/scans/{{ scan.id }}/organize?dir={{ node.entry_id }}">🗂️ Ranger ce dossier</a> <span class="muted">aperçu, puis un script à relancer toi-même</span></div>
 {% if archive.enabled %}
 <div class="actions">
-  <button type="button" class="button small" data-start-archive data-endpoint="/api/scans/{{ scan.id }}/entries/{{ node.entry_id }}/archive" data-name="{{ node.name or title }}" data-where="{{ archive.where }}">🗜️ Archiver ce dossier</button>
+  <button type="button" class="button small" data-start-archive data-endpoint="/api/scans/{{ scan.id }}/entries/{{ node.entry_id }}/archive" data-name="{{ title if node.parent_id is none else node.name }}" data-where="{{ archive.where }}">🗜️ Archiver ce dossier</button>
   <span class="muted">copie compressée et vérifiée, l'original n'est pas modifié</span>
   <p class="error-text" data-error role="alert" hidden></p>
 </div>

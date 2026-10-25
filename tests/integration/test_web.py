@@ -1251,3 +1251,15 @@ def test_projects_page(client: TestClient, scanned: int) -> None:
     assert oldest.status_code == 200 and "Aucun projet ni logiciel" in oldest.text
     assert client.get(f"/scans/{scanned}/projects?tri=rm").status_code == 422
     assert f'href="/scans/{scanned}/projects"' in client.get(f"/scans/{scanned}").text
+
+
+def test_the_analysed_folder_is_named_as_the_user_knows_it(
+    client: TestClient, scanned: int
+) -> None:
+    """Not by its mount point in the container (/audit/roots/<id>), found while exploring."""
+    for url in (f"/scans/{scanned}/space", f"/scans/{scanned}/organize"):
+        crumbs = re.search(r'<nav class="crumbs"[^>]*>(.*?)</nav>', client.get(url).text, re.S)
+        assert crumbs is not None
+        assert ">My Disk</a>" in crumbs.group(1) and ">root</a>" not in crumbs.group(1)
+    projects = client.get(f"/scans/{scanned}/projects").text
+    assert re.search(r"recréables · <strong>\d+ coché", projects)

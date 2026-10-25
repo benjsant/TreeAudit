@@ -592,4 +592,9 @@ Précise la mise en œuvre de D-024.
 - **Pas de cache** : aucune vignette n'est écrite dans le dossier de données, et les réponses restent en `no-store`. Les photos ne sont pas recopiées par TreeAudit.
 - **Interface** : la fiche d'une image la montre. Un dossier qui contient des images propose « 🖼️ Galerie », et chaque vignette garde sa case du panier. Une image refusée est remplacée par « Aperçu impossible ».
 - **Bogue trouvé en explorant** : une galerie demande ses images en parallèle. FastAPI peut alors ouvrir la connexion SQLite d'une requête dans un fil et exécuter la route dans un autre, ce qui donnait des erreurs 500 sur 13 images sur 26. La connexion par requête est désormais ouverte avec `check_same_thread=False` : elle n'appartient qu'à cette requête, et un seul fil l'utilise à la fois. Un test envoie 12 requêtes simultanées ; il échoue sans le correctif.
+- **Exploration de l'interface sur `dummy_folder`** (même jour) :
+  - le dossier analysé est désormais nommé comme l'utilisateur le connaît dans le fil d'Ariane, la fiche et la page Projets, et non par son point de montage (`/audit/roots/<id>` en Docker) ;
+  - la page Projets dit combien de dossiers recréables sont cochés, puisqu'ils restent dans un volet fermé ;
+  - un aperçu impossible ne prend plus toute la hauteur de la fiche ;
+  - la galerie montre deux images par ligne sur téléphone.
 

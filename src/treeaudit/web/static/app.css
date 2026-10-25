@@ -207,9 +207,10 @@ meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 9
 .view-switch { margin: .3rem 0; }
 .preview { margin: 1rem 0; }
 .preview img { display: block; max-width: 100%; max-height: 70vh; height: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
-.gallery { list-style: none; padding: 0; margin: .5rem 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .8rem; }
+.gallery { list-style: none; padding: 0; margin: .5rem 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .8rem; }
 .gallery-item { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
 .gallery-item img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border: 1px solid var(--line); border-radius: 6px; }
 .gallery-caption { display: flex; gap: .3rem; align-items: center; min-width: 0; }
 .gallery-caption .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-failed { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; border: 1px dashed var(--line); border-radius: 6px; padding: .5rem; text-align: center; }
+.preview .preview-failed { aspect-ratio: auto; min-height: 4rem; max-width: 30rem; }

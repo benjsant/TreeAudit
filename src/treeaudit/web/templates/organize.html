@@ -4,7 +4,7 @@
 <p class="back"><a href="/scans/{{ scan.id }}/space?dir={{ node.entry_id }}">← Explorateur</a></p>
 <h1>🗂️ Ranger</h1>
 <nav class="crumbs" aria-label="Dossier à ranger">
-  {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/organize?dir={{ crumb.entry_id }}">{{ crumb.name or title }}</a>{% endfor %}
+  {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/organize?dir={{ crumb.entry_id }}">{{ title if loop.first else crumb.name }}</a>{% endfor %}
 </nav>
 <p class="lead">Aperçu du rangement proposé. <strong>Rien n'est modifié</strong> : ajuste le plan, puis télécharge le script que tu relis et lances toi-même, et le script qui remet tout comme avant.</p>
 {% if scan.status != "complete" %}<p class="notice warn" role="alert">L'analyse n'a pas pu tout voir : le plan peut être incomplet.</p>{% endif %}

@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% from "marks.html" import badges %}
 {% from "paths.html" import full_path %}
-{% block title %}{{ entry.name or title }} · {{ title }}{% endblock %}
+{% block title %}{{ title if entry.depth == 0 else entry.name }} · {{ title }}{% endblock %}
 {% block content %}
 <p class="back">{% if parent %}<a href="/scans/{{ scan.id }}/space?dir={{ parent.entry_id }}">← Retour au dossier</a>{% else %}<a href="/scans/{{ scan.id }}/space">← Explorateur</a>{% endif %}</p>
 {% include "basket_bar.html" %}
 <nav class="crumbs" aria-label="Emplacement">
-  {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/space?dir={{ crumb.entry_id }}">{{ crumb.name or title }}</a>{% endfor %}
+  {% for crumb in crumbs %}{% if not loop.first %} › {% endif %}<a href="/scans/{{ scan.id }}/space?dir={{ crumb.entry_id }}">{{ title if loop.first else crumb.name }}</a>{% endfor %}
 </nav>
-<h1>{% if entry.kind == "dir" %}📁{% elif entry.kind == "symlink" %}🔗{% else %}📄{% endif %} <span class="path">{{ entry.name or title }}</span></h1>
+<h1>{% if entry.kind == "dir" %}📁{% elif entry.kind == "symlink" %}🔗{% else %}📄{% endif %} <span class="path">{{ title if entry.depth == 0 else entry.name }}</span></h1>
 <p>{{ badges(entry.marks) }}</p>
 
 <div class="actions">
@@ -17,7 +17,7 @@
   {% endif %}
   {% if entry.kind == "dir" %}<a class="button small" href="/scans/{{ scan.id }}/space?dir={{ entry.entry_id }}">📂 Ouvrir dans l'explorateur</a>{% endif %}
   {% if entry.kind == "dir" and archive.enabled %}
-  <button type="button" class="button small" data-start-archive data-endpoint="/api/scans/{{ scan.id }}/entries/{{ entry.entry_id }}/archive" data-name="{{ entry.name or title }}" data-where="{{ archive.where }}">🗜️ Archiver ce dossier</button>
+  <button type="button" class="button small" data-start-archive data-endpoint="/api/scans/{{ scan.id }}/entries/{{ entry.entry_id }}/archive" data-name="{{ title if entry.depth == 0 else entry.name }}" data-where="{{ archive.where }}">🗜️ Archiver ce dossier</button>
   <p class="error-text" data-error role="alert" hidden></p>
   {% endif %}
 </div>

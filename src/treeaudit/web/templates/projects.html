@@ -6,7 +6,7 @@
 <p class="lead">{{ counts["projet"] | number }} projet(s) informatique(s) et {{ counts["logiciel"] | number }} logiciel(s) ou jeu(x) trouvés{% if recreatable_size %}, dont <strong>{{ recreatable_size | size }}</strong> recréables (dépendances, compilations, caches){% endif %}. Rien n'est modifié.</p>
 {% if scan.status != "complete" %}<p class="notice warn" role="alert">L'analyse n'a pas pu tout voir : la liste peut être incomplète.</p>{% endif %}
 
-<nav class="links" aria-label="Affichage">
+<nav class="view-switch" aria-label="Affichage">
   Voir :
   {% for value, label in (("tout", "tout"), ("projet", "les projets"), ("logiciel", "les logiciels et jeux")) %}{% if value == voir %}<strong>{{ label }}</strong>{% else %}<a href="?voir={{ value }}&amp;tri={{ tri }}">{{ label }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}
   — Trier par :
@@ -21,7 +21,7 @@
   {% for f in found %}
     <li class="item">
       <div class="item-text">
-        <strong>{{ "📁" if f.is_dir else "📄" }} {{ f.name or title }}</strong>
+        <strong>{{ "📁" if f.is_dir else "📄" }} {{ title if f.rel_path_display == scan.subpath else f.name }}</strong>
         <span class="size">{{ f.size | size if f.size is not none else "?" }}</span>
         {% for kind in f.kinds %}<span class="badge">{{ kind }}</span> {% endfor %}<br>
         <span class="path">{{ f.rel_path_display or "(dossier analysé)" }}</span><br>
@@ -30,7 +30,8 @@
       </div>
       {% if f.recreatable %}
       <details class="why">
-        <summary>♻️ {{ f.recreatable_size | size }} recréables</summary>
+        {% set checked = f.recreatable | selectattr("band.value", "equalto", "green") | selectattr("displayable") | list | length %}
+        <summary>♻️ {{ f.recreatable_size | size }} recréables · <strong>{{ checked }} coché{{ "s" if checked > 1 else "" }}</strong> sur {{ f.recreatable | length }}</summary>
         <ul class="plain small">
         {% for r in f.recreatable %}
           <li>
