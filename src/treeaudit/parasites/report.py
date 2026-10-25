@@ -122,13 +122,21 @@ def render_findings(
 
 
 def render_selection(
-    selected: Sequence[Finding], action: Action, *, root_display: str, scan_id: int
+    selected: Sequence[Finding],
+    action: Action,
+    *,
+    root_display: str,
+    scan_id: int,
+    scanned: str,
+    protected: Sequence[str] = (),
 ) -> str:
     date = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     result = cleanup_command(
         action,
         selected,
         root_display,
+        scanned=scanned,
+        protected=protected,
         archive_name=f"scan{scan_id}-{date}.tar.gz",
     )
     total = sum(f.allocated_size or 0 for f in selected)
@@ -147,6 +155,8 @@ def render_selection(
         )
     for f in result.skipped:
         lines.append(f"⚠ Ignoré (nom non affichable sans risque) : n° {f.number}")
+    for f, reason in result.refused:
+        lines.append(f"⛔ Refusé par la double vérification : n° {f.number} ({reason})")
     lines.append("")
     lines.append(result.text if result.text else "(aucune commande possible pour cette sélection)")
     return "\n".join(lines)

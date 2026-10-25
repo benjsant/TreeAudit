@@ -494,6 +494,7 @@ function setupCommandBuilders() {
           warnings.append(item);
         }
         text.textContent = data.command || "(aucune commande possible pour cette sélection)";
+        builder.querySelector("[data-copy]").hidden = !data.command;
         output.hidden = false;
       } catch (error) {
         showError(builder, error.message);

@@ -1,6 +1,7 @@
 <section class="panel final-step" aria-labelledby="final-step-title">
   <h2 id="final-step-title">Dernière étape</h2>
   <p>Quelle commande préparer pour la sélection ? TreeAudit ne lance rien : tu copies la commande et c'est toi qui la lances.</p>
+  <p class="notice warn small">🛡️ Chaque commande est vérifiée deux fois : elle ne vise jamais <code>/</code>, le système, un disque entier, ton dossier personnel entier ni le dossier analysé lui-même. Elle ne contient jamais <code>sudo</code> : <strong>ne l'ajoute jamais</strong>, et si le terminal te demande un mot de passe, arrête-toi (Ctrl+C).</p>
   <div class="options">
     <label class="option"><input type="radio" name="action" value="trash" checked> <span><strong>Commande pour tout mettre à la corbeille</strong> <span class="muted">— recommandé, tu peux récupérer les fichiers ; vide la corbeille ensuite pour libérer la place</span></span></label>
     <label class="option"><input type="radio" name="action" value="delete"> <span><strong class="danger">Commande pour tout supprimer définitivement</strong> <span class="muted">— impossible à annuler</span></span></label>

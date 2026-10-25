@@ -134,9 +134,16 @@ def override_keep(group: DuplicateGroup, keep_index: int) -> DuplicateGroup:
     return dataclasses.replace(group, keep=keep, keep_reasons=("choisie par toi",))
 
 
-def render_command(groups: Sequence[DuplicateGroup], action: Action, *, root_display: str) -> str:
+def render_command(
+    groups: Sequence[DuplicateGroup],
+    action: Action,
+    *,
+    root_display: str,
+    scanned: str,
+    protected: Sequence[str] = (),
+) -> str:
     targets: list[Copy] = [c for g in groups for c in g.removable]
-    result = cleanup_command(action, targets, root_display)
+    result = cleanup_command(action, targets, root_display, scanned=scanned, protected=protected)
     freed = sum(g.recoverable for g in groups)
     lines = [
         f"{len(targets)} copie(s) de {len(groups)} groupe(s), {human_size(freed)} — "
@@ -146,6 +153,8 @@ def render_command(groups: Sequence[DuplicateGroup], action: Action, *, root_dis
     ]
     for copy in result.skipped:
         lines.append(f"⚠ Ignorée (nom non affichable sans risque) : {copy.rel_path_display!r}")
+    for copy, reason in result.refused:
+        lines.append(f"⛔ Refusée (double vérification) : {copy.rel_path_display!r} ({reason})")
     lines.append("")
     lines.append(result.text if result.text else "(aucune commande possible pour cette sélection)")
     return "\n".join(lines)

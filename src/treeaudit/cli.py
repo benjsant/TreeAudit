@@ -1039,7 +1039,12 @@ def _cmd_scan_parasites(args: argparse.Namespace) -> int:
             print()
             print(
                 render_selection(
-                    selected, Action(args.action), root_display=root_display, scan_id=args.scan_id
+                    selected,
+                    Action(args.action),
+                    root_display=root_display,
+                    scan_id=args.scan_id,
+                    scanned=row["subpath"],
+                    protected=config.protected_paths(),
                 )
             )
     finally:
@@ -1202,7 +1207,15 @@ def _cmd_dupes_show(args: argparse.Namespace) -> int:
             print(f"erreur : {exc}", file=sys.stderr)
             return EXIT_ERROR
         print()
-        print(render_command(selected, ShellAction(args.action), root_display=root_display))
+        print(
+            render_command(
+                selected,
+                ShellAction(args.action),
+                root_display=root_display,
+                scanned=scan["subpath"] if scan is not None else "",
+                protected=config.protected_paths(),
+            )
+        )
     finally:
         conn.close()
     return EXIT_OK

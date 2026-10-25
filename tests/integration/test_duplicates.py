@@ -558,7 +558,7 @@ def test_command_removes_only_unkept_copies(root: Path, harness: Harness) -> Non
     touch(root / "$(touch pwned)" / "img.jpg", content)
     _, report = harness.groups()
     selected = parse_groups("all", report.groups)
-    text = render_command(selected, Action.TRASH, root_display="/mnt/d")
+    text = render_command(selected, Action.TRASH, root_display="/mnt/d", scanned="")
     command = text.split("\n\n", 1)[1]
     argv = shlex.split(command.replace(" \\\n  ", " "))
     assert argv[:3] == ["gio", "trash", "--"]

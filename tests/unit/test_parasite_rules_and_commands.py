@@ -154,7 +154,7 @@ HOSTILE = [
 @pytest.mark.parametrize("action", [Action.TRASH, Action.DELETE])
 def test_paths_reach_the_command_literally(action: Action) -> None:
     findings = [finding(p, number=i) for i, p in enumerate(HOSTILE, start=1)]
-    result = cleanup_command(action, findings, "/mnt/disk with space")
+    result = cleanup_command(action, findings, "/mnt/disk with space", scanned="")
     assert result.text is not None and result.skipped == ()
     argv = split_command(result.text)
     program = ["gio", "trash", "--"] if action is Action.TRASH else ["rm", "-rf", "--"]
@@ -163,7 +163,7 @@ def test_paths_reach_the_command_literally(action: Action) -> None:
 
 
 def test_command_is_multiline_with_backslashes() -> None:
-    result = cleanup_command(Action.TRASH, [finding(b"a/x"), finding(b"b/y")], "/r")
+    result = cleanup_command(Action.TRASH, [finding(b"a/x"), finding(b"b/y")], "/r", scanned="")
     assert result.text == "gio trash -- \\\n  /r/a/x \\\n  /r/b/y"
 
 
@@ -172,26 +172,30 @@ def test_command_is_multiline_with_backslashes() -> None:
 )
 def test_unsafe_paths_get_no_command(rel_path: bytes) -> None:
     unsafe = finding(rel_path, number=2)
-    result = cleanup_command(Action.DELETE, [finding(b"ok/x"), unsafe], "/r")
+    result = cleanup_command(Action.DELETE, [finding(b"ok/x"), unsafe], "/r", scanned="")
     assert result.skipped == (unsafe,)
     assert result.text is not None
     assert split_command(result.text) == ["rm", "-rf", "--", "/r/ok/x"]
 
 
 def test_only_unsafe_paths_gives_no_command() -> None:
-    result = cleanup_command(Action.TRASH, [finding(b"bad\nname")], "/r")
+    result = cleanup_command(Action.TRASH, [finding(b"bad\nname")], "/r", scanned="")
     assert result.text is None
 
 
 @pytest.mark.parametrize("root", ["relative/root", "/root\nwith newline", ""])
 def test_unsafe_root_gives_no_command(root: str) -> None:
-    result = cleanup_command(Action.TRASH, [finding(b"a")], root)
+    result = cleanup_command(Action.TRASH, [finding(b"a")], root, scanned="")
     assert result.text is None
 
 
 def test_archive_command() -> None:
     result = cleanup_command(
-        Action.ARCHIVE, [finding(b"-dash/node_modules")], "/mnt/d", archive_name="scan1.tar.gz"
+        Action.ARCHIVE,
+        [finding(b"-dash/node_modules")],
+        "/mnt/d",
+        scanned="",
+        archive_name="scan1.tar.gz",
     )
     assert result.text is not None
     argv = split_command(result.text)  # "$HOME/..." stays a literal for shlex
@@ -201,7 +205,7 @@ def test_archive_command() -> None:
 
 def test_archive_name_is_validated() -> None:
     with pytest.raises(ValueError, match="archive name"):
-        cleanup_command(Action.ARCHIVE, [finding(b"a")], "/r", archive_name="../x; rm")
+        cleanup_command(Action.ARCHIVE, [finding(b"a")], "/r", scanned="", archive_name="../x; rm")
 
 
 def test_recreate_command_quotes_name_and_parent() -> None:

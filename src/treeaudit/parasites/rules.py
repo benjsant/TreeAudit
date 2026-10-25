@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shlex
 import string
 import tomllib
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from importlib import resources
 from typing import Any
 
 from treeaudit.core.errors import TreeAuditError
+from treeaudit.shellcmd import PRIVILEGED
 
 RULES_RESOURCE = "rules.toml"
 
@@ -134,10 +136,21 @@ def _check_glob(value: str, where: str) -> str:
     return value
 
 
+_DESTRUCTIVE = frozenset({"rm", "rmdir", "shred", "dd", "mkfs", "truncate", "unlink", "mv", "find"})
+
+
 def _check_template(command: str, where: str) -> str:
     for _, field, _, _ in string.Formatter().parse(command):
         if field is not None and field not in _ALLOWED_PLACEHOLDERS:
             raise _fail(where, f"unknown placeholder {{{field}}} in recreate command")
+    # A recreate command builds things back: it never needs privileges nor deletes.
+    try:
+        words = {word.rpartition("/")[2] for word in shlex.split(command)}
+    except ValueError as exc:
+        raise _fail(where, f"unreadable recreate command: {exc}") from exc
+    forbidden = words & (PRIVILEGED | _DESTRUCTIVE)
+    if forbidden:
+        raise _fail(where, f"forbidden program(s) in recreate command: {sorted(forbidden)}")
     return command
 
 

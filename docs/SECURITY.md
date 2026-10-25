@@ -102,7 +102,16 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Les noms de fichiers sont des données non fiables : chaque chemin est échappé avec `shlex.quote`, précédé de `--` (ou de `./` pour `tar`). Les tests vérifient, avec `shlex.split`, que des noms comme `$(touch pwned)`, `` `id` ``, `-rf` ou `a;b && c` arrivent tels quels dans la commande.
 - Un chemin contenant des caractères de contrôle ou de l'UTF-8 invalide ne reçoit aucune commande : il ne pourrait pas être affiché sans ambiguïté.
 - La corbeille (réversible) est proposée avant la suppression définitive ; une sélection hors du vert est signalée.
-- Les modèles de commandes de recréation viennent uniquement du catalogue versionné ; leur seul paramètre (`{name}`) est échappé.
+- Les modèles de commandes de recréation viennent uniquement du catalogue versionné ; leur seul paramètre (`{name}`) est échappé. Le catalogue est refusé au chargement si l'un d'eux appelle un programme privilégié (`sudo`, `su`, `doas`, `pkexec`, `run0`…) ou destructeur (`rm`, `find`, `dd`, `mkfs`…).
+- **Double vérification (D-045)**. Toute commande de nettoyage, d'où qu'elle vienne (nettoyage, doublons, panier, projets, ligne de commande), passe par deux contrôles indépendants :
+  1. **chaque cible, avant d'être écrite**, doit :
+     - être un chemin normalisé (sans `..`, `.` ni `//`) ;
+     - se trouver strictement sous le dossier analysé ;
+     - ne jamais être `/`, un dossier de premier niveau, une arborescence du système (`/usr`, `/etc`, `/boot`, `/root`, `/run` hors `/run/media`…), un dossier personnel entier (`/home/<nom>`), un point de montage de disque (`/media/<disque>`, `/run/media/<nom>/<disque>`, `/mnt/<partition>`), ni un disque, une racine ou le dossier d'archives que TreeAudit connaît, ni un dossier qui en contient un ;
+  2. **le texte terminé est relu** comme le shell le découperait (`shlex.split`). Il doit être exactement le programme attendu, puis autant de cibles que choisies, chacune repassant le premier contrôle. Un `sudo`, un `;`, une option comme `--no-preserve-root`, un `/` ou une cible en trop font refuser toute la commande.
+- Une cible refusée est **signalée avec la raison**, jamais retirée en silence. Si aucune cible ne passe, il n'y a aucune commande, et le bouton « Copier » disparaît.
+- Les commandes ne contiennent jamais `sudo`. L'interface le rappelle à côté de chaque commande : ne jamais l'ajouter, et s'arrêter si le terminal demande un mot de passe.
+- Les scripts de rangement (D-041) refusent d'être produits si un chemin du plan est absolu ou contient `..`. Ils ne suppriment rien : `mv -n`, et `rmdir` des seuls dossiers vides.
 - **Panier de l'explorateur (D-036)** : le navigateur n'envoie que des numéros d'éléments. Le serveur relit chaque chemin dans l'index de l'analyse ; un numéro inconnu est ignoré et signalé. Le dossier analysé entier n'est jamais proposé, un élément déjà compris dans un dossier sélectionné est retiré, et un élément protégé (dépôt git, logiciel installé) est signalé. Les noms sont affichés par `textContent` uniquement.
 
 ## Archives vérifiées (D-024, D-032)

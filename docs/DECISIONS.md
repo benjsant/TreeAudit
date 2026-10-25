@@ -571,3 +571,15 @@ Précise la mise en œuvre de D-024.
 - **La racine analysée peut être elle-même un projet** : tout ce qu'elle contient compte alors comme sous-projet.
 - **Coût** : aucune mise en cache. Sur un million d'entrées, la page se calcule en 1,9 s.
 - **Rien n'est décidé par les noms** : ils disent seulement où regarder. Les commandes passent par les vérifications du nettoyage (D-023, D-025).
+
+## D-045 — Double vérification des commandes proposées (2026-10-25)
+- **Demande du mainteneur** : qu'une commande proposée ne puisse jamais, par inadvertance, devenir un `sudo rm -R /` ou un `sudo rm -R /media/disque`.
+- **Constat** : les chemins étaient déjà échappés et `sudo` n'apparaissait jamais. Mais seul le panier écartait le dossier analysé. Rien ne vérifiait en dernier qu'une cible n'était pas `/`, le système ou un disque entier.
+- **Décision** : un garde-fou central dans `shellcmd.py`, en deux contrôles indépendants. `cleanup_command` exige désormais le dossier analysé (`scanned`) et reçoit les dossiers protégés (`AppConfig.protected_paths()` : toutes les racines et disques connus, et le dossier d'archives).
+  1. `check_target` sur chaque cible ;
+  2. `verify_command` sur le texte terminé, relu avec `shlex.split`.
+  Le détail est dans `docs/SECURITY.md`.
+- **Ambiguïté assumée** : `/media/moi/disque` ne se distingue pas, par le texte, d'un dossier de `/media/disque`. Seul le premier niveau sous `/media` est refusé d'office. Les disques plus profonds sont refusés parce que TreeAudit les connaît (racines détectées). Un disque que TreeAudit ignore, monté sous un dossier analysé, n'est pas reconnu par le texte. Par défaut, l'analyse ne traverse pas les points de montage : un tel disque n'est donc pas dans l'index.
+- **Refus visibles** : chaque cible refusée est listée avec sa raison. Si le texte relu ne correspond pas exactement à ce qui a été construit, aucune commande n'est donnée, et l'erreur est journalisée.
+- **Au-delà des commandes** : les commandes de recréation du catalogue ne peuvent contenir ni programme privilégié ni programme destructeur ; les scripts de rangement refusent tout chemin absolu ou avec `..`.
+

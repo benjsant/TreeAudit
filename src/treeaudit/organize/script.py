@@ -9,6 +9,7 @@ back in reverse order, then removes only the folders it left empty.
 
 from __future__ import annotations
 
+import posixpath
 import shlex
 
 from treeaudit.organize.plan import Plan
@@ -61,7 +62,24 @@ def _q(path: str) -> str:
     return shlex.quote(path)
 
 
+def _check_moves(plan: Plan) -> None:
+    """Every path of the script stays inside the chosen folder (double check).
+
+    The plan already builds them so; this refuses to write a script otherwise.
+    """
+    for path in (plan.destination, *(p for m in plan.moves for p in (m.source, m.target))):
+        parts = path.split("/")
+        if (
+            not path
+            or path.startswith("/")
+            or posixpath.normpath(path) != path
+            or any(part in ("", ".", "..") for part in parts)
+        ):
+            raise ValueError(f"unsafe path in tidying plan: {path!r}")
+
+
 def tidy_script(plan: Plan, folder: str, *, title: str, scan_id: int, date: str) -> str:
+    _check_moves(plan)
     lines = [
         _HEADER.format(title=title, scan_id=scan_id, date=date, folder=_q(folder)),
         _MOVE_FUNCTIONS,
@@ -79,6 +97,7 @@ def tidy_script(plan: Plan, folder: str, *, title: str, scan_id: int, date: str)
 
 
 def undo_script(plan: Plan, folder: str, *, title: str, scan_id: int, date: str) -> str:
+    _check_moves(plan)
     lines = [
         _HEADER.format(
             title=f"annulation : {title}", scan_id=scan_id, date=date, folder=_q(folder)

@@ -99,6 +99,14 @@ class AppConfig:
     def shown_archive_dir(self) -> str | None:
         return self.archive_display_path or self.archive_dir
 
+    def protected_paths(self) -> tuple[str, ...]:
+        """Folders a proposed command never names nor contains (shellcmd):
+        every root and disk known, and the archives folder."""
+        paths = [root.shown_path for root in self.roots]
+        if self.shown_archive_dir:
+            paths.append(self.shown_archive_dir)
+        return tuple(paths)
+
     def get_root(self, root_id: str) -> RootConfig | None:
         """Return the root with this identifier, or None."""
         for root in self.roots:

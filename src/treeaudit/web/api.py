@@ -30,7 +30,7 @@ from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES
 from treeaudit.scanner.browse import Listing, list_folders
 from treeaudit.scanner.walker import SubpathError
-from treeaudit.shellcmd import Action, cleanup_command, is_displayable
+from treeaudit.shellcmd import Action, CleanupCommand, cleanup_command, is_displayable
 from treeaudit.web.explorer import Basket, resolve_basket
 from treeaudit.web.jobs import Job, JobError, JobManager
 
@@ -206,6 +206,14 @@ def cancel_job(jobs: Jobs) -> dict[str, bool]:
     return {"cancelled": jobs.cancel()}
 
 
+def refused_warnings(result: CleanupCommand[Any]) -> list[str]:
+    return [
+        f"Refusé par la double vérification : {target.rel_path_display or '(dossier analysé)'}"
+        f" — {reason}"
+        for target, reason in result.refused
+    ]
+
+
 class ParasiteCommand(BaseModel):
     numbers: list[int] = Field(min_length=1, max_length=MAX_SELECTION)
     action: Literal["trash", "delete", "archive"] = "trash"
@@ -229,12 +237,15 @@ def parasite_command(
         Action(body.action),
         selected,
         root_display(config, scan),
+        scanned=scan["subpath"],
+        protected=config.protected_paths(),
         archive_name=f"scan{scan_id}-parasites.tar.gz",
     )
     return {
         "command": result.text,
         "count": len(selected),
         "skipped": [f.rel_path_display for f in result.skipped],
+        "warnings": refused_warnings(result),
         "outside_green": [f.number for f in selected if f.band.value != "green"],
     }
 
@@ -267,12 +278,19 @@ def dupes_command(run_id: int, body: DupesCommand, conn: Db, config: Config) -> 
     except SelectionError as exc:
         raise HTTPException(422, str(exc)) from exc
     targets = [copy for group in selected for copy in group.removable]
-    result = cleanup_command(Action(body.action), targets, root_display(config, scan))
+    result = cleanup_command(
+        Action(body.action),
+        targets,
+        root_display(config, scan),
+        scanned=scan["subpath"],
+        protected=config.protected_paths(),
+    )
     return {
         "command": result.text,
         "count": len(targets),
         "freed": sum(g.recoverable for g in selected),
         "skipped": [c.rel_path_display for c in result.skipped],
+        "warnings": refused_warnings(result),
     }
 
 
@@ -342,8 +360,11 @@ def basket_command(scan_id: int, body: BasketCommand, conn: Db, config: Config) 
         Action(body.action),
         basket.items,
         root_display(config, scan),
+        scanned=scan["subpath"],
+        protected=config.protected_paths(),
         archive_name=f"scan{scan_id}-panier.tar.gz",
     )
+    warnings += refused_warnings(result)
     return {
         "command": result.text,
         "count": len(basket.items),
