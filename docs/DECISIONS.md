@@ -548,8 +548,8 @@ Précise la mise en œuvre de D-024.
   - en **mode sombre**, les barres de taille avaient un fond blanc : elles suivent le thème.
 - **Restent à traiter** :
   - ~~l'accueil accumule les analyses sans moyen d'en supprimer, et une analyse ne dit pas de quel disque elle vient~~ : fait, voir D-043 ;
-  - « Ranger » compte la taille des fichiers, l'explorateur la place occupée sur le disque : les chiffres diffèrent pour un même dossier ;
-  - dans « Ranger », un dossier nommé `venv` qui ne contient qu'une note est pris pour un logiciel (sur la foi du nom) ; il est déplacé en entier, donc sans dommage, mais mal classé.
+  - ~~« Ranger » et l'explorateur ne comptaient pas la même chose~~ : fait. Même convention partout : un fichier montre sa taille, un dossier la place qu'il occupe sur le disque (le script vérifie toujours la taille exacte des fichiers). Vérifié : `Steam` 9,5 Mio des deux côtés ;
+  - ~~un dossier nommé `venv` qui ne contient qu'une note était pris pour un logiciel~~ : fait. Un nom de programme (`venv`, `node_modules`, `vendor`, `steamapps`…) ne suffit plus si plus de la moitié des fichiers sont des photos, vidéos, musiques ou documents (règle 11). Un vrai `venv` (avec `pyvenv.cfg` et des modules) reste un logiciel.
 
 ## D-043 — Oublier une analyse, compacter l'index (2026-10-25)
 - **Constat de l'exploration (D-042)** : l'accueil accumulait les analyses (« main » × 8), sans dire d'où elles venaient ni permettre d'en retirer. L'index pesait 870 Mo.

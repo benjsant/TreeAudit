@@ -276,3 +276,40 @@ def test_adjusted_plan_and_scripts(
     assert restored.returncode == 0, restored.stderr
     assert snapshot(messy) == before
     assert not (messy / "Classement").exists()
+
+
+def test_a_name_alone_never_makes_a_program(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    root = tmp_path / "disque"
+    touch(root / "notes" / "venv" / "important-notes.txt", b"n")  # only a note
+    touch(root / "Images" / "venv" / "IMG_1.jpg", b"p", PHOTO_TIME)  # only photos
+    touch(root / "Images" / "venv" / "IMG_2.jpg", b"q", PHOTO_TIME)
+    touch(root / "outil" / "venv" / "pyvenv.cfg", b"home = /usr")  # a real one
+    touch(root / "outil" / "venv" / "lib" / "site.py", b"x")
+    touch(root / "outil" / "venv" / "lib" / "mod.so", b"y")
+    plan, _ = scan_and_plan(tmp_path, root, data_disk_table)
+    moves = {move.source: move for move in plan.moves}
+    assert moves["notes"].category == "Documents"  # moved as a folder of documents
+    assert moves["Images"].category == "Photos"
+    assert moves["outil/venv"].category == "Logiciels"
+
+
+def test_sizes_follow_the_explorer(
+    tmp_path: Path, messy: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    plan, scan_id = scan_and_plan(tmp_path, messy, data_disk_table)
+    conn = connect(str(tmp_path / "data"))
+    try:
+        from treeaudit.web.queries import all_children, start_node
+
+        start = start_node(conn, scan_id)
+        assert start is not None
+        shown = {node.rel_path: node.size for node in all_children(conn, scan_id, start.entry_id)}
+    finally:
+        conn.close()
+    for move in plan.moves:
+        if "/" not in move.source:  # top-level elements are listed by the explorer too
+            assert move.space == shown[move.source], move.source
+    album = next(m for m in plan.moves if m.source == "Vacances Bretagne")
+    assert album.space >= album.size  # a folder: the place it uses, not just its bytes

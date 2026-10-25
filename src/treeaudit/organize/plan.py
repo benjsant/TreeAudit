@@ -342,6 +342,8 @@ class Move:
     reason: str
     renamed: bool = False
     subfolder: str | None = None
+    space: int = 0
+    """What the explorer shows: a file's size, or the place a folder uses."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,7 +369,7 @@ class Plan:
             total = totals[move.category]
             total[0] += 1
             total[1] += move.files
-            total[2] += move.size
+            total[2] += move.space
         return {name: (t[0], t[1], t[2]) for name, t in sorted(totals.items())}
 
     @property
@@ -394,6 +396,7 @@ class _Node:
     kind: str
     extension: str | None
     size: int
+    allocated: int
     mtime_ns: int
     children: list[_Node] = field(default_factory=list)
     # Filled bottom-up for folders:
@@ -401,6 +404,9 @@ class _Node:
     years: Counter[int] = field(default_factory=Counter)
     files: int = 0
     total: int = 0
+    space: int = 0
+    """Place used on the disk by the folder and everything below, as the explorer
+    shows it (a file shows its own size)."""
     unmovable: bool = False
     """Holds something that must stay put (hidden, link, special, bad name)."""
     has_block: bool = False
@@ -429,6 +435,7 @@ def _load(conn: sqlite3.Connection, scan_id: int, start_id: int) -> _Node:
             kind=row["kind"],
             extension=row["extension"],
             size=row["size"],
+            allocated=row["allocated_size"],
             mtime_ns=row["mtime_ns"],
         )
         for row in rows
@@ -453,7 +460,7 @@ LOAD_SQL = (
     "  ON e.scan_id = ? AND e.parent_id = sub.id"
     ") "
     "SELECT e.entry_id, e.parent_id, e.name, e.name_display, e.rel_path, "
-    "e.rel_path_display, e.kind, e.extension, e.size, e.mtime_ns "
+    "e.rel_path_display, e.kind, e.extension, e.size, e.allocated_size, e.mtime_ns "
     "FROM sub CROSS JOIN entry e ON e.scan_id = ? AND e.entry_id = sub.id LIMIT ?"
 )
 
@@ -470,6 +477,7 @@ def _summarize(node: _Node) -> None:
         if current.kind != "dir":
             continue
         if not done:
+            current.space = current.allocated
             stack.append((current, True))
             stack.extend((child, False) for child in current.children)
             continue
@@ -479,11 +487,13 @@ def _summarize(node: _Node) -> None:
                 current.years.update(child.years)
                 current.files += child.files
                 current.total += child.total
+                current.space += child.space
                 current.unmovable |= child.unmovable or _hidden(child)
                 current.has_block |= child.has_block or _is_block(child)
             elif child.kind == "file":
                 current.files += 1
                 current.total += child.size
+                current.space += child.allocated
                 if child.name in NEUTRAL_FILES:
                     continue
                 if _hidden(child) or not is_displayable(child.rel_path):
@@ -502,16 +512,33 @@ def _block_kind(node: _Node) -> str | None:
     names = {child.name for child in node.children}
     if names & PROJECT_MARKERS or any(n.endswith(_PROJECT_SUFFIXES) for n in names):
         return PROJECTS
-    if node.name in SOFTWARE_DIRS or node.name.endswith(b".app"):
+    if (node.name in SOFTWARE_DIRS or node.name.endswith(b".app")) and not _mostly_personal(node):
         return SOFTWARE
     # Its parent is the program: Steam/steamapps, a Wine prefix's drive_c, a
     # copied "C:" with Program Files... moving the inner folder alone breaks it.
-    if any(child.kind == "dir" and child.name in _INSTALL_DIRS for child in node.children):
+    if any(
+        child.kind == "dir" and child.name in _INSTALL_DIRS and not _mostly_personal(child)
+        for child in node.children
+    ):
         return SOFTWARE
     extensions = {child.extension for child in node.children if child.kind == "file"}
     if "exe" in extensions and "dll" in extensions:  # an installed Windows program
         return SOFTWARE
     return None
+
+
+PERSONAL = frozenset({PHOTOS, VIDEOS, MUSIC, DOCUMENTS})
+
+
+def _mostly_personal(node: _Node) -> bool:
+    """More than half of the files below are photos, videos, music or documents.
+
+    A folder named like a program's (venv, node_modules, vendor...) is then not
+    taken for one on the strength of its name (rule 11 of CLAUDE.md).
+    """
+    counted = sum(node.categories.values())
+    personal = sum(node.categories[category] for category in PERSONAL)
+    return counted > 0 and personal * 2 > counted
 
 
 def _is_block(node: _Node) -> bool:
@@ -572,6 +599,7 @@ class _Planner:
                 reason=reason,
                 renamed=renamed,
                 subfolder=sub,
+                space=node.space if node.kind == "dir" else node.size,
             )
         )
 
