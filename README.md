@@ -2,6 +2,8 @@
 
 **Fais le tri dans tes disques, sans risque.** TreeAudit analyse un dossier ou un disque (par exemple une vieille sauvegarde) et te montre ce qui prend de la place, ce qui est en double et ce qui peut être nettoyé, en expliquant chaque résultat. Application locale pour Linux, avec une interface web et une ligne de commande.
 
+📖 **[Guide d'utilisation complet](docs/guide/README.md)** : installer, analyser, nettoyer, ranger, et comprendre chaque commande proposée.
+
 > [!WARNING]
 > **Mise en garde — à lire avant utilisation**
 >
@@ -24,11 +26,14 @@
 | **Doublons exacts** (empreinte SHA-256), copie à garder suggérée, copies dans les logiciels, jeux et dépôts git protégées | ✅ disponible |
 | **Petits fichiers en double** et fichiers vides (« micro-nettoyage ») | ✅ disponible |
 | Recherche : nom, extension, motif, regex, taille, type | ✅ disponible |
-| Commandes de nettoyage prêtes à copier (corbeille, suppression, archive) | ✅ disponible |
+| Commandes de nettoyage prêtes à copier (corbeille, suppression, archive), **vérifiées deux fois** avant d'être affichées | ✅ disponible |
+| Explorateur, panier et **galerie d'images** | ✅ disponible |
+| **Ranger** un dossier par catégories, avec aperçu, script de rangement et script d'annulation | ✅ disponible |
+| **Projets et logiciels** : inventaire, vieux projets, dépendances recréables | ✅ disponible |
 | Exports JSON et CSV | ✅ disponible |
 | **Archive vérifiée** d'un dossier avant nettoyage (`.tar.gz`), relue et comparée fichier par fichier | ✅ disponible |
+| **Mode expert** : avis d'une IA locale (carte graphique AMD), sans jamais rien exécuter | ✅ disponible |
 | Dossiers presque identiques (similarité) | 🚧 prévu |
-| Aide d'une IA locale pour les cas ambigus (sans jamais rien exécuter) | 🚧 envisagé |
 | Windows, macOS | ❌ pas en V1 |
 
 Des outils comme [Czkawka](https://github.com/qarmin/czkawka) trouvent très bien les doublons. TreeAudit vise plutôt l'**audit de dossiers** : comprendre un vieux disque de sauvegarde, repérer les projets de développement et ce qui s'y recrée tout seul, et toujours **expliquer pourquoi** un élément est proposé.
@@ -63,6 +68,8 @@ Double-clique sur le fichier, ou lance-le dans un terminal. Le navigateur s'ouvr
 ## Utilisation
 
 ### Dans le navigateur
+
+En résumé ; chaque étape a son chapitre dans le [guide](docs/guide/README.md).
 
 1. **Choisir le disque** : TreeAudit propose les disques externes branchés, avec leur occupation. Navigue dans les dossiers, puis « Analyser ».
 2. **Analyse** : la progression s'affiche, et tu peux annuler.
@@ -164,6 +171,7 @@ Méthode et chiffres détaillés : [docs/ROADMAP.md](docs/ROADMAP.md) (phase 6 t
 
 | Document | Contenu |
 |---|---|
+| **[Guide d'utilisation](docs/guide/README.md)** | **Chaque fonction expliquée pas à pas, sécurité des commandes, dépannage** |
 | [PROJECT_SPEC.md](docs/PROJECT_SPEC.md) | Spécification fonctionnelle et définitions |
 | [SECURITY.md](docs/SECURITY.md) | Modèle de sécurité, menaces, limites |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, déroulement d'une analyse, modèle de données |
