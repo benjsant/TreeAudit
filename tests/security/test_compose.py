@@ -254,6 +254,11 @@ def test_llm_container_is_hardened_and_offline() -> None:
     assert LLM_OVERRIDE["networks"]["llm"]["internal"] is True
     # The GPU compute node only: never /dev, never a display or card node.
     assert llm["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128"]
+    # Only the render node's own group, never a fixed one (0 would be root's).
+    assert llm["group_add"] == [
+        "${TREEAUDIT_RENDER_GID:?no GPU render node: ./treeaudit expert checks it}"
+    ]
+    assert all("group_add" not in s for n, s in COMPOSE["services"].items())
     (volume,) = llm["volumes"]
     assert volume["read_only"] is True and volume["target"] == "/models"
     for flag in ("--no-webui", "--no-webui-mcp-proxy", "--offline"):

@@ -41,6 +41,22 @@
 </section>
 {% endif %}
 
+<details class="tech expert-box"{% if expert %} open{% endif %}>
+  <summary>💡 Mode expert (IA locale){% if expert %} : <strong>actif</strong>{% endif %}</summary>
+  {% if expert %}
+  <p class="small">Une IA tourne sur ta carte graphique, sans accès à Internet. Elle donne son avis sur les dossiers douteux à nettoyer et propose des sous-dossiers pour ranger. <strong>Elle ne voit que des noms, des tailles et des dates, et ne peut rien modifier.</strong></p>
+  <p class="small muted">Pour l'arrêter : arrête TreeAudit, puis <code class="cmd">./treeaudit expert off</code></p>
+  {% elif container_mode %}
+  <p class="small">Facultatif : une IA locale donne son avis sur les dossiers douteux et propose des sous-dossiers pour ranger. Elle ne voit que des noms, des tailles et des dates, et ne peut rien modifier.</p>
+  <ul class="small">
+    <li>Il faut une carte graphique <strong>AMD</strong> avec environ <strong>4 Gio de mémoire vidéo</strong>, et 2 Gio d'espace disque pour le modèle.</li>
+    <li>Pour l'activer, arrête TreeAudit, puis lance : <code class="cmd">./treeaudit expert</code><br><span class="muted">Il vérifie ta carte, télécharge et vérifie le modèle, puis redémarre avec l'IA. Elle reste active aux démarrages suivants.</span></li>
+  </ul>
+  {% else %}
+  <p class="small muted">Le mode expert n'existe que dans la version Docker de TreeAudit, pas dans l'AppImage.</p>
+  {% endif %}
+</details>
+
 {% if refused %}
 <details class="tech">
   <summary>Dossiers refusés par la configuration</summary>

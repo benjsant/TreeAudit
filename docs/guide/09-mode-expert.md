@@ -24,14 +24,28 @@ Le modèle retenu est **Ministral 3 3B** (Mistral AI, licence Apache 2.0). Il a 
 
 ## L'activer
 
+Arrête TreeAudit, puis :
+
 ```bash
-./treeaudit llm-download ministral      # une seule fois : télécharge et vérifie le modèle (2 Gio)
-TREEAUDIT_EXPERT=1 TREEAUDIT_LLM_MODEL=Ministral-3-3B-Instruct-2512-Q4_K_M.gguf ./treeaudit
+./treeaudit expert
 ```
 
-- Le téléchargement est vérifié par son empreinte SHA-256 : un fichier altéré est écarté.
-- Le modèle est rangé dans `models/`, en lecture seule pour le conteneur.
-- Le conteneur de l'IA n'a accès qu'à la puce de calcul de la carte graphique (`/dev/dri/renderD128`), jamais à l'écran ni au reste de `/dev`.
-- Sans les deux variables, TreeAudit démarre sans IA. Les boutons « 💡 » n'apparaissent alors pas.
+Cette seule commande :
 
-**Pour la retirer** : supprime le fichier dans `models/`, puis l'image Docker `ghcr.io/ggml-org/llama.cpp`.
+1. vérifie ta **carte graphique** et affiche sa mémoire vidéo (elle refuse une carte NVIDIA, et prévient sous 4 Gio) ;
+2. vérifie qu'il reste **3 Gio libres**, puis **télécharge le modèle** s'il manque, et le vérifie par son empreinte SHA-256 (un fichier altéré est écarté) ;
+3. **retient ton choix** : le mode expert restera actif à chaque `./treeaudit` ;
+4. démarre TreeAudit avec l'IA.
+
+La page d'accueil indique alors « 💡 Mode expert (IA locale) : **actif** ». Les boutons « 💡 » apparaissent sur les pages À nettoyer et Ranger.
+
+- **L'arrêter** : `./treeaudit expert off`. Le modèle reste dans `models/` ; supprime-le pour libérer 2 Gio.
+- **Pour un seul démarrage sans IA** : `TREEAUDIT_EXPERT=0 ./treeaudit`.
+- **Un autre modèle**, pour comparer : `./treeaudit expert qwen3` ou `./treeaudit expert gemma3`. Ministral est celui qui a obtenu les meilleurs résultats.
+
+Ce qui protège ta machine :
+
+- le modèle est rangé dans `models/`, en lecture seule pour le conteneur ;
+- le conteneur de l'IA n'a pas accès à Internet, et n'a accès qu'à la puce de calcul de la carte graphique (`/dev/dri/renderD128`), jamais à l'écran ni au reste de `/dev`. Sur Debian ou Mint, il reçoit pour cela le groupe `render`, qui ne donne accès qu'à cette puce.
+
+**Pour la retirer complètement** : `./treeaudit expert off`, puis supprime le fichier dans `models/` et l'image Docker `ghcr.io/ggml-org/llama.cpp`.

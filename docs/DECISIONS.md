@@ -604,3 +604,14 @@ Précise la mise en œuvre de D-024.
 - **Où** : l'explorateur (liste, tri, galerie, barres du bilan), les totaux de « Ranger » et la fiche. Le script de rangement vérifie toujours la taille exacte.
 - **Inchangé** : la recherche, qui filtre et affiche la taille des fichiers (un critère « plus de 100 Mo » porte sur la taille). Les petits fichiers gardent leur taille : 32 o, et non les 4 Kio d'un bloc.
 
+## D-048 — Mode expert en une commande (2026-10-26)
+- **Demande** : le mode expert doit être facile à installer avant les essais sur de vrais disques. Il fallait jusqu'ici deux commandes et deux variables à connaître. Il reste **AMD seulement** pour l'instant (cartes Intel acceptées, mais lentes ; NVIDIA refusée avec un message).
+- **`./treeaudit expert [modèle]`** :
+  - lit sur sysfs le fabricant de la carte (`renderD128/device/vendor`) et sa mémoire vidéo (`mem_info_vram_total`), et prévient sous 4 Gio (3,8 Gio mesurés sur une RX 6600 : 2,0 pour le modèle, 1,6 pour le contexte, 0,1 de calcul) ;
+  - vérifie qu'il reste 3 Gio libres, puis télécharge et vérifie le modèle s'il manque ;
+  - écrit son choix dans `models/.expert`, puis redémarre.
+- **`models/.expert` est lu comme une donnée**, comme `.env` : une ligne, retenue seulement si c'est le nom d'un modèle connu **et** présent. Sinon, elle est ignorée et le lanceur le dit. L'environnement l'emporte : `TREEAUDIT_EXPERT=0` le désactive pour un démarrage. `./treeaudit expert off` efface le choix et garde le modèle.
+- **Groupe `render`** : sur Debian ou Mint, `/dev/dri/renderD128` n'est ouvert qu'au groupe `render`. Le conteneur `llm`, qui tourne avec l'UID et le GID de l'utilisateur, n'aurait pas pu calculer. Il reçoit donc ce groupe-là et aucun autre (`group_add`, GID lu sur le nœud par le lanceur). Il ne donne accès qu'au seul périphérique déjà transmis. Les autres conteneurs n'en reçoivent aucun (test).
+- **Interface** : la page d'accueil a un encadré « 💡 Mode expert », qui donne l'état et, s'il est inactif, la carte nécessaire et la commande à lancer. L'interface ne peut ni télécharger ni démarrer l'IA : le conteneur `app` n'a ni Internet ni accès à Docker (règle 6).
+- **Essai réel** : `./treeaudit expert` sur la machine du mainteneur. La carte AMD est détectée (8 176 Mio), le modèle déjà présent n'est pas retéléchargé, l'accueil indique « actif », le conteneur `llm` a reçu le groupe 105 (`render`) et l'IA répond depuis `app`.
+

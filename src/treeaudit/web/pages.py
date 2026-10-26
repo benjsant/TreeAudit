@@ -230,6 +230,8 @@ def index(request: Request, conn: Db) -> Response:
         or request.app.state.external_enabled,
         index_size=index_size(config.data_dir),
         compacted=request.query_params.get("compacte") is not None,
+        expert=request.app.state.llm is not None,
+        container_mode=config.container_mode,
     )
 
 

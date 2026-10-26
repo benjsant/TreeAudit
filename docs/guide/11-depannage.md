@@ -39,8 +39,9 @@ Elle exige Linux 6.7 ou plus récent, pour pouvoir s'enfermer elle-même (Landlo
 
 ## Le mode expert ne démarre pas
 
-- `Mode expert : modèle absent` : lance `./treeaudit llm-download ministral`, puis vérifie que le nom donné dans `TREEAUDIT_LLM_MODEL` est exactement celui du fichier dans `models/`.
-- Pas de carte graphique AMD ou Intel, ou pas assez de mémoire vidéo : voir [9. Mode expert](09-mode-expert.md#ce-quil-faut).
+- Relance `./treeaudit expert` : il dit ce qui manque (carte graphique, place disque, modèle) et le corrige quand il le peut.
+- « Mode expert ignoré : models/.expert ne désigne pas un modèle téléchargé » : le modèle a été supprimé. `./treeaudit expert` le télécharge à nouveau.
+- Carte NVIDIA, ou pas assez de mémoire vidéo : voir [9. Mode expert](09-mode-expert.md#ce-quil-faut).
 
 ## Signaler un problème
 

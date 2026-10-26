@@ -32,7 +32,7 @@
 | **Projets et logiciels** : inventaire, vieux projets, dépendances recréables | ✅ disponible |
 | Exports JSON et CSV | ✅ disponible |
 | **Archive vérifiée** d'un dossier avant nettoyage (`.tar.gz`), relue et comparée fichier par fichier | ✅ disponible |
-| **Mode expert** : avis d'une IA locale (carte graphique AMD), sans jamais rien exécuter | ✅ disponible |
+| **Mode expert** : avis d'une IA locale (carte graphique AMD), sans jamais rien exécuter ; activé par `./treeaudit expert` | ✅ disponible |
 | Dossiers presque identiques (similarité) | 🚧 prévu |
 | Windows, macOS | ❌ pas en V1 |
 

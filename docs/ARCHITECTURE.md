@@ -63,13 +63,13 @@ Le lanceur `./treeaudit` (bash, D-035) prépare tout **sur l'hôte**, puis appel
 
 1. il valide les dossiers demandés et le dossier d'archives avec la table des montages de l'hôte, via les services `check` et `check-archive` (sans réseau ni volume, la table leur est donnée sur l'entrée standard) ;
 2. il détecte les disques externes et les partitions de données (service `check-disks`), et écrit un fichier compose qui monte **chaque disque accepté, en lecture seule**, sous `/audit/disks/<id>` ;
-3. il démarre `app` et `gateway`, et `llm` en mode expert.
+3. il démarre `app` et `gateway`, et `llm` en mode expert. `./treeaudit expert` vérifie la carte graphique (sysfs), télécharge le modèle et retient le choix dans `models/.expert`, relu ensuite comme une donnée : seul un nom de modèle connu et présent compte (D-048).
 
 | Service | Rôle | Réseau | Volumes |
 |---|---|---|---|
 | `app` | serveur web et moteur | interne, sans sortie | disques en lecture seule, `/data`, `/archives` |
 | `gateway` | publie le port sur `127.0.0.1` et relaie octet par octet | interne et `edge` | aucun |
-| `llm` | serveur llama.cpp (mode expert, `compose.llm.yaml`) | `llm`, interne | `models/` en lecture seule ; seul périphérique : `/dev/dri/renderD128` |
+| `llm` | serveur llama.cpp (mode expert, `compose.llm.yaml`) | `llm`, interne | `models/` en lecture seule ; seul périphérique : `/dev/dri/renderD128`, avec le seul groupe de ce nœud (`group_add`) |
 | `check`, `check-disks`, `check-archive` | validations sur l'hôte | aucun | aucun |
 | `dev` | tests et outils de qualité | aucun | le dépôt sous `/app` |
 

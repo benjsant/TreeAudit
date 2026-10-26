@@ -1263,3 +1263,9 @@ def test_the_analysed_folder_is_named_as_the_user_knows_it(
         assert ">My Disk</a>" in crumbs.group(1) and ">root</a>" not in crumbs.group(1)
     projects = client.get(f"/scans/{scanned}/projects").text
     assert re.search(r"recréables · <strong>\d+ coché", projects)
+
+
+def test_home_explains_how_to_turn_the_expert_mode_on(client: TestClient) -> None:
+    page = client.get("/").text
+    assert "💡 Mode expert (IA locale)" in page and "actif" not in page.split("Mode expert")[1][:40]
+    assert "./treeaudit expert" in page or "AppImage" in page

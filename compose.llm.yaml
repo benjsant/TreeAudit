@@ -19,6 +19,9 @@ services:
     pids_limit: 256
     networks: [llm]
     devices: ["/dev/dri/renderD128:/dev/dri/renderD128"]
+    # The render node's group (D-048): on Debian or Mint it is not open to all.
+    # It grants that node only, the one device given above.
+    group_add: ["${TREEAUDIT_RENDER_GID:?no GPU render node: ./treeaudit expert checks it}"]
     environment:
       # Vulkan's shader cache goes to the tmpfs, the image is read-only.
       HOME: /tmp
