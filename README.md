@@ -174,7 +174,7 @@ Méthode et chiffres détaillés : [docs/ROADMAP.md](docs/ROADMAP.md) (phase 6 t
 | **[Guide d'utilisation](docs/guide/README.md)** | **Chaque fonction expliquée pas à pas, sécurité des commandes, dépannage** |
 | [PROJECT_SPEC.md](docs/PROJECT_SPEC.md) | Spécification fonctionnelle et définitions |
 | [SECURITY.md](docs/SECURITY.md) | Modèle de sécurité, menaces, limites |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, déroulement d'une analyse, modèle de données |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Pour développer : carte des modules, Docker et natif, tâches de fond, chemin d'une commande, modèle de données, recettes |
 | [DECISIONS.md](docs/DECISIONS.md) | Journal des décisions datées |
 | [ROADMAP.md](docs/ROADMAP.md) | Phases de développement et mesures |
 | [FILTERS_AND_REGEX.md](docs/FILTERS_AND_REGEX.md) | Syntaxe de la recherche |

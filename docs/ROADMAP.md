@@ -135,7 +135,7 @@ Aucun parcours de fichiers dans cette phase.
 
 ## Documentation
 - [x] Guide d'utilisation (`docs/guide/`) : onze chapitres, de l'installation au dépannage, vérifiés contre le code.
-- [ ] `ARCHITECTURE.md` remis à jour pour les développeurs : carte des modules, tâches de fond, commandes, bac à sable, IA.
+- [x] `ARCHITECTURE.md` remis à jour pour les développeurs : carte des modules, deux modes d'exécution, tâches de fond, chemin d'une commande, IA, modèle de données, pièges SQLite, recettes.
 
 ## Phase 11 — Projets et logiciels (D-044)
 - [x] Détection sur l'index : projets par fichiers marqueurs ou dépôt git, logiciels et jeux (Steam, GOG, Wine, programmes Windows, `.app`, AppImage). Seul le dossier le plus haut est retenu, et rien n'est cherché dans les dépendances ni les dossiers cachés.
