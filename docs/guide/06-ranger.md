@@ -36,7 +36,7 @@ Sur chaque catégorie, **« 📂 Proposer des sous-dossiers »** regroupe ses é
 
 Un sous-dossier regroupe au moins deux éléments, et jamais tous (il ne rangerait rien). Survole une proposition pour voir pourquoi elle est faite. Clique dessus pour l'accepter, ou sur « Accepter toutes les suggestions », puis sur « 🔄 Mettre à jour l'aperçu ». **Rien ne change tant que tu ne les acceptes pas.**
 
-Les photos et les vidéos sont déjà rangées par année : les sous-dossiers se placent à l'intérieur.
+Les photos et les vidéos sont déjà rangées par année : les sous-dossiers se placent à l'intérieur. Les noms donnés par un appareil ou une application (un préfixe suivi d'une date ou d'un long numéro) ne forment pas de groupe : ils disent d'où vient la photo, pas ce qu'elle montre.
 
 En [mode expert](09-mode-expert.md), **« 💡 Suggestions de l'IA »** fait la même chose avec l'IA locale. Les règles fixes font aussi bien sur les cas d'essai, en un instant (voir D-050).
 

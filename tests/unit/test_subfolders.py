@@ -89,6 +89,30 @@ def test_a_sub_folder_holding_everything_is_never_proposed() -> None:
     assert groups(found) == {"EDF": [1, 2], "SFR": [3, 4]}
 
 
+def test_photos_named_by_a_device_are_not_grouped() -> None:
+    found = propose(
+        PHOTOS,
+        moves(
+            "XY_20210305_101112.jpg",
+            "XY_20210306_093000.jpg",
+            "XY_20210412_181818.jpg",
+            "Vacances 001.jpg",
+            "Vacances 002.jpg",
+            "Vacances 003.jpg",
+            "IMG-20210305-WA0012.jpg",
+            "IMG-20210412-WA0003.jpg",
+            category=PHOTOS,
+        ),
+    )
+    # A camera's prefix says nothing of the picture; a person's series does.
+    assert groups(found) == {"WhatsApp": [7, 8], "Vacances": [4, 5, 6]}
+    # The same names among documents are a person's choice: they stay grouped.
+    assert (
+        "XY"
+        in propose(DOCUMENTS, moves("XY_20210305_1.pdf", "XY_20210306_2.pdf", "a.pdf")).subfolders
+    )
+
+
 def test_names_by_category() -> None:
     photos = propose(
         PHOTOS, moves("Screenshot_1.png", "Capture d'écran 2.png", "a.jpg", category=PHOTOS)

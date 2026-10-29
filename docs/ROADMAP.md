@@ -148,7 +148,9 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Ajustements dans l'aperçu : laisser en place, changer de catégorie, renommer les dossiers ; repris par les scripts.
 - [x] Étape B : sous-dossiers suggérés par l'IA (mode expert), affichés seulement, appliqués par l'utilisateur ; banc d'essai (Ministral 98 %, piège sans effet).
 - [x] Suggestions en tâche de fond, avec progression et annulation.
-- [x] Sous-dossiers proposés par des règles fixes, pour tous, sans IA (D-050) : thèmes et mots communs, explicables, instantanés.
+- [x] Sous-dossiers proposés par des règles fixes, pour tous, sans IA (D-050) : thèmes et mots communs, explicables, instantanés ; séries d'appareil photo écartées après un essai sur un vrai dossier.
+- [ ] À réfléchir : les photos sans nom parlant (64 % sur le vrai dossier). Idée du mainteneur : les trier soi-même en les regardant, les nommer, et s'aider de Czkawka (images semblables) ; ce que TreeAudit pourrait y apporter sans lire le contenu reste à définir.
+- [ ] À décider : garder ou retirer les suggestions de l'IA dans Ranger.
 
 ## Phase 9 bis — Mode expert, LLM local (D-040)
 - [x] Étape 1 : conteneur llama.cpp (Vulkan) sans Internet, téléchargement vérifié des modèles, banc d'essai ; Ministral 3 3B retenu (16/16, aucune réponse dangereuse).

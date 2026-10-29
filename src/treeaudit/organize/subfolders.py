@@ -38,6 +38,8 @@ NO_SUBFOLDERS = frozenset({PROJECTS, SOFTWARE})
 """Moved whole, as they are: never split into sub-folders."""
 MIN_MEMBERS = 2
 MAX_NAME_WORDS = 2
+DEVICE_DIGITS = 6
+DEVICE_SHARE = 0.8
 NONE = "aucun"
 
 # Names that say nothing of the content: where the files came from, or one of
@@ -169,6 +171,7 @@ _STOP_WORDS = frozenset(
 _WORD_BREAKS = re.compile(r"[\W_]+")
 _SEPARATORS = re.compile(r"[^0-9a-z]+")
 _DIGITS = re.compile(r"[0-9]+")
+_DIGITS_ONLY = re.compile(r"[^0-9]+")
 
 
 def _stem(name: str) -> str:
@@ -282,6 +285,22 @@ def _display(forms: Counter[str]) -> str:
     return form[:1].upper() + form[1:] if form.islower() else form
 
 
+def _device_series(
+    group: set[int], key: str, words: Mapping[int, list[tuple[str, str]]], names: Mapping[int, str]
+) -> bool:
+    """Photos named by a camera or an app: the shared word and a date or a long
+    number, nothing else ("XY_20210305_101112"). It says where they come from,
+    not what they show; a series named by a person keeps a short number
+    ("Vacances 001"). Seen on a real folder (D-050)."""
+    device = sum(
+        1
+        for entry in group
+        if {_key(w) for w, _ in words[entry]} <= {key}
+        and len(_DIGITS_ONLY.sub("", _stem(names[entry]))) >= DEVICE_DIGITS
+    )
+    return device >= DEVICE_SHARE * len(group)
+
+
 def _accept(name: str, used: set[str], category: str) -> str | None:
     clean = clean_folder_name(name)
     if (
@@ -348,6 +367,8 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
             continue
         if len(group) < -size:  # some were taken since: put it back at its true rank
             heapq.heappush(heap, (-len(group), length, key))
+            continue
+        if category in (PHOTOS, VIDEOS) and _device_series(group, key, words, names):
             continue
         # Words every member shares make the name, in the order they are
         # written: "Daft Punk", not "Daft"; "Cours Python", not "Chapitre".
