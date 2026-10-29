@@ -76,6 +76,27 @@
 - Conteneur : disque non monté, monté en écriture, ou devenu disque système : refusé. Racine non montée : `not_mounted`, masquée à l'accueil.
 - Web : liste des disques avec leur occupation, liste des disques non proposés, nom piégé, analyse d'un disque, conseil d'activation quand l'option est désactivée.
 - Réel : détection par Docker (`/mnt/Data` refusé), disque forgé refusé dans le conteneur, mode « un dossier » inchangé.
+- Disque arraché, simulé (`test_disk_removed.py`) : après quelques appels, chaque lecture échoue avec `EIO`, comme sur un disque USB retiré. Arraché pendant l'analyse : `incomplete`, ce qui a été lu est gardé, erreurs `EIO` listées. Arraché avant le premier listage : `incomplete`, rien de lu. Même les dossiers déjà ouverts illisibles : `failed`, avec le message. Arraché pendant les doublons : `incomplete`, aucun fichier illisible dans un groupe.
+- Réel (2026-10-29) : un disque dur USB 2,5 pouces, ext4, monté sous `/mnt`, est détecté et proposé par `./treeaudit disks` ; une analyse de 24 000 éléments et une recherche de doublons s'y terminent.
+
+### Essai réel avec un disque USB (mainteneur)
+À faire avec un disque qui ne contient **que des copies**. TreeAudit n'y écrit jamais, mais arracher un disque monté en écriture sur l'hôte peut abîmer ce que d'autres programmes y écrivaient. Rapporter seulement les états et les chiffres affichés, jamais des noms de fichiers.
+
+**A. Disque branché après le démarrage (Docker)**
+1. Disque débranché, lancer `./treeaudit` : le disque n'est pas proposé.
+2. Brancher le disque, l'ouvrir dans le gestionnaire de fichiers. Attendu : toujours absent de la page (avec Docker, les disques sont lus au démarrage) ; `./treeaudit disks`, dans un autre terminal, le montre « proposé ».
+3. `Ctrl+C`, puis `./treeaudit` : le disque est proposé ; une analyse se termine « terminée ».
+
+**B. Disque arraché pendant une analyse**
+1. `sync`, puis lancer l'analyse du disque entier ; attendre que le compteur d'éléments avance.
+2. Débrancher le câble.
+3. Attendu : l'analyse finit « incomplète » (erreurs « Input/output error » dans « Détails techniques ») ou « échouée » avec un message ; **jamais « terminée »**. La page reste utilisable.
+4. Rebrancher le disque **sans redémarrer** TreeAudit et relancer l'analyse. Attendu : pas « terminée » (le conteneur garde l'ancien montage, devenu illisible).
+5. `Ctrl+C`, `./treeaudit` : le disque est de nouveau proposé et une analyse se termine « terminée ».
+
+À rapporter : l'état et le nombre d'erreurs à chaque étape, et tout ce qui a gelé la page.
+
+La vitesse à froid sur ce type de disque est déjà mesurée (`ROADMAP.md`, phase 7, 2026-10-20).
 
 ## Ranger (D-041)
 - Plan : album gardé en entier, projet et installation Steam jamais découpés, fichiers en vrac par type et année, collisions renommées « (2) », éléments cachés, liens et dossiers vides laissés en place.

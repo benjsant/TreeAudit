@@ -6,6 +6,10 @@
 - **Avec l'AppImage**, clique sur **« 🔄 Actualiser »** sur la page de choix.
 - `./treeaudit disks` liste les disques proposés **et refusés**, avec la raison. Un disque réseau, une image ISO, ou un disque dont TreeAudit ne peut pas prouver qu'il n'est pas celui du système, sont refusés volontairement.
 
+## J'ai débranché le disque pendant une analyse
+
+L'analyse finit « incomplète » ou « échouée », jamais « terminée » : ce qui a été lu avant reste consultable, mais les chiffres sont des minimums. Rebranche le disque, **relance TreeAudit** (`Ctrl+C`, puis `./treeaudit`) avant de refaire l'analyse : avec Docker, TreeAudit garde sinon l'ancien accès au disque, devenu illisible.
+
 ## L'analyse est « incomplète »
 
 Certains éléments n'ont pas pu être lus, le plus souvent faute de droits. Ils sont listés en bas du bilan, dans « Détails techniques ». Les chiffres affichés sont alors des minimums. TreeAudit ne demandera jamais `sudo` pour les lire.

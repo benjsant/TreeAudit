@@ -176,7 +176,7 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Docker : détection sur l'hôte, montage individuel en lecture seule récursive des seuls disques acceptés, nouvelle vérification dans le conteneur ; dossier de `.env` devenu facultatif.
 - [x] Interface : choix d'un disque avec son occupation, et liste des disques non proposés avec la raison.
 - [x] Essais réels : `/mnt/Data` (partition du NVMe système) refusé ; un disque forgé sur le NVMe système refusé dans le conteneur ; le mode « un dossier » est inchangé.
-- [ ] Essai avec un vrai disque USB (mainteneur).
+- [ ] Essai avec un vrai disque USB (mainteneur) : détection et analyse réelles faites (2026-10-29), disque arraché simulé par les tests ; restent le branchement après démarrage et l'arrachement réel (protocole dans `TEST_PLAN.md`).
 
 ## Phase 6 bis — Archivage vérifié (D-024)
 - [x] Dossier de sortie dédié, déclaré et validé (D-032) : natif, hôte (`make check-root`) et conteneur.
