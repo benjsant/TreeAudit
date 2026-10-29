@@ -266,7 +266,8 @@ def test_a_large_category_is_sampled_for_the_proposal() -> None:
 )
 def test_vague_sub_folder_names_are_never_proposed(name: str, generic: bool) -> None:
     """Seen on a real folder and in the benchmark (D-049)."""
-    from treeaudit.llm.organize import _clean_subfolders, is_generic_name
+    from treeaudit.llm.organize import _clean_subfolders
+    from treeaudit.organize.subfolders import is_generic_name
 
     assert is_generic_name(name) is generic
     assert _clean_subfolders([name, "Factures"], "Photos") == (

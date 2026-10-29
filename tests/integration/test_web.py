@@ -1092,6 +1092,46 @@ def test_ai_suggestions_are_shown_never_applied(
         expert.app.state.jobs.wait()  # type: ignore[attr-defined]
 
 
+def test_rule_sub_folders_are_shown_never_applied(
+    tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    for name in ("facture-edf.pdf", "Facture SFR.pdf", "avis_imposition.pdf", "Avis d'impôt.pdf"):
+        touch(root / "papiers" / name, name.encode())
+    touch(root / "papiers" / f"{XSS} facture.pdf", b"x")
+    touch(root / "papiers" / "notes.txt", b"n")
+    touch(root / "papiers" / "c.mp3", b"c")  # a mixed folder: its files are proposed one by one
+    config = AppConfig(
+        data_dir=str(tmp_path / "data"),
+        roots=(RootConfig(id="main", path=str(root), label="Disque", display_path=DISPLAY),),
+    )
+    mounts = data_disk_table(str(tmp_path))
+    app = create_app(
+        config, evaluate_roots(config, mounts, home=None), mounts=lambda: mounts, home=lambda: None
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as plain:
+        scan_id = run_job(plain, "/api/scans", {"root_id": "main", "subpath": ""})["scan_id"]
+        page = plain.get(f"/scans/{scan_id}/organize").text
+        # For everyone: no expert mode needed (D-050).
+        assert "📂 Proposer des sous-dossiers" in page and "💡" not in page
+        assert "proposer=Documents" in page and "ai-panel" not in page
+        page = plain.get(f"/scans/{scan_id}/organize", params={"proposer": "Documents"}).text
+        assert_safe_html(page)
+        assert "📂 Sous-dossiers proposés" in page and "règles fixes" in page
+        assert page.count('data-suggestion="Factures"') == 3
+        assert page.count('data-suggestion="Impôts"') == 2
+        assert "le nom contient « facture »" in page
+        assert "onerror" not in page.split("ai-panel")[1].split("</section>")[0]
+        # Shown only: the plan and its script are unchanged until the user submits.
+        assert 'value="Factures"' not in page
+        script = plain.get(
+            f"/export/scans/{scan_id}/organize.sh", params={"proposer": "Documents"}
+        ).text
+        assert "/Factures/" not in script
+        for odd in ("Projets", "../../etc", "x" * 41):
+            other = plain.get(f"/scans/{scan_id}/organize", params={"proposer": odd})
+            assert other.status_code in (200, 422) and "ai-panel" not in other.text
+
+
 def test_no_ai_without_expert_mode(client: TestClient, scanned: int) -> None:
     page = client.get(f"/scans/{scanned}/organize").text
     assert "💡 Suggestions de l'IA" not in page and "ai-panel" not in page

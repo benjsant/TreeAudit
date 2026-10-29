@@ -22,7 +22,8 @@ from threading import Event
 from typing import Any
 
 from treeaudit.llm.client import LlmClient, LlmError
-from treeaudit.organize.plan import CATEGORIES, Move, clean_folder_name
+from treeaudit.organize.plan import Move, clean_folder_name
+from treeaudit.organize.subfolders import NONE, Suggestions, is_generic_name
 from treeaudit.parasites.report import human_size
 
 MAX_SUBFOLDERS = 10
@@ -30,51 +31,6 @@ MAX_ITEMS = 200
 """Elements considered per category: beyond, the first ones only (and said so)."""
 BATCH = 40
 PROPOSAL_SAMPLE = 80
-NONE = "aucun"
-# Names that say nothing of the content: where the files came from, or one of
-# the plan's own categories (D-049, seen on a real folder).
-GENERIC_NAMES = frozenset(
-    name.casefold()
-    for name in (
-        *CATEGORIES,
-        "Téléchargements",
-        "Telechargements",
-        "Downloads",
-        "Bureau",
-        "Desktop",
-        "Divers",
-        "Fichiers",
-        "Dossiers",
-        "Nouveau dossier",
-        "Temp",
-        "Général",
-        "General",
-        "Misc",
-        "Supports",
-        NONE,
-    )
-)
-
-
-# A name made of these words only, or starting with one ("Autres documents
-# divers"), sorts nothing: it is what the model writes when it gives up.
-_VAGUE_WORDS = frozenset({"autre", "autres", "divers", "diverses", "misc", "varié", "variés"})
-
-
-def is_generic_name(name: str) -> bool:
-    """A name that says nothing of the content (D-049): never proposed."""
-    words = name.replace("_", " ").replace("-", " ").casefold().split()
-    if not words:
-        return True
-    filler = _VAGUE_WORDS | {"document", "documents", "fichier", "fichiers"}
-    return (
-        name.casefold() in GENERIC_NAMES
-        or " ".join(words) in GENERIC_NAMES
-        or words[0] in _VAGUE_WORDS
-        or all(word in filler for word in words)
-    )
-
-
 SYSTEM_PROMPT = """\
 Tu aides à ranger un vieux disque. On te donne les éléments d'UNE catégorie \
 (par exemple « Documents ») : leur nom, leur extension, le dossier d'où ils \
@@ -104,16 +60,6 @@ class SuggestProgress:
     stage: str = "propositions"
     done: int = 0
     total: int = 0
-
-
-@dataclass(frozen=True, slots=True)
-class Suggestions:
-    category: str
-    subfolders: tuple[str, ...]
-    by_entry: dict[int, str]
-    """Entry id -> suggested sub-folder (elements without one are absent)."""
-    considered: int
-    total: int
 
 
 def _item(key: str, move: Move) -> dict[str, Any]:

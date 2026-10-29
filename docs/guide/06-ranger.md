@@ -27,7 +27,18 @@ Dans l'aperçu, tu peux :
 - pour chaque élément : **le laisser en place**, **changer sa catégorie**, ou lui donner un **sous-dossier** ;
 - cliquer sur **« 🔄 Mettre à jour l'aperçu »** pour voir le résultat, et sur **« Annuler mes ajustements »** pour repartir du plan proposé.
 
-En [mode expert](09-mode-expert.md), **« 💡 Suggestions de l'IA »** propose des sous-dossiers pour une catégorie (« Factures », « Impôts »…). Les suggestions s'affichent à côté de chaque élément. **Rien ne change tant que tu ne les acceptes pas.**
+### Sous-dossiers proposés
+
+Sur chaque catégorie, **« 📂 Proposer des sous-dossiers »** regroupe ses éléments d'après leurs noms, sans IA et sans carte graphique :
+
+- un **mot connu** donne un thème : « facture » ou « invoice » vont dans *Factures*, « avis d'imposition » dans *Impôts*, « fiche de paie » dans *Salaires*, « capture d'écran » dans *Captures d'écran*… Un sujet l'emporte sur un type de papier : « facture-garage-vidange » va dans *Voiture* ;
+- parmi le reste, les noms qui **partagent un mot** sont regroupés sous ce mot : « TD1_maths », « examen_maths » dans *Maths* ; « Daft Punk - … » dans *Daft Punk*.
+
+Un sous-dossier regroupe au moins deux éléments, et jamais tous (il ne rangerait rien). Survole une proposition pour voir pourquoi elle est faite. Clique dessus pour l'accepter, ou sur « Accepter toutes les suggestions », puis sur « 🔄 Mettre à jour l'aperçu ». **Rien ne change tant que tu ne les acceptes pas.**
+
+Les photos et les vidéos sont déjà rangées par année : les sous-dossiers se placent à l'intérieur.
+
+En [mode expert](09-mode-expert.md), **« 💡 Suggestions de l'IA »** fait la même chose avec l'IA locale. Les règles fixes font aussi bien sur les cas d'essai, en un instant (voir D-050).
 
 ## Lancer le rangement
 

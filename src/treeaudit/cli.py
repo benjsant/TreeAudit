@@ -43,8 +43,11 @@ from treeaudit.core.sandbox import Policy, SandboxError, restrict
 from treeaudit.filters.spec import FilterSpec
 from treeaudit.llm.bench import CASES, run_bench
 from treeaudit.llm.bench_heldout import HELDOUT_CASES
-from treeaudit.llm.bench_organize import run_organize_bench
+from treeaudit.llm.bench_organize import ORGANIZE_CASES, run_organize_bench
 from treeaudit.llm.client import LlmClient, LlmError, client_from_environment
+from treeaudit.organize.subfolder_bench import BenchResult, case_moves, run_rules_bench
+from treeaudit.organize.subfolder_cases import HELDOUT_CASES as SUBFOLDER_CASES
+from treeaudit.organize.subfolder_cases import SubfolderCase
 from treeaudit.parasites.commands import Action
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
 from treeaudit.parasites.report import human_size
@@ -313,6 +316,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--heldout", action="store_true", help="second jeu de cas, jamais utilisé pour régler"
     )
 
+    commands.add_parser(
+        "subfolders", help="mesurer les sous-dossiers proposés par les règles (D-050)"
+    )
     commands.add_parser("serve", help="démarrer le serveur web local")
 
     gateway = commands.add_parser(
@@ -325,7 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # Commands that read no configuration (tools run by ./treeaudit on host data).
-_WITHOUT_CONFIG = frozenset({"roots check", "archive check", "disks detect"})
+_WITHOUT_CONFIG = frozenset({"roots check", "archive check", "disks detect", "subfolders"})
 
 
 # Never written inside, whatever the configuration says. /var and /run are not
@@ -673,7 +679,10 @@ def _cmd_llm_bench(args: argparse.Namespace) -> int:
     if not client.wait_until_ready(args.wait):
         raise LlmError("le LLM n'est pas prêt (modèle trop long à charger ?)")
     if args.organize:
-        return _llm_bench_organize(client, args.label or client.url)
+        # With --heldout: the cases the fixed rules are measured on (D-050).
+        cases = SUBFOLDER_CASES if args.heldout else ORGANIZE_CASES
+        label = (args.label or client.url) + (" (cas mis de côté)" if args.heldout else "")
+        return _llm_bench_organize(client, label, cases)
     results = run_bench(client, HELDOUT_CASES if args.heldout else CASES)
     label = (args.label or client.url) + (" (second jeu)" if args.heldout else "")
     for result in results:
@@ -700,9 +709,26 @@ def _cmd_llm_bench(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def _llm_bench_organize(client: LlmClient, label: str) -> int:
+def _llm_bench_organize(client: LlmClient, label: str, cases: Sequence[SubfolderCase]) -> int:
     started = time.monotonic()
-    results = run_organize_bench(client)
+    results = run_organize_bench(client, cases)
+    _print_subfolder_bench(results, label, time.monotonic() - started)
+    return EXIT_OK
+
+
+def _cmd_subfolders() -> int:
+    for label, cases in (
+        ("règles, cas mis de côté", SUBFOLDER_CASES),
+        ("règles, cas de l'IA", ORGANIZE_CASES),
+    ):
+        started = time.monotonic()
+        results = run_rules_bench(cases)
+        _print_subfolder_bench(results, label, time.monotonic() - started)
+    return EXIT_OK
+
+
+def _print_subfolder_bench(results: Sequence[BenchResult], label: str, seconds: float) -> None:
+    """Made-up names only: the cases are synthetic."""
     for result in results:
         if result.suggestions is None:
             print(f"✘ {result.case.name} : erreur : {result.error}")
@@ -715,21 +741,20 @@ def _llm_bench_organize(client: LlmClient, label: str) -> int:
             f"classés {result.covered[0]}/{result.covered[1]} ({result.coverage:.0%})"
             + (f", noms génériques : {', '.join(result.generic)}" if result.generic else "")
         )
-        print(f"    sous-dossiers : {', '.join(found.subfolders) or '(aucun)'}")
+        names = {m.entry_id: m.source.rsplit("/", 1)[-1] for m in case_moves(result.case)[0]}
         for sub in found.subfolders:
-            names = [
-                f"e{entry}" for entry, chosen in sorted(found.by_entry.items()) if chosen == sub
-            ]
-            print(f"      {sub} : {' '.join(names)}")
+            members = [names[e] for e, chosen in sorted(found.by_entry.items()) if chosen == sub]
+            print(f"    {sub} : {' | '.join(members)}")
+        left = [name for e, name in names.items() if e not in found.by_entry]
+        print(f"    (sans sous-dossier) : {' | '.join(left) or '-'}")
     scores = [r.score for r in results]
     coverages = [r.coverage for r in results if r.covered[1]]
     print(
         f"BILAN rangement {label} : score moyen {sum(scores) / len(scores):.0%}, "
         f"classement moyen {sum(coverages) / max(len(coverages), 1):.0%}, "
         f"noms valides {sum(r.names_valid for r in results)}/{len(results)}, "
-        f"{time.monotonic() - started:.1f} s"
+        f"{seconds:.3f} s\n"
     )
-    return EXIT_OK
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
@@ -1440,6 +1465,8 @@ def main(argv: Sequence[str] | None = None, *, sandboxed: bool = False) -> int:
             return _cmd_dupes_show(args)
         if args.command == "bench":
             return _cmd_bench(args)
+        if args.command == "subfolders":
+            return _cmd_subfolders()
         if args.command == "search":
             return _cmd_search(args)
         if args.command == "gateway":

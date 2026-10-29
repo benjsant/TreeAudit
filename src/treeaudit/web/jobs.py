@@ -37,8 +37,9 @@ from treeaudit.duplicates.runner import DupOptions, DupOutcome, DupProgress, exe
 from treeaudit.llm.client import LlmClient, LlmError
 from treeaudit.llm.facts import facts_for_finding
 from treeaudit.llm.opinion import Opinion, ask_opinion
-from treeaudit.llm.organize import Suggestions, SuggestionsCancelled, SuggestProgress, suggest
+from treeaudit.llm.organize import SuggestionsCancelled, SuggestProgress, suggest
 from treeaudit.organize.plan import PlanTooLargeError, adjustments_from_query, make_plan
+from treeaudit.organize.subfolders import Suggestions
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.detect import Band
 from treeaudit.parasites.report import human_size

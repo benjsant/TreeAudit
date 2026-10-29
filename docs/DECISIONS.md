@@ -633,3 +633,29 @@ Précise la mise en œuvre de D-024.
   - **Mesures** (deux passes, température 0,1) : avec le filtre et la consigne, score 93–94 %, classement 87–92 %, aucun nom vague. Avec le filtre seul : 92–93 % et 82–83 %. Avant : 96 % et 97 % sur une seule passe, mais avec deux noms vagues.
 - **Bibliothèque recopiée** : le cas a été ajouté au second jeu (`bench_heldout.py`), avec son contraire pour garder l'équilibre : un jQuery utilisé par un site (à garder) et un jQuery téléchargé et décompressé (nettoyable). Ministral répond « nettoyable » aux deux, donc **une deuxième réponse dangereuse** (second jeu : 11/14, 2 dangereuses). Comme pour les sauvegardes de jeu, les consignes ne sont **pas** retouchées pour ce jeu-là. La protection reste celle de D-040 : la règle met ce dossier en rouge, jamais coché, et l'avis de l'IA s'affiche comme « à toi de vérifier, ce n'est pas une recommandation ».
 
+
+## D-050 — Sous-dossiers par règles fixes, pour tous (2026-10-29)
+- **Question du mainteneur** : un algorithme ne ferait-il pas mieux que l'IA locale pour proposer des sous-dossiers ? L'IA demande Docker, une carte AMD ou Intel, 4 Gio de mémoire vidéo et 2 Gio de modèle, et elle ne répond pas toujours la même chose.
+- **Décision** : « 📂 Proposer des sous-dossiers », sur chaque catégorie de Ranger, sans mode expert (`organize/subfolders.py`, bibliothèque standard seulement). Deux étages :
+  - **thèmes** : des mots-clés en français et en anglais (Factures, Impôts, Salaires, Banque, Santé, Emploi, Logement, Voiture, Notices ; Captures d'écran et WhatsApp pour les photos et vidéos ; aucun pour la musique). Un sujet compte double face à un type de papier : « facture-garage » va dans *Voiture* ;
+  - **mots communs** : parmi le reste, le mot rare partagé par le plus de noms (« Maths », « Dupont », « Daft Punk »).
+- **Garde-fous** :
+  - un groupe a au moins deux membres et jamais tous ;
+  - les noms passent par les mêmes contrôles qu'un nom tapé (`clean_folder_name`, `is_generic_name`, déplacé depuis `llm/organize.py`) ;
+  - chaque proposition dit pourquoi elle est faite ;
+  - rien n'est appliqué sans clic de l'utilisateur, comme pour l'IA (D-041).
+- **Écarté** :
+  - lire le contenu des fichiers (règle de vie privée) ;
+  - un modèle de plongements (grosse dépendance, AppImage alourdie), à reconsidérer seulement si les règles plafonnent ;
+  - un autre langage : quelques millisecondes pour un dossier courant.
+- **Mesure** : de nouveaux cas (`organize/subfolder_cases.py`, 5 catégories, 70 éléments) ont été écrits et validés dans un commit **avant** l'algorithme. Ils n'ont pas été modifiés depuis.
+
+  | | Cas mis de côté : score / classement | Cas de l'IA : score / classement | Temps |
+  |---|---|---|---|
+  | Règles fixes | 100 % / 100 % | 99 % / 97 % | 0,003 s |
+  | IA (Ministral 3 3B) | 94 % / 96 % | 92 % / 89 % | 39–46 s |
+
+  L'IA donne des noms plus jolis (« Mathématiques », « Réunions »). Mais elle crée aussi des groupes d'un seul élément (« Plages », « Plans »), mêle fiches de paie et banque, mêle captures d'écran et photos WhatsApp avec les photos sans nom (« Archives générales »), et regroupe les artistes en « contemporains » / « classiques ».
+- **Limite de la mesure** : ces cas ont été écrits par l'auteur des règles. Même figés avant le code, ils reflètent ce qu'il avait en tête : le 100 % prouve que les règles font ce qu'il voulait, pas qu'elles réussissent sur des noms imprévus. Il faudra des cas écrits par quelqu'un d'autre, ou un vrai dossier (en chiffres seulement), pour le savoir. Les règles ne comprennent pas les synonymes absents du dictionnaire, ni les mots collés (« FactureEDF »).
+- **Vitesse** : 300 000 noms en 4 s environ (le maximum d'un plan), grâce à un index des mots-clés construit une fois (12 s sans).
+- **IA** : elle reste disponible en mode expert pour l'instant. Son maintien dans Ranger sera décidé après un essai des règles sur un vrai dossier.

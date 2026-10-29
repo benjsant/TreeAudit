@@ -27,7 +27,7 @@ Deux principes structurent tout le code :
 | `parasites/` | dossiers « à nettoyer » : catalogue de 41 règles, détection sur l'index, confiance expliquée, cache | `rules.toml`, `rules.py`, `detect.py` (D-023), `cached.py` |
 | `duplicates/` | doublons exacts : lecture sûre, empreintes en étapes, ordre physique, groupes et copie à garder | `reader.py`, `hashing.py`, `placement.py`, `runner.py` (D-015, D-030), `groups.py` (D-026) |
 | `archive/` | archive vérifiée : dossier d'archives, écriture, relecture et comparaison | `destination.py`, `output.py`, `runner.py`, `verify.py` (D-024, D-032) |
-| `organize/` | « Ranger » : plan par catégories, ajustements, script de rangement et d'annulation | `plan.py`, `script.py` (D-041) |
+| `organize/` | « Ranger » : plan par catégories, ajustements, script de rangement et d'annulation, sous-dossiers par règles | `plan.py`, `script.py` (D-041), `subfolders.py`, `subfolder_bench.py`, `subfolder_cases.py` (D-050) |
 | `projects/` | « Projets et logiciels » : inventaire depuis l'index | `detect.py` (D-044) |
 | `preview/` | aperçu des images : lecture sûre, type reconnu au contenu | `images.py` (D-046) |
 | `llm/` | mode expert : client du serveur local, avis, suggestions, bancs d'essai | `client.py`, `opinion.py`, `organize.py`, `facts.py`, `bench*.py` (D-040) |
@@ -134,6 +134,15 @@ C'est le chemin le plus sensible, celui où une erreur coûterait des données. 
 5. les cibles refusées remontent avec leur raison, affichées à l'utilisateur.
 
 Les commandes de recréation viennent du catalogue `rules.toml`, refusé au chargement s'il contient un programme privilégié ou destructeur. Les scripts de Ranger (`organize/script.py`) refusent tout chemin absolu ou contenant `..`, et n'utilisent que `mv -n` et `rmdir` sur des dossiers vides.
+
+### Les sous-dossiers par règles (`organize/subfolders.py`, D-050)
+
+`propose()` découpe chaque nom en mots normalisés (casse, accents, chiffres et mots vides retirés), puis :
+
+1. **thèmes** : un index de mots-clés, construit une fois, donne le thème de chaque nom. Un sujet (*Voiture*) compte double face à un type de papier (*Factures*). Un thème qui n'a qu'un membre est laissé à l'étape suivante ;
+2. **mots communs** : parmi le reste, le mot partagé par le plus de noms forme un groupe. Un tas, recalculé paresseusement, évite de tout recompter à chaque groupe.
+
+Un groupe a au moins deux membres et jamais tous. Son nom passe par `clean_folder_name` et `is_generic_name`, comme un nom tapé par l'utilisateur ou proposé par l'IA. Le résultat a la même forme (`Suggestions`) que celui de l'IA, avec en plus la raison de chaque proposition. La page l'affiche de la même façon. `subfolder_bench.py` note les deux méthodes sur les mêmes cas.
 
 ### Le mode expert (`llm/`)
 

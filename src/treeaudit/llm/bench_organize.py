@@ -1,30 +1,20 @@
-"""Benchmark of the sub-folder suggestions (D-040, D-041) on known groups.
+"""Cases for the local AI's sub-folder suggestions (D-040, D-041, D-049).
 
-A pair of elements from the same expected group should share a suggested
-sub-folder; a pair from different groups should not. The score is the share
-of pairs handled right. A timid model that classifies almost nothing keeps
-pairs apart for free: the coverage (elements of a real group that get a
-sub-folder) and the generic names proposed are reported too (D-049). The
-last case hides an instruction in a name: the suggested names must still be
-plain folder names.
+Scored by organize/subfolder_bench.py, like the fixed rules (D-050). These
+cases were used to tune the AI's instructions; the held-out ones are in
+organize/subfolder_cases.py. The last case hides an instruction in a name:
+the suggested names must still be plain folder names.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from itertools import combinations
+from collections.abc import Sequence
 
 from treeaudit.llm.client import LlmClient, LlmError
-from treeaudit.llm.organize import Suggestions, is_generic_name, suggest
-from treeaudit.organize.plan import DOCUMENTS, Move, clean_folder_name
-
-
-@dataclass(frozen=True, slots=True)
-class OrganizeCase:
-    name: str
-    category: str
-    groups: tuple[tuple[str, ...], ...]
-
+from treeaudit.llm.organize import suggest
+from treeaudit.organize.plan import DOCUMENTS
+from treeaudit.organize.subfolder_bench import BenchResult, case_moves, score
+from treeaudit.organize.subfolder_cases import SubfolderCase as OrganizeCase
 
 _GROUPS = (
     (
@@ -159,87 +149,16 @@ ORGANIZE_CASES = (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class OrganizeResult:
-    case: OrganizeCase
-    suggestions: Suggestions | None
-    error: str | None
-    together: tuple[int, int]
-    """(pairs of a group that share a sub-folder, pairs of a group)."""
-    apart: tuple[int, int]
-    """(pairs of different groups kept apart, pairs of different groups)."""
-    names_valid: bool
-    covered: tuple[int, int] = (0, 0)
-    """(elements of a real group given a sub-folder, elements of a real group)."""
-    generic: tuple[str, ...] = ()
-    """Proposed names that say nothing of the content (D-049)."""
-
-    @property
-    def coverage(self) -> float:
-        return self.covered[0] / self.covered[1] if self.covered[1] else 0.0
-
-    @property
-    def score(self) -> float:
-        done = self.together[0] + self.apart[0]
-        total = self.together[1] + self.apart[1]
-        return done / total if total else 0.0
-
-
-def _moves(case: OrganizeCase) -> tuple[list[Move], dict[int, int]]:
-    moves: list[Move] = []
-    group_of: dict[int, int] = {}
-    for group_index, group in enumerate(case.groups):
-        for name in group:
-            entry = len(moves) + 1
-            moves.append(
-                Move(
-                    entry_id=entry,
-                    source=f"Bazar/{name}",
-                    target=f"Rangé/{case.category}/{name}",
-                    kind="file",
-                    category=case.category,
-                    size=50_000,
-                    files=1,
-                    mtime_s=1_580_000_000,
-                    reason="fichier rangé par type",
-                )
-            )
-            group_of[entry] = group_index
-    return moves, group_of
-
-
-def run_organize_bench(client: LlmClient) -> list[OrganizeResult]:
+def run_organize_bench(
+    client: LlmClient, cases: Sequence[OrganizeCase] = ORGANIZE_CASES
+) -> list[BenchResult]:
     results = []
-    for case in ORGANIZE_CASES:
-        moves, group_of = _moves(case)
+    for case in cases:
+        moves, group_of = case_moves(case)
         try:
             found = suggest(client, case.category, moves)
         except LlmError as exc:
-            results.append(OrganizeResult(case, None, str(exc), (0, 0), (0, 0), False))
+            results.append(BenchResult(case, None, str(exc), (0, 0), (0, 0), False))
             continue
-        together = apart = together_total = apart_total = 0
-        for first, second in combinations(group_of, 2):
-            a, b = found.by_entry.get(first), found.by_entry.get(second)
-            if group_of[first] == group_of[second]:
-                together_total += 1
-                together += a is not None and a == b
-            else:
-                apart_total += 1
-                apart += a is None or b is None or a != b
-        valid = all(clean_folder_name(name) == name for name in found.subfolders)
-        grouped = [e for e in group_of if len(case.groups[group_of[e]]) > 1]
-        covered = (sum(e in found.by_entry for e in grouped), len(grouped))
-        generic = tuple(n for n in found.subfolders if is_generic_name(n))
-        results.append(
-            OrganizeResult(
-                case,
-                found,
-                None,
-                (together, together_total),
-                (apart, apart_total),
-                valid,
-                covered,
-                generic,
-            )
-        )
+        results.append(score(case, group_of, found))
     return results

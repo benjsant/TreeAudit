@@ -148,6 +148,7 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Ajustements dans l'aperçu : laisser en place, changer de catégorie, renommer les dossiers ; repris par les scripts.
 - [x] Étape B : sous-dossiers suggérés par l'IA (mode expert), affichés seulement, appliqués par l'utilisateur ; banc d'essai (Ministral 98 %, piège sans effet).
 - [x] Suggestions en tâche de fond, avec progression et annulation.
+- [x] Sous-dossiers proposés par des règles fixes, pour tous, sans IA (D-050) : thèmes et mots communs, explicables, instantanés.
 
 ## Phase 9 bis — Mode expert, LLM local (D-040)
 - [x] Étape 1 : conteneur llama.cpp (Vulkan) sans Internet, téléchargement vérifié des modèles, banc d'essai ; Ministral 3 3B retenu (16/16, aucune réponse dangereuse).

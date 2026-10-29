@@ -36,6 +36,8 @@ from treeaudit.filters.search import Sort, search
 from treeaudit.filters.spec import FilterError, compile_filter, describe
 from treeaudit.llm.client import LlmClient
 from treeaudit.organize import plan as organize_plan
+from treeaudit.organize import subfolders
+from treeaudit.organize.subfolders import NO_SUBFOLDERS
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.commands import recreate_command
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE, Band
@@ -490,6 +492,7 @@ def organize_page(
     dir: Annotated[int | None, Query(ge=1)] = None,
     tout: bool = False,
     suggestions: Annotated[int | None, Query(ge=1)] = None,
+    proposer: Annotated[str | None, Query(max_length=40)] = None,
 ) -> Response:
     """Tidying (D-041): the plan and a preview of the result; nothing is changed.
 
@@ -531,6 +534,9 @@ def organize_page(
         and job.outcome.dir_id == node.entry_id
     ):
         found = job.outcome.suggestions
+    # Sub-folders by fixed rules (D-050): instant, for everyone, shown the same way.
+    if found is None and proposer in by_category and proposer not in NO_SUBFOLDERS:
+        found = subfolders.propose(proposer, by_category[proposer])
     return render(
         request,
         "organize.html",
@@ -550,10 +556,11 @@ def organize_page(
         base_query="&".join(
             f"{quote(key)}={quote(value)}"
             for key, value in request.query_params.multi_items()
-            if key not in ("suggestions", "tout")
+            if key not in ("suggestions", "tout", "proposer")
         ),
         expert=llm is not None,
         suggestions=found,
+        no_subfolders=NO_SUBFOLDERS,
     )
 
 
