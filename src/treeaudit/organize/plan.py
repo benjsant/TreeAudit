@@ -208,6 +208,10 @@ PROJECT_MARKERS = frozenset(
         b".project",
     }
 )
+# Found loose in folders that are no project at all (a backup holding a
+# requirements.txt next to photos): they make a project only of a folder that
+# holds no other project or program (found on a real disk, D-049).
+WEAK_PROJECT_MARKERS = frozenset({b"requirements.txt", b"Makefile"})
 _PROJECT_SUFFIXES = (b".csproj", b".sln", b".vcxproj", b".xcodeproj", b".uproject")
 # Folders that only make sense inside the program that holds them.
 _INSTALL_DIRS = frozenset(
@@ -511,7 +515,9 @@ def _summarize(node: _Node) -> None:
 def _block_kind(node: _Node) -> str | None:
     """ "Projets", "Logiciels" or None."""
     names = {child.name for child in node.children}
-    if names & PROJECT_MARKERS or any(n.endswith(_PROJECT_SUFFIXES) for n in names):
+    if names & (PROJECT_MARKERS - WEAK_PROJECT_MARKERS) or any(
+        n.endswith(_PROJECT_SUFFIXES) for n in names
+    ):
         return PROJECTS
     if (node.name in SOFTWARE_DIRS or node.name.endswith(b".app")) and not _mostly_personal(node):
         return SOFTWARE
@@ -525,6 +531,8 @@ def _block_kind(node: _Node) -> str | None:
     extensions = {child.extension for child in node.children if child.kind == "file"}
     if "exe" in extensions and "dll" in extensions:  # an installed Windows program
         return SOFTWARE
+    if names & WEAK_PROJECT_MARKERS and not node.has_block:
+        return PROJECTS
     return None
 
 

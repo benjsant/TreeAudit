@@ -330,3 +330,22 @@ def test_a_sparse_file_counts_the_place_it_uses(
     assert move.size == 1024**3  # what the script checks before moving
     assert move.space < 1024**2  # what the page adds up
     assert sum(total[2] for total in plan.categories().values()) == move.space
+
+
+def test_a_backup_with_a_loose_requirements_txt_is_not_moved_whole(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    """D-049: only its projects move whole; its photos are sorted like the others."""
+    root = tmp_path / "disque"
+    backup = root / "sauvegarde_cle"
+    touch(backup / "requirements.txt", b"requests")
+    touch(backup / "photo.jpg", b"p", PHOTO_TIME)
+    touch(backup / "agent" / "pyproject.toml", b"[project]")
+    touch(root / "script" / "requirements.txt", b"rich")
+    touch(root / "script" / "run.py")
+    plan, _ = scan_and_plan(tmp_path, root, data_disk_table)
+    moves = {move.source: move.target for move in plan.moves}
+    assert "sauvegarde_cle" not in moves
+    assert moves["sauvegarde_cle/agent"] == f"{DESTINATION}/Projets/agent"
+    assert moves["sauvegarde_cle/photo.jpg"].startswith(f"{DESTINATION}/Photos/2019/")
+    assert moves["script"] == f"{DESTINATION}/Projets/script"

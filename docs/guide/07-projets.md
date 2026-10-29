@@ -20,7 +20,9 @@ La tuile **📦 Projets et logiciels** du bilan dresse l'inventaire des projets 
 
 **Un logiciel ou un jeu** : une bibliothèque Steam, un jeu GOG, un préfixe Wine, une copie de `Program Files`, un programme Windows (`.exe` et `.dll` côte à côte, un `.exe` seul ne suffit pas), une application macOS (`.app`), un fichier AppImage.
 
-**Seul le dossier le plus haut compte.** Un monorepo apparaît une fois, avec la mention « contient N autres projets ». Rien n'est cherché dans les dépendances (un `package.json` au fond de `node_modules` n'est pas un projet). Les dossiers cachés comme `~/.cache` sont aussi écartés, sauf pour les logiciels, car Steam vit souvent dans `~/.local/share/Steam`.
+**Un `requirements.txt` ou un `Makefile` seul ne suffit pas toujours.** On en trouve souvent égarés dans des dossiers qui ne sont pas des projets, comme une sauvegarde de clé USB. Ils ne font un projet que d'un dossier qui ne contient aucun autre projet ni logiciel.
+
+**Seul le dossier le plus haut compte.** Un monorepo apparaît une fois, avec la mention « contient N autres projets ». Un logiciel reste pourtant visible même à l'intérieur d'un projet (un programme portable rangé dans un dépôt, par exemple). Rien n'est cherché dans les dépendances (un `package.json` au fond de `node_modules` n'est pas un projet). Les dossiers cachés comme `~/.cache` sont aussi écartés, sauf pour les logiciels, car Steam vit souvent dans `~/.local/share/Steam`.
 
 ## Ce que montre chaque élément
 
@@ -35,6 +37,8 @@ En haut de la page : **Voir** tout, les projets seulement, ou les logiciels seul
 Sous un projet, **« ♻️ … recréables · N cochés sur M »** déplie ses dossiers recréables : dépendances, environnements Python, compilations, caches. Ce sont les mêmes que sur la page [À nettoyer](03-nettoyer.md), avec les mêmes couleurs et les mêmes numéros.
 
 - Les verts sont **déjà cochés**. Le compteur te le rappelle même quand le volet est fermé.
+- Quand une règle revient plus de trois fois (les dizaines de `__pycache__` d'un projet Python), ses dossiers sont **regroupés** sur une ligne dépliable : « Cache de bytecode Python : 34 dossiers, 2,4 Mio · 34 cochés ».
+- Les chemins sont donnés à partir du projet.
 - Sous chacun, quand c'est possible : la commande pour le recréer (`npm ci`, `python3 -m venv .venv`…).
 - **« Dernière étape »** prépare la commande, comme pour le nettoyage. L'archive n'est pas proposée ici : archiver des dépendances n'aurait pas de sens.
 

@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Projets et logiciels · {{ title }}{% endblock %}
+{% macro recreatable_item(r, skip, with_label) %}
+  <li>
+    <label><input type="checkbox" data-pick="{{ r.number }}" data-band="{{ r.band.value }}" {% if r.band.value == "green" and r.displayable %}checked{% endif %} {% if not r.displayable %}disabled{% endif %}>
+    <span class="badge band-{{ r.band.value }}">{{ r.confidence }} % sûr</span>{% if with_label %} {{ r.rule.label }}{% endif %} <span class="size">{{ r.allocated_size | size if r.allocated_size is not none else "" }}</span> <span class="path">{{ r.rel_path_display[skip:] }}</span></label>
+    {% if recreate[r.number] %}<br><span class="muted">Pour le recréer : <code class="cmd">{{ recreate[r.number] }}</code></span>{% endif %}
+  </li>
+{% endmacro %}
 {% block content %}
 <p class="back"><a href="/scans/{{ scan.id }}">← Bilan de {{ title }}</a></p>
 <h1>📦 Projets et logiciels</h1>
@@ -32,12 +39,20 @@
       <details class="why">
         {% set checked = f.recreatable | selectattr("band.value", "equalto", "green") | selectattr("displayable") | list | length %}
         <summary>♻️ {{ f.recreatable_size | size }} recréables · <strong>{{ checked }} coché{{ "s" if checked > 1 else "" }}</strong> sur {{ f.recreatable | length }}</summary>
+        {# Grouped by rule: a project often holds dozens of __pycache__ (D-049). #}
+        {% set skip = (f.rel_path_display | length + 1) if f.rel_path_display else 0 %}
         <ul class="plain small">
-        {% for r in f.recreatable %}
+        {% for label, items in f.recreatable | groupby("rule.label") %}
           <li>
-            <label><input type="checkbox" data-pick="{{ r.number }}" data-band="{{ r.band.value }}" {% if r.band.value == "green" and r.displayable %}checked{% endif %} {% if not r.displayable %}disabled{% endif %}>
-            <span class="badge band-{{ r.band.value }}">{{ r.confidence }} % sûr</span> {{ r.rule.label }} <span class="size">{{ r.allocated_size | size if r.allocated_size is not none else "" }}</span> <span class="path">{{ r.rel_path_display }}</span></label>
-            {% if recreate[r.number] %}<br><span class="muted">Pour le recréer : <code class="cmd">{{ recreate[r.number] }}</code></span>{% endif %}
+          {% if items | length > 3 %}
+            {% set picked = items | selectattr("band.value", "equalto", "green") | selectattr("displayable") | list | length %}
+            <details>
+              <summary><strong>{{ label }}</strong> : {{ items | length }} dossiers, <span class="size">{{ items | map(attribute="allocated_size") | select | sum | size }}</span> · {{ picked }} coché{{ "s" if picked > 1 else "" }}</summary>
+              <ul class="plain">{% for r in items %}{{ recreatable_item(r, skip, False) }}{% endfor %}</ul>
+            </details>
+          {% else %}
+            <ul class="plain">{% for r in items %}{{ recreatable_item(r, skip, True) }}{% endfor %}</ul>
+          {% endif %}
           </li>
         {% endfor %}
         </ul>

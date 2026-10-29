@@ -133,3 +133,37 @@ def test_age_mention() -> None:
     assert _age(int(now * 1e9) - 100 * day) == "il y a 3 mois"
     assert _age(int(now * 1e9) - 400 * day) == "il y a 1 an"
     assert _age(int(now * 1e9) - 3000 * day) == "il y a 8 ans"
+
+
+def test_a_backup_with_a_loose_requirements_txt_is_no_project(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    """Found on a real disk (D-049): a USB-stick backup holding a stray
+    requirements.txt hid its projects and the portable program inside it."""
+    root = tmp_path / "disque"
+    backup = root / "Bureau" / "sauvegarde_cle"
+    touch(backup / "requirements.txt", b"requests")
+    touch(backup / "notes.txt")
+    touch(backup / "photo.jpg")
+    touch(backup / "agent" / "pyproject.toml", b"[project]")
+    touch(backup / "agent" / "app" / "main.py")
+    touch(backup / "site" / "package.json", b"{}")
+    touch(backup / "portable" / "Outil" / "outil.exe")
+    touch(backup / "portable" / "Outil" / "Qt6Core.dll")
+    (backup / "repo" / ".git").mkdir(parents=True)
+    touch(backup / "repo" / "outils" / "Outil" / "outil.exe")  # a program inside a project
+    touch(backup / "repo" / "outils" / "Outil" / "lib.dll")
+    # A lone requirements.txt still makes a project of a folder holding nothing else.
+    touch(root / "script" / "requirements.txt", b"rich")
+    touch(root / "script" / "run.py")
+    found = by_path(scan(tmp_path, root, data_disk_table))
+    assert set(found) == {
+        "Bureau/sauvegarde_cle/agent",
+        "Bureau/sauvegarde_cle/site",
+        "Bureau/sauvegarde_cle/repo",
+        "Bureau/sauvegarde_cle/portable/Outil",
+        "Bureau/sauvegarde_cle/repo/outils/Outil",
+        "script",
+    }
+    assert found["Bureau/sauvegarde_cle/portable/Outil"].group == SOFTWARE
+    assert found["script"].kinds == ("Python",)

@@ -10,7 +10,7 @@ Tout irait dans un nouveau dossier, **`Rangé/`** par défaut, à l'intérieur d
 |---|---|
 | Photos, Vidéos | classées **par année** (date de modification) : `Rangé/Photos/2019/` |
 | Musique, Documents, Archives, Installateurs, Code, Polices | par type de fichier |
-| **Projets** | les projets informatiques, **déplacés en entier** (un dossier avec `package.json`, `.git`…) |
+| **Projets** | les projets informatiques, **déplacés en entier** (un dossier avec `package.json`, `.git`…). Un `requirements.txt` ou un `Makefile` seul ne compte que si le dossier ne contient pas d'autre projet. |
 | **Logiciels** | les jeux et logiciels, **déplacés en entier** (Steam, préfixe Wine, programme Windows…) |
 | Autres | le reste |
 

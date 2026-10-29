@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from bisect import bisect_left
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -66,6 +67,10 @@ SOFTWARE_CHILDREN: dict[bytes, str] = {
     b"Program Files (x86)": "Copie de Windows",
 }
 UNITY = (b"Assets", b"ProjectSettings")
+# Often found loose in folders that are no project (a backup with a
+# requirements.txt next to photos): alone, they make a project only of a
+# folder that holds no other project or program (found on a real disk, D-049).
+WEAK_MARKERS = frozenset({b"requirements.txt", b"Makefile"})
 # Nothing is looked for inside these: dependencies and tool caches hold
 # thousands of package.json and setup.py that are not the user's projects.
 DEPENDENCY_DIRS = frozenset(
@@ -116,6 +121,8 @@ class Found:
 class _Candidate:
     kinds: set[str] = field(default_factory=set)
     group: str = PROJECT
+    strong: bool = False
+    """False when only weak markers (WEAK_MARKERS) make it a project."""
 
 
 def _rows(conn: sqlite3.Connection, sql: str, params: Sequence[object]) -> Iterable[sqlite3.Row]:
@@ -138,11 +145,13 @@ def _candidates(conn: sqlite3.Connection, scan_id: int) -> dict[int, _Candidate]
         for name in present:
             if name in MARKERS:
                 found[parent].kinds.add(MARKERS[name])
+                found[parent].strong |= name not in WEAK_MARKERS
             elif name in SOFTWARE_CHILDREN:
                 found[parent].kinds.add(SOFTWARE_CHILDREN[name])
                 found[parent].group = SOFTWARE
         if all(name in present for name in UNITY):
             found[parent].kinds.add("Unity")
+            found[parent].strong = True
     extensions = [*EXTENSION_MARKERS, "exe", "dll", "appimage"]
     marks = ",".join("?" * len(extensions))
     windows: dict[int, set[str]] = defaultdict(set)
@@ -156,6 +165,7 @@ def _candidates(conn: sqlite3.Connection, scan_id: int) -> dict[int, _Candidate]
         parent, extension = row["parent_id"], row["extension"]
         if extension in EXTENSION_MARKERS:
             found[parent].kinds.add(EXTENSION_MARKERS[extension])
+            found[parent].strong = True
         elif extension == "appimage":
             appimages.append(row["entry_id"])
         else:
@@ -184,6 +194,15 @@ def _candidates(conn: sqlite3.Connection, scan_id: int) -> dict[int, _Candidate]
         found[row["entry_id"]].group = SOFTWARE
     found.pop(None, None)  # type: ignore[call-overload]  # the root has no parent
     return found
+
+
+def _holds_another(paths: list[bytes], rel_path: bytes) -> bool:
+    """Another candidate lies below ``rel_path`` (``paths`` sorted)."""
+    if not rel_path:
+        return len(paths) > 1
+    prefix = rel_path + b"/"
+    index = bisect_left(paths, prefix)
+    return index < len(paths) and paths[index].startswith(prefix)
 
 
 def _ancestors(rel_path: bytes) -> Iterable[bytes]:
@@ -242,14 +261,29 @@ def find_projects(
         sql = _ENTRY_SQL.format(marks=",".join("?" * len(chunk)))
         for row in conn.execute(sql, (scan_id, *chunk)):
             rows[row["entry_id"]] = row
+    eligible = sorted(
+        (bytes(rows[i]["rel_path"]), i)
+        for i in rows
+        if not _hidden_away(bytes(rows[i]["rel_path"]), candidates[i].group)
+    )
+    paths = [path for path, _ in eligible]
     kept: dict[bytes, int] = {}
     nested: dict[int, int] = defaultdict(int)
-    for entry_id in sorted(rows, key=lambda i: bytes(rows[i]["rel_path"])):
-        row = rows[entry_id]
-        rel_path = bytes(row["rel_path"])
-        if _hidden_away(rel_path, candidates[entry_id].group):
-            continue
-        outer = next((kept[a] for a in _ancestors(rel_path) if a in kept), None)
+    for rel_path, entry_id in eligible:
+        candidate = candidates[entry_id]
+        if candidate.group == PROJECT and not candidate.strong and _holds_another(paths, rel_path):
+            continue  # a folder of projects, not a project (D-049)
+        # A program stays visible inside a project (a portable application
+        # kept in a backup); everything else is hidden by what holds it.
+        outer = next(
+            (
+                kept[a]
+                for a in _ancestors(rel_path)
+                if a in kept
+                and (candidate.group == PROJECT or candidates[kept[a]].group == SOFTWARE)
+            ),
+            None,
+        )
         if outer is not None:
             nested[outer] += 1
             continue

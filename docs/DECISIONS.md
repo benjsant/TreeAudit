@@ -615,3 +615,17 @@ Précise la mise en œuvre de D-024.
 - **Interface** : la page d'accueil a un encadré « 💡 Mode expert », qui donne l'état et, s'il est inactif, la carte nécessaire et la commande à lancer. L'interface ne peut ni télécharger ni démarrer l'IA : le conteneur `app` n'a ni Internet ni accès à Docker (règle 6).
 - **Essai réel** : `./treeaudit expert` sur la machine du mainteneur. La carte AMD est détectée (8 176 Mio), le modèle déjà présent n'est pas retéléchargé, l'accueil indique « actif », le conteneur `llm` a reçu le groupe 105 (`render`) et l'IA répond depuis `app`.
 
+## D-049 — Ce qu'a montré un vrai dossier : marqueurs faibles, logiciels dans un projet (2026-10-29)
+- **Essai réel** : une copie de dossier personnel prêtée par le mainteneur, de l'ordre de 25 000 éléments. Analyse en 4 s, doublons en 2 s, avis de l'IA en 4 s, suggestions de rangement en 96 s pour 200 éléments. Aucune donnée de ce dossier n'est reprise ici, seulement les défauts qu'il a montrés.
+- **Défaut** : une sauvegarde de clé USB, qui contenait un `requirements.txt` égaré à sa racine, était prise pour **un seul projet Python**. Trois conséquences :
+  - elle masquait les projets qu'elle contenait ;
+  - elle masquait un programme Windows portable (`.exe` et `.dll`), d'où « 0 logiciel » ;
+  - « Ranger » l'aurait déplacée en bloc, photos et documents compris, dans `Rangé/Projets`.
+- **Décision** : `requirements.txt` et `Makefile` sont des **marqueurs faibles**. Seuls, ils ne font un projet que d'un dossier qui ne contient aucun autre projet ni logiciel, dans « Projets et logiciels » comme dans « Ranger ». Les autres marqueurs restent suffisants (`pyproject.toml`, `package.json`, `.git`…).
+- **Un logiciel n'est plus masqué par un projet** qui le contient : il est listé à part, avec ses propres dossiers recréables. Un projet reste masqué par un projet ou un logiciel qui le contient (monorepos, dépendances).
+- **Lisibilité** : une règle qui revient plus de trois fois dans un projet est regroupée sur une ligne dépliable, avec son nombre de dossiers, sa taille et le nombre de cochés. Les chemins sont donnés à partir du projet.
+- **Résultat sur le même dossier** : les projets masqués et le programme portable réapparaissent, et les chemins affichés sont beaucoup plus courts.
+- **Restent à traiter** :
+  - les suggestions de sous-dossiers de l'IA ne classent qu'un élément sur huit environ, et certains noms proposés (« Téléchargements », « Archives ») ne disent rien du contenu ;
+  - l'IA ne voit pas de raison de garder une bibliothèque recopiée dans `public/lib`, que le site utilise pourtant. La règle l'avait mise en rouge, et l'affichage asymétrique laisse la décision à l'utilisateur. Le cas est à ajouter au banc d'essai.
+
