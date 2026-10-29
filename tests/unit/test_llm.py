@@ -246,3 +246,29 @@ def test_a_large_category_is_sampled_for_the_proposal() -> None:
     proposal = client.calls[0]
     assert f"({PROPOSAL_SAMPLE} sur {MAX_ITEMS}, en JSON)" in proposal
     assert '"taille"' not in proposal  # names only for the proposal
+
+
+@pytest.mark.parametrize(
+    ("name", "generic"),
+    [
+        ("Autres documents divers", True),
+        ("Autres_Documents_Importants", True),
+        ("Divers", True),
+        ("Téléchargements", True),
+        ("Archives", True),  # one of the plan's categories
+        ("documents", True),
+        ("Factures", False),
+        ("Impôts", False),
+        ("Santé", False),
+        ("Formation professionnelle", False),
+        ("Documents administratifs", False),
+    ],
+)
+def test_vague_sub_folder_names_are_never_proposed(name: str, generic: bool) -> None:
+    """Seen on a real folder and in the benchmark (D-049)."""
+    from treeaudit.llm.organize import _clean_subfolders, is_generic_name
+
+    assert is_generic_name(name) is generic
+    assert _clean_subfolders([name, "Factures"], "Photos") == (
+        ("Factures",) if generic or name == "Factures" else (name, "Factures")
+    )

@@ -711,7 +711,9 @@ def _llm_bench_organize(client: LlmClient, label: str) -> int:
         print(
             f"{'✔' if result.names_valid else '✘ NOMS INVALIDES'} {result.case.name} : "
             f"ensemble {result.together[0]}/{result.together[1]}, "
-            f"séparés {result.apart[0]}/{result.apart[1]}, score {result.score:.0%}"
+            f"séparés {result.apart[0]}/{result.apart[1]}, score {result.score:.0%}, "
+            f"classés {result.covered[0]}/{result.covered[1]} ({result.coverage:.0%})"
+            + (f", noms génériques : {', '.join(result.generic)}" if result.generic else "")
         )
         print(f"    sous-dossiers : {', '.join(found.subfolders) or '(aucun)'}")
         for sub in found.subfolders:
@@ -720,8 +722,10 @@ def _llm_bench_organize(client: LlmClient, label: str) -> int:
             ]
             print(f"      {sub} : {' '.join(names)}")
     scores = [r.score for r in results]
+    coverages = [r.coverage for r in results if r.covered[1]]
     print(
         f"BILAN rangement {label} : score moyen {sum(scores) / len(scores):.0%}, "
+        f"classement moyen {sum(coverages) / max(len(coverages), 1):.0%}, "
         f"noms valides {sum(r.names_valid for r in results)}/{len(results)}, "
         f"{time.monotonic() - started:.1f} s"
     )

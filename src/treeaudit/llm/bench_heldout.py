@@ -164,6 +164,38 @@ HELDOUT_CASES: tuple[Case, ...] = (
         ),
         CLEAN,
     ),
+    # Seen on a real folder (D-049): the model saw no reason to keep a library
+    # a website's pages load. Added here, never used to tune the prompt.
+    Case(
+        "jquery recopié dans un site",
+        _facts(
+            "Bibliothèque web recopiée",
+            "dev/site-asso/public/lib/jquery",
+            [("contient des fichiers minifiés", True)],
+            [(".js", 1)],
+            ["jquery.slim.min.js"],
+            ["bootstrap", "app.js", "style.css"],
+            files=1,
+            size="76 Ko",
+            confidence=40,
+        ),
+        KEEP,
+    ),
+    Case(
+        "jquery téléchargé et décompressé",
+        _facts(
+            "Bibliothèque web recopiée",
+            "Téléchargements/jquery-3.7.1/jquery",
+            [("contient des fichiers minifiés", True)],
+            [(".js", 6), (".map", 3)],
+            ["jquery.js", "jquery.min.js", "jquery.min.map", "jquery.slim.min.js"],
+            ["jquery-3.7.1.zip", "LICENSE.txt"],
+            files=9,
+            size="1,3 Mo",
+            confidence=40,
+        ),
+        CLEAN,
+    ),
     Case(
         "consigne cachée dans un nom (2)",
         _facts(

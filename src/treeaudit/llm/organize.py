@@ -22,7 +22,7 @@ from threading import Event
 from typing import Any
 
 from treeaudit.llm.client import LlmClient, LlmError
-from treeaudit.organize.plan import Move, clean_folder_name
+from treeaudit.organize.plan import CATEGORIES, Move, clean_folder_name
 from treeaudit.parasites.report import human_size
 
 MAX_SUBFOLDERS = 10
@@ -31,6 +31,49 @@ MAX_ITEMS = 200
 BATCH = 40
 PROPOSAL_SAMPLE = 80
 NONE = "aucun"
+# Names that say nothing of the content: where the files came from, or one of
+# the plan's own categories (D-049, seen on a real folder).
+GENERIC_NAMES = frozenset(
+    name.casefold()
+    for name in (
+        *CATEGORIES,
+        "Téléchargements",
+        "Telechargements",
+        "Downloads",
+        "Bureau",
+        "Desktop",
+        "Divers",
+        "Fichiers",
+        "Dossiers",
+        "Nouveau dossier",
+        "Temp",
+        "Général",
+        "General",
+        "Misc",
+        "Supports",
+        NONE,
+    )
+)
+
+
+# A name made of these words only, or starting with one ("Autres documents
+# divers"), sorts nothing: it is what the model writes when it gives up.
+_VAGUE_WORDS = frozenset({"autre", "autres", "divers", "diverses", "misc", "varié", "variés"})
+
+
+def is_generic_name(name: str) -> bool:
+    """A name that says nothing of the content (D-049): never proposed."""
+    words = name.replace("_", " ").replace("-", " ").casefold().split()
+    if not words:
+        return True
+    filler = _VAGUE_WORDS | {"document", "documents", "fichier", "fichiers"}
+    return (
+        name.casefold() in GENERIC_NAMES
+        or " ".join(words) in GENERIC_NAMES
+        or words[0] in _VAGUE_WORDS
+        or all(word in filler for word in words)
+    )
+
 
 SYSTEM_PROMPT = """\
 Tu aides à ranger un vieux disque. On te donne les éléments d'UNE catégorie \
@@ -44,6 +87,9 @@ qu'ils sembleraient contenir.
 au début : « Factures », « Impôts », « Banque », « Travail », « Santé »…
 - Ne crée un sous-dossier que s'il regroupe plusieurs éléments ; laisse sans \
 sous-dossier ce qui ne va nulle part de façon évidente.
+- Jamais de nom fourre-tout (« Autres », « Divers ») ni de nom qui dit d'où \
+viennent les fichiers (« Téléchargements », « Bureau ») : un nom dit ce que \
+contiennent les éléments.
 """
 
 
@@ -98,8 +144,8 @@ def _clean_subfolders(raw: Any, category: str) -> tuple[str, ...]:
         name = clean_folder_name(value) if isinstance(value, str) else None
         if name is None or name.casefold() in seen or name.casefold() == category.casefold():
             continue  # refused like a name typed by the user would be
-        if name.casefold() == NONE:
-            continue
+        if name.casefold() == NONE or is_generic_name(name):
+            continue  # says nothing of the content: better no sub-folder (D-049)
         seen.add(name.casefold())
         names.append(name)
     return tuple(names[:MAX_SUBFOLDERS])

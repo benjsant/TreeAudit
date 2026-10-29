@@ -62,7 +62,9 @@
   <details class="group-band"{% if (suggestions and name == suggestions.category) or (not suggestions and loop.first) %} open{% endif %}>
     <summary><strong>{{ plan.destination }}/{{ names.folder(name) }}</strong> — {{ moves | length | number }} élément(s){% if expert and name not in ("Projets", "Logiciels") %} <button type="button" class="button small" data-start-suggestions data-scan="{{ scan.id }}" data-dir="{{ node.entry_id }}" data-category="{{ name }}" data-query="{{ base_query }}">💡 Suggestions de l'IA</button>{% endif %}</summary>
     <ul class="plain small organize-list">
-    {% for move in (moves if shown_per_category is none else moves[:shown_per_category]) %}
+    {# The category the AI worked on is shown whole: "accept all" must reach every suggestion (D-049). #}
+    {% set limit = none if (suggestions and name == suggestions.category) else shown_per_category %}
+    {% for move in (moves if limit is none else moves[:limit]) %}
       <li>
         <label><input type="checkbox" name="exclure" value="{{ move.entry_id }}"> laisser en place</label>
         <select name="categorie_{{ move.entry_id }}" aria-label="Catégorie de « {{ move.source }} »">
@@ -76,7 +78,7 @@
       </li>
     {% endfor %}
     </ul>
-    {% if shown_per_category is not none and moves | length > shown_per_category %}<p class="muted small">… et {{ (moves | length) - shown_per_category }} autre(s), tous dans le script. <a href="/scans/{{ scan.id }}/organize?{{ query }}&amp;tout=true">Tout afficher pour les ajuster</a></p>{% endif %}
+    {% if limit is not none and moves | length > limit %}<p class="muted small">… et {{ (moves | length) - shown_per_category }} autre(s), tous dans le script. <a href="/scans/{{ scan.id }}/organize?{{ query }}&amp;tout=true">Tout afficher pour les ajuster</a></p>{% endif %}
   </details>
   {% endfor %}
 

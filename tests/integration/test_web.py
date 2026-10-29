@@ -1057,6 +1057,8 @@ def test_ai_suggestions_are_shown_never_applied(
     touch(root / "papiers" / "a.pdf", b"a")
     touch(root / "papiers" / "b.txt", b"b")
     touch(root / "papiers" / "c.mp3", b"c")  # a mixed folder: its files are proposed one by one
+    for i in range(35):  # more than a category shows by default (30)
+        touch(root / "papiers" / f"doc{i:02}.pdf", b"%d" % i)
     config = AppConfig(
         data_dir=str(tmp_path / "data"),
         roots=(RootConfig(id="main", path=str(root), label="Disque", display_path=DISPLAY),),
@@ -1080,7 +1082,8 @@ def test_ai_suggestions_are_shown_never_applied(
         page = expert.get(job["result_url"]).text
         assert_safe_html(page)
         assert "rien ne change tant que tu ne les acceptes pas" in page
-        assert 'data-suggestion="Factures"' in page
+        # The whole category is shown: "accept all" reaches every suggestion (D-049).
+        assert page.count('data-suggestion="Factures"') >= 37  # not cut at 30
         assert "../../etc" not in page and "onerror" not in page.split("ai-panel")[1]
         # Shown only: the plan itself is unchanged until the user submits.
         assert 'name="sous_' in page and 'value="Factures"' not in page
