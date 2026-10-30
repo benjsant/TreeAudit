@@ -43,11 +43,10 @@ from treeaudit.core.sandbox import Policy, SandboxError, restrict
 from treeaudit.filters.spec import FilterSpec
 from treeaudit.llm.bench import CASES, run_bench
 from treeaudit.llm.bench_heldout import HELDOUT_CASES
-from treeaudit.llm.bench_organize import ORGANIZE_CASES, run_organize_bench
 from treeaudit.llm.client import LlmClient, LlmError, client_from_environment
 from treeaudit.organize.subfolder_bench import BenchResult, case_moves, run_rules_bench
 from treeaudit.organize.subfolder_cases import HELDOUT_CASES as SUBFOLDER_CASES
-from treeaudit.organize.subfolder_cases import SubfolderCase
+from treeaudit.organize.subfolder_cases_earlier import EARLIER_CASES
 from treeaudit.parasites.commands import Action
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
 from treeaudit.parasites.report import human_size
@@ -309,9 +308,6 @@ def build_parser() -> argparse.ArgumentParser:
     llm_bench = llm_commands.add_parser("bench", help="mesurer le modèle sur des cas connus")
     llm_bench.add_argument("--label", default="", help="nom du modèle, pour le tableau")
     llm_bench.add_argument("--wait", type=float, default=300.0, help="attente du chargement (s)")
-    llm_bench.add_argument(
-        "--organize", action="store_true", help="mesurer les suggestions de rangement"
-    )
     llm_bench.add_argument(
         "--heldout", action="store_true", help="second jeu de cas, jamais utilisé pour régler"
     )
@@ -678,11 +674,6 @@ def _cmd_llm_bench(args: argparse.Namespace) -> int:
     client = _llm_client()
     if not client.wait_until_ready(args.wait):
         raise LlmError("le LLM n'est pas prêt (modèle trop long à charger ?)")
-    if args.organize:
-        # With --heldout: the cases the fixed rules are measured on (D-050).
-        cases = SUBFOLDER_CASES if args.heldout else ORGANIZE_CASES
-        label = (args.label or client.url) + (" (cas mis de côté)" if args.heldout else "")
-        return _llm_bench_organize(client, label, cases)
     results = run_bench(client, HELDOUT_CASES if args.heldout else CASES)
     label = (args.label or client.url) + (" (second jeu)" if args.heldout else "")
     for result in results:
@@ -709,17 +700,10 @@ def _cmd_llm_bench(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def _llm_bench_organize(client: LlmClient, label: str, cases: Sequence[SubfolderCase]) -> int:
-    started = time.monotonic()
-    results = run_organize_bench(client, cases)
-    _print_subfolder_bench(results, label, time.monotonic() - started)
-    return EXIT_OK
-
-
 def _cmd_subfolders() -> int:
     for label, cases in (
         ("règles, cas mis de côté", SUBFOLDER_CASES),
-        ("règles, cas de l'IA", ORGANIZE_CASES),
+        ("règles, cas plus anciens", EARLIER_CASES),
     ):
         started = time.monotonic()
         results = run_rules_bench(cases)

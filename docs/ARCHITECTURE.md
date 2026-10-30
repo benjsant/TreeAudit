@@ -27,10 +27,10 @@ Deux principes structurent tout le code :
 | `parasites/` | dossiers « à nettoyer » : catalogue de 41 règles, détection sur l'index, confiance expliquée, cache | `rules.toml`, `rules.py`, `detect.py` (D-023), `cached.py` |
 | `duplicates/` | doublons exacts : lecture sûre, empreintes en étapes, ordre physique, groupes et copie à garder | `reader.py`, `hashing.py`, `placement.py`, `runner.py` (D-015, D-030), `groups.py` (D-026) |
 | `archive/` | archive vérifiée : dossier d'archives, écriture, relecture et comparaison | `destination.py`, `output.py`, `runner.py`, `verify.py` (D-024, D-032) |
-| `organize/` | « Ranger » : plan par catégories, ajustements, script de rangement et d'annulation, sous-dossiers par règles | `plan.py`, `script.py` (D-041), `subfolders.py`, `subfolder_bench.py`, `subfolder_cases.py` (D-050) |
+| `organize/` | « Ranger » : plan par catégories, ajustements, script de rangement et d'annulation, sous-dossiers par règles | `plan.py`, `script.py` (D-041), `subfolders.py`, `subfolder_bench.py`, `subfolder_cases*.py` (D-050) |
 | `projects/` | « Projets et logiciels » : inventaire depuis l'index | `detect.py` (D-044) |
 | `preview/` | aperçu des images : lecture sûre, type reconnu au contenu | `images.py` (D-046) |
-| `llm/` | mode expert : client du serveur local, avis, suggestions, bancs d'essai | `client.py`, `opinion.py`, `organize.py`, `facts.py`, `bench*.py` (D-040) |
+| `llm/` | mode expert : client du serveur local, avis, bancs d'essai | `client.py`, `opinion.py`, `facts.py`, `bench*.py` (D-040) |
 | `web/` | interface web : assemblage, pages, API JSON, exports, tâches de fond, sécurité HTTP | voir [Interface web](#interface-web) |
 | `shellcmd.py` | **toutes** les commandes de nettoyage proposées, et leur double vérification | D-025, D-045 |
 | `cli.py` | ligne de commande ; aussi le serveur web et le relais en Docker | |
@@ -142,15 +142,14 @@ Les commandes de recréation viennent du catalogue `rules.toml`, refusé au char
 1. **thèmes** : un index de mots-clés, construit une fois, donne le thème de chaque nom. Un sujet (*Voiture*) compte double face à un type de papier (*Factures*). Un thème qui n'a qu'un membre est laissé à l'étape suivante ;
 2. **mots communs** : parmi le reste, le mot partagé par le plus de noms forme un groupe. Un tas, recalculé paresseusement, évite de tout recompter à chaque groupe.
 
-Un groupe a au moins deux membres et jamais tous. Son nom passe par `clean_folder_name` et `is_generic_name`, comme un nom tapé par l'utilisateur ou proposé par l'IA. Le résultat a la même forme (`Suggestions`) que celui de l'IA, avec en plus la raison de chaque proposition. La page l'affiche de la même façon. `subfolder_bench.py` note les deux méthodes sur les mêmes cas.
+Un groupe a au moins deux membres et jamais tous. Son nom passe par `clean_folder_name` et `is_generic_name`, comme un nom tapé par l'utilisateur ou proposé par l'IA. Chaque proposition porte sa raison, affichée au survol. `subfolder_bench.py` note les règles sur deux jeux : `subfolder_cases.py` (mis de côté, figé avant l'algorithme) et `subfolder_cases_earlier.py` (écrit pour l'IA). Les suggestions de l'IA ont été retirées (D-051) ; elles restent sur la branche `legacy-ai-subfolders`.
 
 ### Le mode expert (`llm/`)
 
 - `client.py` parle au serveur llama.cpp par HTTP, **adresses locales seulement**, et force chaque réponse dans un **schéma JSON**. Ce qui revient est une donnée à valider, jamais une instruction.
 - `facts.py` construit ce que l'IA voit d'un dossier : métadonnées de l'index seulement.
 - `opinion.py` demande un avis, puis l'**ordre des champs** du schéma oblige le modèle à décrire le contenu avant de conclure. `guard()` corrige ensuite les réponses risquées. L'avis ne change jamais la classification ni la sélection.
-- `organize.py` propose des sous-dossiers en deux temps : des noms (vérifiés comme ceux tapés par l'utilisateur), puis une affectation par **énumération fermée**, où le modèle ne peut pas inventer de nom.
-- `bench.py`, `bench_heldout.py` et `bench_organize.py` sont les cas d'essai. Le deuxième jeu n'a jamais servi à régler les consignes.
+- `bench.py` et `bench_heldout.py` sont les cas d'essai. Le deuxième jeu n'a jamais servi à régler les consignes.
 
 ## Modèle de données (`db/schema.py`)
 

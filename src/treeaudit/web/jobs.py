@@ -18,7 +18,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
-from urllib.parse import parse_qsl
 
 from treeaudit.archive.destination import ARCHIVE_DIR_MESSAGES, ArchiveDirRejectedError
 from treeaudit.archive.runner import (
@@ -37,9 +36,6 @@ from treeaudit.duplicates.runner import DupOptions, DupOutcome, DupProgress, exe
 from treeaudit.llm.client import LlmClient, LlmError
 from treeaudit.llm.facts import facts_for_finding
 from treeaudit.llm.opinion import Opinion, ask_opinion
-from treeaudit.llm.organize import SuggestionsCancelled, SuggestProgress, suggest
-from treeaudit.organize.plan import PlanTooLargeError, adjustments_from_query, make_plan
-from treeaudit.organize.subfolders import Suggestions
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.detect import Band
 from treeaudit.parasites.report import human_size
@@ -57,7 +53,6 @@ class JobKind(StrEnum):
     SCAN = "scan"
     DUPES = "dupes"
     ARCHIVE = "archive"
-    SUGGEST = "suggest"
     OPINIONS = "opinions"
     COMPACT = "compact"
 
@@ -95,32 +90,20 @@ class OpinionsOutcome:
         return f"/scans/{self.scan_id}/parasites?min_confidence={self.min_confidence}&avis="
 
 
-@dataclass(frozen=True, slots=True)
-class SuggestOutcome:
-    """Sub-folders suggested by the local AI for one category (D-041). Shown on
-    the tidying page only: nothing applies until the user accepts it."""
+@dataclass(slots=True)
+class StepProgress:
+    """Progress of a job counted in steps. Written by the job's thread only."""
 
-    status: ScanStatus
-    scan_id: int
-    dir_id: int
-    category: str
-    query: str
-    """The page's adjustments, to come back to the same preview."""
-    suggestions: Suggestions | None = None
-
-    @property
-    def result_url(self) -> str:
-        query = f"{self.query}&" if self.query else ""
-        return f"/scans/{self.scan_id}/organize?{query}suggestions="
+    stage: str
+    done: int = 0
+    total: int = 0
 
 
 class JobError(TreeAuditError):
     """The job cannot be started; the message is shown to the user."""
 
 
-Outcome = (
-    ScanOutcome | DupOutcome | ArchiveOutcome | SuggestOutcome | OpinionsOutcome | CompactOutcome
-)
+Outcome = ScanOutcome | DupOutcome | ArchiveOutcome | OpinionsOutcome | CompactOutcome
 
 
 @dataclass(slots=True)
@@ -129,7 +112,7 @@ class Job:
     kind: JobKind
     label: str
     cancel: threading.Event = field(default_factory=threading.Event)
-    progress: ScanProgress | DupProgress | ArchiveProgress | SuggestProgress = field(
+    progress: ScanProgress | DupProgress | ArchiveProgress | StepProgress = field(
         default_factory=ScanProgress
     )
     started_at: float = field(default_factory=time.time)
@@ -162,7 +145,7 @@ class Job:
                 "current_dir": progress.current_dir,
             }
             data["scan_id"] = progress.scan_id
-        elif isinstance(progress, SuggestProgress):
+        elif isinstance(progress, StepProgress):
             data["progress"] = {
                 "stage": progress.stage,
                 "done": progress.done,
@@ -191,7 +174,7 @@ class Job:
             data["status"] = self.outcome.status.value
         if isinstance(self.outcome, ArchiveOutcome):
             data["archive"] = _archive_result(self.outcome)
-        if isinstance(self.outcome, SuggestOutcome | OpinionsOutcome | CompactOutcome):
+        if isinstance(self.outcome, OpinionsOutcome | CompactOutcome):
             data["result_url"] = self.outcome.result_url + str(self.id)
         return data
 
@@ -327,36 +310,9 @@ class JobManager:
 
         return self._start(job, work)
 
-    def start_suggestions(
-        self, llm: LlmClient, scan_id: int, dir_id: int, category: str, query: str
-    ) -> Job:
-        """Sub-folder suggestions of the local AI for one category of a tidying
-        plan (D-041). The model only proposes: the result is shown, never applied."""
-        progress = SuggestProgress()
-        label = f"Suggestions de l'IA pour « {category} »"
-        job = Job(id=next(self._ids), kind=JobKind.SUGGEST, label=label, progress=progress)
-        adjustments = adjustments_from_query(parse_qsl(query, keep_blank_values=True))
-
-        def work(j: Job) -> SuggestOutcome:
-            conn = connect(self.config.data_dir)
-            try:
-                plan = make_plan(conn, scan_id, dir_id, adjustments)
-            except PlanTooLargeError as exc:
-                raise JobError("dossier trop grand : choisis un sous-dossier") from exc
-            finally:
-                conn.close()
-            moves = [move for move in plan.moves if move.category == category]
-            try:
-                found = suggest(llm, category, moves, progress=progress, cancel=j.cancel)
-            except SuggestionsCancelled:
-                return SuggestOutcome(ScanStatus.CANCELLED, scan_id, dir_id, category, query)
-            return SuggestOutcome(ScanStatus.COMPLETE, scan_id, dir_id, category, query, found)
-
-        return self._start(job, work)
-
     def start_opinions(self, llm: LlmClient, scan_id: int, min_confidence: int) -> Job:
         """The local AI's opinion on each folder "to check" or "doubtful" (D-040)."""
-        progress = SuggestProgress(stage="avis")
+        progress = StepProgress(stage="avis")
         label = "Avis de l'IA sur les dossiers à vérifier"
         job = Job(id=next(self._ids), kind=JobKind.OPINIONS, label=label, progress=progress)
 
@@ -399,7 +355,7 @@ class JobManager:
 
     def start_compact(self) -> Job:
         """VACUUM the index: only TreeAudit's own data, after analyses were forgotten."""
-        progress = SuggestProgress(stage="compactage")
+        progress = StepProgress(stage="compactage")
         job = Job(
             id=next(self._ids),
             kind=JobKind.COMPACT,

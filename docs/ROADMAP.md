@@ -150,7 +150,8 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Suggestions en tâche de fond, avec progression et annulation.
 - [x] Sous-dossiers proposés par des règles fixes, pour tous, sans IA (D-050) : thèmes et mots communs, explicables, instantanés ; séries d'appareil photo écartées après un essai sur un vrai dossier.
 - [ ] À réfléchir : les photos sans nom parlant (64 % sur le vrai dossier). Idée du mainteneur : les trier soi-même en les regardant, les nommer, et s'aider de Czkawka (images semblables) ; ce que TreeAudit pourrait y apporter sans lire le contenu reste à définir.
-- [ ] À décider : garder ou retirer les suggestions de l'IA dans Ranger.
+- [x] Suggestions de l'IA retirées de Ranger (D-051), gardées sur la branche `legacy-ai-subfolders`.
+- [ ] À décider, sur des mesures : l'avis de l'IA dans « À nettoyer » apporte-t-il plus qu'une règle ?
 
 ## Phase 9 bis — Mode expert, LLM local (D-040)
 - [x] Étape 1 : conteneur llama.cpp (Vulkan) sans Internet, téléchargement vérifié des modèles, banc d'essai ; Ministral 3 3B retenu (16/16, aucune réponse dangereuse).

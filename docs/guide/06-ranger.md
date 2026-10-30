@@ -38,8 +38,6 @@ Un sous-dossier regroupe au moins deux éléments, et jamais tous (il ne rangera
 
 Les photos et les vidéos sont déjà rangées par année : les sous-dossiers se placent à l'intérieur. Les noms donnés par un appareil ou une application (un préfixe suivi d'une date ou d'un long numéro) ne forment pas de groupe : ils disent d'où vient la photo, pas ce qu'elle montre.
 
-En [mode expert](09-mode-expert.md), **« 💡 Suggestions de l'IA »** fait la même chose avec l'IA locale. Les règles fixes font aussi bien sur les cas d'essai, en un instant (voir D-050).
-
 ## Lancer le rangement
 
 1. Télécharge les **deux scripts** : celui qui range, et celui qui **annule**. Ils reprennent tes ajustements.

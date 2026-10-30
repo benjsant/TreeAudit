@@ -1035,63 +1035,6 @@ def test_organize_adjustments_reach_the_scripts(client: TestClient, scanned: int
     assert "Ajustement refusé" in refused.text
 
 
-def test_ai_suggestions_are_shown_never_applied(
-    tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
-) -> None:
-    from typing import Any
-
-    from treeaudit.llm.client import Answer, LlmClient
-
-    class Organizer(LlmClient):
-        def __init__(self) -> None:
-            super().__init__("http://llm:8080")
-
-        def ask(self, system: str, user: str, schema: Any, *, max_tokens: int = 400) -> Answer:
-            if "sous_dossiers" in schema["properties"]:
-                data: dict[str, Any] = {"sous_dossiers": ["Factures", "../../etc", XSS]}
-            else:
-                keys = schema["properties"]["classement"]["items"]["properties"]["id"]["enum"]
-                data = {"classement": [{"id": key, "sous_dossier": "Factures"} for key in keys]}
-            return Answer(data=data, seconds=0.1, tokens=1, tokens_per_second=1.0)
-
-    touch(root / "papiers" / "a.pdf", b"a")
-    touch(root / "papiers" / "b.txt", b"b")
-    touch(root / "papiers" / "c.mp3", b"c")  # a mixed folder: its files are proposed one by one
-    for i in range(35):  # more than a category shows by default (30)
-        touch(root / "papiers" / f"doc{i:02}.pdf", b"%d" % i)
-    config = AppConfig(
-        data_dir=str(tmp_path / "data"),
-        roots=(RootConfig(id="main", path=str(root), label="Disque", display_path=DISPLAY),),
-    )
-    mounts = data_disk_table(str(tmp_path))
-    statuses = evaluate_roots(config, mounts, home=None)
-    app = create_app(config, statuses, mounts=lambda: mounts, home=lambda: None, llm=Organizer())
-    with TestClient(app, base_url="http://127.0.0.1:8765") as expert:
-        snapshot = run_job(expert, "/api/scans", {"root_id": "main", "subpath": ""})
-        scan_id = snapshot["scan_id"]
-        plain = expert.get(f"/scans/{scan_id}/organize").text
-        assert "💡 Suggestions de l'IA" in plain and "ai-panel" not in plain
-        url = f"/api/scans/{scan_id}/organize/suggestions"
-        body = {"category": "Documents", "query": ""}
-        assert expert.post(url, json=body).status_code == 403  # CSRF header required
-        bad = expert.post(url, json={"category": "../../etc"}, headers=CSRF)
-        assert bad.status_code == 422
-        job = run_job(expert, url, body)
-        assert job["kind"] == "suggest" and job["status"] == "complete"
-        assert job["result_url"].startswith(f"/scans/{scan_id}/organize?suggestions=")
-        page = expert.get(job["result_url"]).text
-        assert_safe_html(page)
-        assert "rien ne change tant que tu ne les acceptes pas" in page
-        # The whole category is shown: "accept all" reaches every suggestion (D-049).
-        assert page.count('data-suggestion="Factures"') >= 37  # not cut at 30
-        assert "../../etc" not in page and "onerror" not in page.split("ai-panel")[1]
-        # Shown only: the plan itself is unchanged until the user submits.
-        assert 'name="sous_' in page and 'value="Factures"' not in page
-        script = expert.get(f"/export/scans/{scan_id}/organize.sh").text
-        assert "/Factures/" not in script
-        expert.app.state.jobs.wait()  # type: ignore[attr-defined]
-
-
 def test_rule_sub_folders_are_shown_never_applied(
     tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
 ) -> None:
@@ -1132,7 +1075,8 @@ def test_rule_sub_folders_are_shown_never_applied(
             assert other.status_code in (200, 422) and "ai-panel" not in other.text
 
 
-def test_no_ai_without_expert_mode(client: TestClient, scanned: int) -> None:
+def test_the_ai_no_longer_proposes_sub_folders(client: TestClient, scanned: int) -> None:
+    """Removed in favour of the fixed rules (D-051): no button, no route."""
     page = client.get(f"/scans/{scanned}/organize").text
     assert "💡 Suggestions de l'IA" not in page and "ai-panel" not in page
     started = client.post(
@@ -1140,7 +1084,7 @@ def test_no_ai_without_expert_mode(client: TestClient, scanned: int) -> None:
         json={"category": "Documents"},
         headers=CSRF,
     )
-    assert started.status_code == 409 and "mode expert" in started.json()["detail"]
+    assert started.status_code in (404, 405)
 
 
 # --- opinions of the local AI on the folders to check (D-040) ------------------------------

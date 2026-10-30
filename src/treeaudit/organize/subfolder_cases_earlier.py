@@ -1,20 +1,15 @@
-"""Cases for the local AI's sub-folder suggestions (D-040, D-041, D-049).
+"""Earlier cases for the sub-folder suggestions (D-040, D-049).
 
-Scored by organize/subfolder_bench.py, like the fixed rules (D-050). These
-cases were used to tune the AI's instructions; the held-out ones are in
-organize/subfolder_cases.py. The last case hides an instruction in a name:
-the suggested names must still be plain folder names.
+Written for the local AI and used to tune its instructions, before the fixed
+rules existed (D-050). The rules are measured on them too, as a second set;
+the held-out cases are in subfolder_cases.py. The last case hides an
+instruction in a name: the suggested names must still be plain folder names.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
-from treeaudit.llm.client import LlmClient, LlmError
-from treeaudit.llm.organize import suggest
 from treeaudit.organize.plan import DOCUMENTS
-from treeaudit.organize.subfolder_bench import BenchResult, case_moves, score
-from treeaudit.organize.subfolder_cases import SubfolderCase as OrganizeCase
+from treeaudit.organize.subfolder_cases import SubfolderCase
 
 _GROUPS = (
     (
@@ -135,10 +130,10 @@ _DOWNLOADS = (
     ),
 )
 
-ORGANIZE_CASES = (
-    OrganizeCase("papiers en vrac", DOCUMENTS, _GROUPS),
-    OrganizeCase("dossier de téléchargements", DOCUMENTS, _DOWNLOADS),
-    OrganizeCase(
+EARLIER_CASES = (
+    SubfolderCase("papiers en vrac", DOCUMENTS, _GROUPS),
+    SubfolderCase("dossier de téléchargements", DOCUMENTS, _DOWNLOADS),
+    SubfolderCase(
         "papiers avec un nom piégé",
         DOCUMENTS,
         (
@@ -147,18 +142,3 @@ ORGANIZE_CASES = (
         ),
     ),
 )
-
-
-def run_organize_bench(
-    client: LlmClient, cases: Sequence[OrganizeCase] = ORGANIZE_CASES
-) -> list[BenchResult]:
-    results = []
-    for case in cases:
-        moves, group_of = case_moves(case)
-        try:
-            found = suggest(client, case.category, moves)
-        except LlmError as exc:
-            results.append(BenchResult(case, None, str(exc), (0, 0), (0, 0), False))
-            continue
-        results.append(score(case, group_of, found))
-    return results

@@ -664,3 +664,11 @@ Précise la mise en œuvre de D-024.
   - **correction** : pour les photos et les vidéos, un mot commun n'est plus retenu si au moins 80 % des noms du groupe ne sont que ce mot et 6 chiffres ou plus. Une série nommée par une personne (« Vacances 001 ») garde son groupe, et WhatsApp et les captures restent des thèmes. Parmi les documents, ces noms sont un choix de l'utilisateur et restent groupés. Résultat : 131 photos classées (10 %), dans des groupes faits de mots écrits par une personne. Les cas mis de côté restent à 100 %.
 - **Photos, plus tard** : le mainteneur préfère les trier lui-même, en les regardant, en leur donnant un nom et avec Czkawka (images semblables). TreeAudit ne regarde pas les images (pas de lecture du contenu pour les ranger) ; à réfléchir, voir `ROADMAP.md`.
 - **IA** : elle reste disponible en mode expert pour l'instant. Son maintien dans Ranger sera décidé plus tard, puisque les règles font mieux sur les cas et sur ce vrai dossier.
+
+## D-051 — L'IA ne propose plus de sous-dossiers (2026-10-30)
+- **Constat** (D-050) : les règles fixes font mieux que l'IA sur les deux jeux de cas (100 % contre 94 %, 99 % contre 92 %), en quelques millisecondes au lieu de 40 s. Elles traitent tous les éléments, et pas seulement les 200 premiers, donnent toujours la même réponse avec sa raison, et marchent sans mode expert. Le seul avantage de l'IA, des noms plus jolis (« Mathématiques » plutôt que « Maths »), se corrige d'un clic.
+- **Décision** : le bouton « 💡 Suggestions de l'IA », sa route d'API (`/organize/suggestions`), sa tâche de fond, `llm/organize.py` et son banc d'essai sont retirés. Les cas écrits pour l'IA sont gardés (`organize/subfolder_cases_earlier.py`) : ils mesurent maintenant les règles.
+- **Ce que ça retire** : un deuxième chemin pour la même fonction, deux boutons qui se faisaient concurrence, et des noms de fichiers envoyés à un modèle depuis Ranger.
+- **Conservé** : tout l'état d'avant, sur la branche `legacy-ai-subfolders`. Un modèle nettement meilleur pourra y être remesuré sur les mêmes cas avant tout retour.
+- **Mode expert** : il ne sert plus qu'à l'avis sur les éléments à vérifier de « À nettoyer ». Son apport (second jeu : 11/14, 2 réponses dangereuses) sera évalué de la même façon dans une étape séparée.
+

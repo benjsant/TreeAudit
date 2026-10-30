@@ -7,7 +7,6 @@ Le mode expert ajoute une **IA locale** qui donne son avis. Elle tourne sur ta c
 | Où | Ce qu'elle propose |
 |---|---|
 | [À nettoyer](03-nettoyer.md) | un avis sur les éléments orange et rouges (au plus 50 à la fois) : « à garder », « incertain », ou « ne voit pas de raison de garder » |
-| [Ranger](06-ranger.md) | des sous-dossiers pour une catégorie (« Factures », « Impôts »…), à accepter ou non |
 
 **Ce qu'elle voit** : des noms, des types, des tailles, des années. **Jamais le contenu de tes fichiers**, jamais un chemin sur lequel agir.
 
@@ -37,7 +36,9 @@ Cette seule commande :
 3. **retient ton choix** : le mode expert restera actif à chaque `./treeaudit` ;
 4. démarre TreeAudit avec l'IA.
 
-La page d'accueil indique alors « 💡 Mode expert (IA locale) : **actif** ». Les boutons « 💡 » apparaissent sur les pages À nettoyer et Ranger.
+La page d'accueil indique alors « 💡 Mode expert (IA locale) : **actif** ». Le bouton « 💡 Avis de l'IA » apparaît sur la page À nettoyer.
+
+Les sous-dossiers de [Ranger](06-ranger.md) n'ont pas besoin de l'IA : des règles fixes les proposent, pour tout le monde, et mieux qu'elle sur les cas d'essai (D-050, D-051).
 
 - **L'arrêter** : `./treeaudit expert off`. Le modèle reste dans `models/` ; supprime-le pour libérer 2 Gio.
 - **Pour un seul démarrage sans IA** : `TREEAUDIT_EXPERT=0 ./treeaudit`.

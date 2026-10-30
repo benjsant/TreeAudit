@@ -209,12 +209,6 @@ function setupJobMonitor() {
       field("progress").textContent =
         `${p.done.toLocaleString("fr-FR")} / ${p.total.toLocaleString("fr-FR")} dossiers examinés par l'IA`;
       field("current").textContent = "";
-    } else if (job.kind === "suggest") {
-      field("progress").textContent =
-        p.stage === "propositions"
-          ? "L'IA lit les noms et propose des sous-dossiers…"
-          : `${p.done.toLocaleString("fr-FR")} / ${p.total.toLocaleString("fr-FR")} éléments classés`;
-      field("current").textContent = "";
     } else if (job.kind === "archive") {
       field("progress").textContent = archiveProgress(p);
       field("current").textContent = p.problems ? `${p.problems} élément(s) à signaler` : "";
@@ -247,7 +241,7 @@ function setupJobMonitor() {
     } else if (job.kind === "dupes" && job.run_id) {
       target = `/dupes/${encodeURIComponent(job.run_id)}`;
     } else if (
-      (job.kind === "suggest" || job.kind === "opinions" || job.kind === "compact") &&
+      (job.kind === "opinions" || job.kind === "compact") &&
       job.result_url &&
       (job.result_url.startsWith("/scans/") || job.result_url.startsWith("/?"))
     ) {
@@ -548,8 +542,6 @@ function setupTheme() {
 
 // --- tidying adjustments: only what changed goes in the address (D-041) -------------
 
-// --- AI suggestions: shown only, applied by the user's click (D-041) ----------------
-
 // --- forgetting analyses: TreeAudit's own records only (D-043) ----------------------
 
 function setupForget() {
@@ -599,28 +591,8 @@ function setupOpinions() {
   }
 }
 
+// Proposed sub-folders: shown only, applied by the user's click (D-050).
 function setupSuggestions() {
-  for (const button of document.querySelectorAll("[data-start-suggestions]")) {
-    button.addEventListener("click", async (event) => {
-      event.preventDefault(); // inside a <summary>: do not fold the list
-      button.disabled = true;
-      try {
-        await post(`/api/scans/${encodeURIComponent(button.dataset.scan)}/organize/suggestions`, {
-          dir: Number(button.dataset.dir),
-          category: button.dataset.category,
-          query: button.dataset.query,
-        });
-        window.location.assign("/jobs/current");
-      } catch (error) {
-        const box = document.querySelector("[data-suggest-error]");
-        if (box) {
-          box.textContent = error.message;
-          box.hidden = false;
-        }
-        button.disabled = false;
-      }
-    });
-  }
   const accept = (button) => {
     const field = document.querySelector(`input[name="${CSS.escape(button.dataset.target)}"]`);
     if (!field) return;

@@ -34,7 +34,6 @@ from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.filters.search import Sort, search
 from treeaudit.filters.spec import FilterError, compile_filter, describe
-from treeaudit.llm.client import LlmClient
 from treeaudit.organize import plan as organize_plan
 from treeaudit.organize import subfolders
 from treeaudit.organize.subfolders import NO_SUBFOLDERS
@@ -50,7 +49,7 @@ from treeaudit.scanner.walker import SubpathError, parse_subpath
 from treeaudit.shellcmd import host_path, safe_root
 from treeaudit.web import explorer, queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, browse_root, root_display
-from treeaudit.web.jobs import OpinionsOutcome, SuggestOutcome
+from treeaudit.web.jobs import OpinionsOutcome
 from treeaudit.web.live import refresh_roots
 from treeaudit.web.search_form import SearchForm, spec_from_form
 
@@ -491,7 +490,6 @@ def organize_page(
     config: Config,
     dir: Annotated[int | None, Query(ge=1)] = None,
     tout: bool = False,
-    suggestions: Annotated[int | None, Query(ge=1)] = None,
     proposer: Annotated[str | None, Query(max_length=40)] = None,
 ) -> Response:
     """Tidying (D-041): the plan and a preview of the result; nothing is changed.
@@ -520,22 +518,9 @@ def organize_page(
     if plan is not None:
         for move in plan.moves:
             by_category.setdefault(move.category, []).append(move)
-    llm: LlmClient | None = request.app.state.llm
-    # Suggestions of the local AI come from a finished job (D-041). They are
-    # only shown next to the elements; the user accepts them or not.
-    found = None
-    job = request.app.state.jobs.current
-    if (
-        suggestions is not None
-        and job is not None
-        and job.id == suggestions
-        and isinstance(job.outcome, SuggestOutcome)
-        and job.outcome.scan_id == scan_id
-        and job.outcome.dir_id == node.entry_id
-    ):
-        found = job.outcome.suggestions
     # Sub-folders by fixed rules (D-050): instant, for everyone, shown the same way.
-    if found is None and proposer in by_category and proposer not in NO_SUBFOLDERS:
+    found = None
+    if proposer in by_category and proposer not in NO_SUBFOLDERS:
         found = subfolders.propose(proposer, by_category[proposer])
     return render(
         request,
@@ -556,9 +541,8 @@ def organize_page(
         base_query="&".join(
             f"{quote(key)}={quote(value)}"
             for key, value in request.query_params.multi_items()
-            if key not in ("suggestions", "tout", "proposer")
+            if key not in ("tout", "proposer")
         ),
-        expert=llm is not None,
         suggestions=found,
         no_subfolders=NO_SUBFOLDERS,
     )

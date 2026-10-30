@@ -58,7 +58,6 @@ def test_themes_and_shared_words() -> None:
         ),
     )
     assert groups(found) == {"Factures": [1, 2], "Impôts": [3, 4], "Dupont": [5, 6]}
-    assert found.by_rules
     assert found.reasons[1] == "le nom contient « facture »"
     assert found.reasons[5] == "mot en commun : « Dupont »"
     assert 7 not in found.by_entry
@@ -168,3 +167,24 @@ def test_held_out_cases_stay_sorted(case: object) -> None:
     [result] = run_rules_bench([case])  # type: ignore[list-item]
     assert result.names_valid and not result.generic
     assert result.score >= 0.95
+
+
+@pytest.mark.parametrize(
+    ("name", "generic"),
+    [
+        ("Autres documents divers", True),
+        ("Autres_Documents_Importants", True),
+        ("Divers", True),
+        ("Téléchargements", True),
+        ("Archives", True),  # one of the plan's categories
+        ("documents", True),
+        ("Factures", False),
+        ("Impôts", False),
+        ("Santé", False),
+        ("Formation professionnelle", False),
+        ("Documents administratifs", False),
+    ],
+)
+def test_vague_sub_folder_names_are_never_proposed(name: str, generic: bool) -> None:
+    """Seen on a real folder and in the benchmark (D-049)."""
+    assert is_generic_name(name) is generic

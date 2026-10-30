@@ -103,7 +103,7 @@ La vitesse à froid sur ce type de disque est déjà mesurée (`ROADMAP.md`, pha
 - Scripts exécutés pour de vrai sur une arborescence de test : rangement sans perte (empreintes identiques), annulation à l'identique, fichier modifié ignoré, place prise jamais écrasée, nom piégé sans effet.
 - Plan d'exécution de la descente dans les sous-dossiers (index des parents), page d'aperçu et téléchargements avec des noms piégés.
 - Sous-dossiers par règles (D-050, `test_subfolders.py`) : mots normalisés (casse, accents, chiffres, mots vides), thèmes, sujet plus fort qu'un type de papier, thème isolé laissé aux mots communs, aucun sous-dossier qui contiendrait tout, thèmes selon la catégorie, séries d'appareil photo écartées (mais gardées parmi les documents), noms sûrs et jamais vagues, même réponse pour la même entrée, 50 000 éléments en moins de 10 s. Page : proposition sans mode expert, affichée seulement, script inchangé, catégorie inconnue ou interdite sans effet.
-- Cas mis de côté (`organize/subfolder_cases.py`), figés avant l'algorithme : `treeaudit subfolders` mesure les règles, `./treeaudit llm-bench` l'IA (`--organize --heldout`).
+- Cas mis de côté (`organize/subfolder_cases.py`), figés avant l'algorithme : `treeaudit subfolders` mesure les règles sur ces cas et sur ceux écrits autrefois pour l'IA. Retrait de l'IA de Ranger (D-051) : ni bouton ni route.
 
 ## Mode natif sous bac à sable (D-038)
 - Sonde dans un processus enfant : écriture, modification, suppression, création, renommage, `chmod`, `utime`, `setxattr` et `chown` hors des dossiers autorisés ; écoute sur un autre port ; TCP sortant, UDP, Unix, netlink ; signal ; `exec`. Tout est refusé ; ce qui est autorisé fonctionne.

@@ -40,7 +40,6 @@ MIN_MEMBERS = 2
 MAX_NAME_WORDS = 2
 DEVICE_DIGITS = 6
 DEVICE_SHARE = 0.8
-NONE = "aucun"
 
 # Names that say nothing of the content: where the files came from, or one of
 # the plan's own categories (D-049, seen on a real folder).
@@ -62,11 +61,11 @@ GENERIC_NAMES = frozenset(
         "General",
         "Misc",
         "Supports",
-        NONE,
+        "aucun",
     )
 )
 # A name made of these words only, or starting with one ("Autres documents
-# divers"), sorts nothing: it is what a model writes when it gives up.
+# divers"), sorts nothing (D-049).
 _VAGUE_WORDS = frozenset({"autre", "autres", "divers", "diverses", "misc", "varié", "variés"})
 
 
@@ -90,11 +89,8 @@ class Suggestions:
     subfolders: tuple[str, ...]
     by_entry: dict[int, str]
     """Entry id -> suggested sub-folder (elements without one are absent)."""
-    considered: int
-    total: int
     reasons: Mapping[int, str] = field(default_factory=dict)
-    """Entry id -> why, for the rules (the AI gives none)."""
-    by_rules: bool = False
+    """Entry id -> why the sub-folder is proposed."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -384,4 +380,4 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
         for entry in group if name is not None else ():
             reasons[entry] = f"mot en commun : « {name} »"
 
-    return Suggestions(category, tuple(order), by_entry, count, count, reasons, by_rules=True)
+    return Suggestions(category, tuple(order), by_entry, reasons)

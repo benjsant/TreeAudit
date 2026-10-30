@@ -260,8 +260,8 @@ class AdjustmentError(ValueError):
 class Adjustments:
     """The user's changes to the plan: elements left in place, other categories,
     a sub-folder inside the category, other folder names. Each one is checked
-    again (adjustments_from_query). Suggestions of the expert mode's AI only
-    ever reach the plan this way, once the user accepted them (D-041)."""
+    again (adjustments_from_query). Proposed sub-folders only
+    ever reach the plan this way, once the user accepted them (D-050)."""
 
     excluded: frozenset[int] = frozenset()
     categories: Mapping[int, str] = field(default_factory=dict)
