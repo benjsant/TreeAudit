@@ -89,7 +89,8 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Le contenu des fichiers n'est jamais stocké dans l'index ; seules les empreintes le sont.
 - Les journaux ne contiennent pas le contenu des fichiers.
 
-## LLM (phase ultérieure)
+## LLM (mode expert retiré, D-052)
+Le mode expert a été retiré : TreeAudit ne contient plus d'IA. Si une IA revenait un jour, ces règles resteraient obligatoires, et elle serait locale : jamais une IA en ligne, qui recevrait les noms de fichiers.
 - Aucun accès shell ou outil de modification.
 - Ne pas envoyer le contenu intégral des fichiers par défaut.
 - Transmettre seulement les métadonnées minimales nécessaires.

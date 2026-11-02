@@ -23,7 +23,7 @@ die() { say "$@"; exit 1; }
 # in a .env file (OLD, EXPERIMENTAL mode, not tested any more).
 SETTINGS=(TREEAUDIT_ROOT_PATH TREEAUDIT_ALLOW_SYSTEM_VOLUME TREEAUDIT_PORT
           TREEAUDIT_ARCHIVE_PATH TREEAUDIT_EXTERNAL_DISKS TREEAUDIT_INTERNAL_DISKS
-          TREEAUDIT_HOME TREEAUDIT_EXPERT TREEAUDIT_LLM_MODEL TREEAUDIT_UID TREEAUDIT_GID)
+          TREEAUDIT_HOME TREEAUDIT_UID TREEAUDIT_GID)
 for name in "${SETTINGS[@]}"; do
     printf -v "$name" '%s' "${!name:-}"
 done
@@ -114,47 +114,6 @@ if [[ $TREEAUDIT_EXTERNAL_DISKS == 1 ]]; then
     EXTERNAL=1
     COMPOSE+=(-f "$DISKS_FILE")
 fi
-# Expert mode (D-040): a local LLM in its own container, internal network only.
-# Models: name, file, address, SHA-256. A file is put in place only once checked.
-MODELS=(
-    "ministral|Ministral-3-3B-Instruct-2512-Q4_K_M.gguf|https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf|9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8"
-    "qwen3|Qwen3-4B-Instruct-2507-Q4_K_M.gguf|https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf|3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"
-    "gemma3|gemma-3-4b-it-Q4_K_M.gguf|https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf|882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863"
-)
-# "./treeaudit expert" remembers its choice in models/.expert: one line, the
-# model's file name. Read as data: only a known model file, present, counts.
-# The environment (or .env) wins: TREEAUDIT_EXPERT=0 turns it off for one run.
-EXPERT_FILE=models/.expert
-known_model_file() {
-    local entry name file url sum
-    for entry in "${MODELS[@]}"; do
-        IFS='|' read -r name file url sum <<<"$entry"
-        [[ $1 == "$file" ]] && return 0
-    done
-    return 1
-}
-if [[ -z $TREEAUDIT_EXPERT && -f $EXPERT_FILE ]]; then
-    chosen="$(head -c 200 -- "$EXPERT_FILE" | head -n 1)"
-    if known_model_file "$chosen" && [[ -f models/$chosen ]]; then
-        TREEAUDIT_EXPERT=1
-        [[ -n $TREEAUDIT_LLM_MODEL ]] || TREEAUDIT_LLM_MODEL="$chosen"
-    else
-        say "Mode expert ignoré : $EXPERT_FILE ne désigne pas un modèle téléchargé (./treeaudit expert pour le refaire)"
-    fi
-fi
-# The GPU render node's group, given to the LLM container only: where the node
-# is not open to all (Debian, Mint: group "render"), it could not compute.
-TREEAUDIT_RENDER_GID=""
-if [[ -c /dev/dri/renderD128 ]]; then
-    TREEAUDIT_RENDER_GID="$(stat -c %g /dev/dri/renderD128)"
-fi
-export TREEAUDIT_EXPERT TREEAUDIT_LLM_MODEL TREEAUDIT_RENDER_GID
-COMPOSE_LLM=("${COMPOSE[@]}" -f compose.llm.yaml)
-if [[ $TREEAUDIT_EXPERT == 1 ]]; then
-    [[ -n $TREEAUDIT_LLM_MODEL && -f models/$TREEAUDIT_LLM_MODEL ]] ||
-        die "Mode expert : modèle absent. ./treeaudit expert le télécharge et l'active."
-    COMPOSE=("${COMPOSE_LLM[@]}")
-fi
 DEV=("${COMPOSE_BASE[@]}" run --rm dev)
 
 # --- Preparation, on the host -----------------------------------------------
@@ -230,102 +189,17 @@ check_roots() {
 cmd_start() {
     check_roots >&2
     say "TreeAudit : http://127.0.0.1:${TREEAUDIT_PORT:-8765}  (Ctrl+C pour arrêter)"
-    if [[ $TREEAUDIT_EXPERT == 1 ]]; then
-        say "Mode expert : LLM local ($TREEAUDIT_LLM_MODEL), sans accès à Internet"
-        exec "${COMPOSE[@]}" up app gateway llm
-    fi
     exec "${COMPOSE[@]}" up app gateway
 }
 
-# Download the models (all, or the ones named), each checked before use.
-cmd_llm_download() {
-    local entry name file url sum wanted=" $* "
-    mkdir -p -m 700 models
-    for entry in "${MODELS[@]}"; do
-        IFS='|' read -r name file url sum <<<"$entry"
-        [[ $# -eq 0 || $wanted == *" $name "* ]] || continue
-        if [[ -f models/$file ]]; then
-            say "$name : déjà présent"
-            continue
-        fi
-        say "$name : téléchargement de $file"
-        curl -fL --proto '=https' --tlsv1.2 --retry 3 -C - -o "models/.$file.partial" "$url"
-        if ! printf '%s  %s\n' "$sum" "models/.$file.partial" | sha256sum --check --status; then
-            die "$name : empreinte SHA-256 incorrecte, fichier écarté (models/.$file.partial)"
-        fi
-        mv -f -- "models/.$file.partial" "models/$file"
-        say "$name : vérifié ($sum)"
-    done
-}
-
-# Measure each downloaded model on the known cases, one after the other.
-cmd_llm_bench() {
-    local entry name file url sum wanted=" $* "
-    check_roots >&2
-    for entry in "${MODELS[@]}"; do
-        IFS='|' read -r name file url sum <<<"$entry"
-        [[ $# -eq 0 || $wanted == *" $name "* ]] || continue
-        [[ -f models/$file ]] || { say "$name : absent (./treeaudit llm-download $name)"; continue; }
-        say "== $name"
-        TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" up -d llm >&2
-        TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" run --rm -T app llm bench --label "$name" || true
-        TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" run --rm -T app llm bench --heldout --label "$name" || true
-        TREEAUDIT_LLM_MODEL="$file" "${COMPOSE_LLM[@]}" rm -sf llm >&2
-    done
-}
-
-# Expert mode in one command (D-048): check the GPU, download and check the
-# model if needed, remember the choice, start. "off" forgets the choice.
+# The expert mode was removed (D-052): its command only says so.
 cmd_expert() {
-    local wanted="${1:-ministral}" entry name file url sum found=""
-    if [[ $wanted == off ]]; then
-        rm -f -- "$EXPERT_FILE"
-        say "Mode expert désactivé. Le modèle reste dans models/ (supprime-le pour libérer 2 Gio)."
-        return 0
-    fi
-    for entry in "${MODELS[@]}"; do
-        IFS='|' read -r name file url sum <<<"$entry"
-        if [[ $name == "$wanted" ]]; then
-            found="$file"
-        fi
-    done
-    [[ -n $found ]] || die "Modèle inconnu : $wanted (ministral, qwen3 ou gemma3 ; ministral est conseillé)"
-    check_gpu
-    if [[ ! -f models/$found ]]; then
-        mkdir -p -m 700 models
-        local free
-        free="$(df --output=avail -B1 -- models | tail -n 1 | tr -d ' ')"
-        (( free > 3 * 1024 * 1024 * 1024 )) ||
-            die "Pas assez de place pour le modèle : il faut 3 Gio libres dans $HERE/models"
-        cmd_llm_download "$wanted"
-    fi
-    (umask 077 && printf '%s\n' "$found" > "$EXPERT_FILE.tmp" && mv -f -- "$EXPERT_FILE.tmp" "$EXPERT_FILE")
-    say "Mode expert activé ($wanted). Il le restera aux prochains démarrages ; './treeaudit expert off' pour l'arrêter."
-    exec "$HERE/treeaudit" start
+    say "Le mode expert (IA locale) a été retiré : voir docs/DECISIONS.md, D-052."
+    say "Un modèle déjà téléchargé reste dans $HERE/models : supprime ce dossier pour libérer 2 Gio."
 }
 
-# The LLM container computes on an AMD or Intel GPU through Vulkan (D-040).
-check_gpu() {
-    local node=/sys/class/drm/renderD128/device vendor vram
-    [[ -c /dev/dri/renderD128 && -r $node/vendor ]] ||
-        die "Mode expert : aucune carte graphique utilisable trouvée (/dev/dri/renderD128)."
-    vendor="$(< "$node/vendor")"
-    case "$vendor" in
-        0x1002) say "Carte graphique AMD détectée." ;;
-        0x8086) say "Carte graphique Intel détectée : l'IA marchera, mais lentement." ;;
-        0x10de) die "Mode expert : les cartes NVIDIA ne sont pas prises en charge pour l'instant." ;;
-        *) die "Mode expert : carte graphique inconnue ($vendor)." ;;
-    esac
-    if [[ -r $node/mem_info_vram_total ]]; then
-        vram="$(< "$node/mem_info_vram_total")"
-        say "Mémoire vidéo : $(( vram / 1024 / 1024 )) Mio (le modèle en utilise environ 3 800)."
-        if (( vram < 4 * 1024 * 1024 * 1024 )); then
-            say "Attention : moins de 4 Gio de mémoire vidéo, le modèle risque de ne pas tenir."
-        fi
-    fi
-}
-
-# --remove-orphans: also the containers of optional files (the expert mode LLM).
+# --remove-orphans: also the containers of files no longer used (the former
+# expert mode's LLM, D-052).
 cmd_stop() { exec "${COMPOSE_BASE[@]}" down --remove-orphans; }
 
 cmd_disks() {
@@ -349,7 +223,7 @@ cmd_cli() {
 
 cmd_settings() {
     local name
-    for name in "${SETTINGS[@]}" TREEAUDIT_HOME_PATH TREEAUDIT_TZ TREEAUDIT_RENDER_GID COMPOSE_SELINUX; do
+    for name in "${SETTINGS[@]}" TREEAUDIT_HOME_PATH TREEAUDIT_TZ COMPOSE_SELINUX; do
         printf '%s=%s\n' "$name" "${!name}"
     done
     printf 'COMPOSE=%s\n' "${COMPOSE[*]}"
@@ -425,13 +299,6 @@ Développement :
   lock               Met à jour uv.lock (réseau nécessaire)
   appimage           Construit dist/TreeAudit-x86_64.AppImage (dans Docker)
 
-Mode expert (IA locale, carte AMD, Docker seulement) :
-  expert             Vérifie la carte, télécharge le modèle si besoin, l'active
-                     et démarre ; il reste actif aux démarrages suivants
-  expert off         Le désactive
-  llm-download [nom] Télécharge et vérifie les modèles (ministral, qwen3, gemma3)
-  llm-bench [nom]    Mesure les modèles sur des cas connus
-
 Ancien mode, expérimental, non testé :
   env                Crée un fichier .env (inutile pour l'usage normal)
 EOF
@@ -449,9 +316,7 @@ case "$command" in
     build) build ;;
     lock) cmd_lock ;;
     appimage) cmd_appimage ;;
-    expert) cmd_expert "$@" ;;
-    llm-download) cmd_llm_download "$@" ;;
-    llm-bench) cmd_llm_bench "$@" ;;
+    expert | llm-download | llm-bench) cmd_expert ;;
     test) exec "${DEV[@]}" pytest "$@" ;;
     lint) cmd_lint ;;
     format) exec "${DEV[@]}" ruff format . ;;

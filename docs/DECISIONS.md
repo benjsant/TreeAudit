@@ -672,3 +672,19 @@ Précise la mise en œuvre de D-024.
 - **Conservé** : tout l'état d'avant, sur la branche `legacy-ai-subfolders`. Un modèle nettement meilleur pourra y être remesuré sur les mêmes cas avant tout retour.
 - **Mode expert** : il ne sert plus qu'à l'avis sur les éléments à vérifier de « À nettoyer ». Son apport (second jeu : 11/14, 2 réponses dangereuses) sera évalué de la même façon dans une étape séparée.
 
+## D-052 — Le mode expert est retiré (2026-11-02)
+- **Question** : l'avis de l'IA dans « À nettoyer » apporte-t-il plus que les règles seules ? Après D-051, c'était sa seule utilité.
+- **Ce qui a été découvert d'abord** : le premier jeu de cas (`bench.py`) ne mesurait rien. Sa confiance avait été écrite avec la réponse attendue, si bien qu'un simple seuil sur la confiance de la règle faisait 16/16, comme l'IA.
+- **Mesure honnête** (`llm/bench_rules.py`, branche `legacy-expert-mode`) : chaque cas des deux jeux est reconstruit en vraie arborescence temporaire, analysé, puis soumis aux **vraies règles**. L'IA n'est interrogée que là où la page l'aurait proposée (orange et rouge), avec le vrai nom et la vraie confiance de la règle. La passe s'est faite **à faible charge** : 14 avis, 5 s de pause entre deux, une seule passe (une première mesure en continu avait fait tourner la carte graphique à plein régime pendant plusieurs minutes, au point d'alerter le mainteneur).
+- **Résultats** :
+  - **règles seules** : aucun dossier à garder mis en vert, sur les deux jeux ;
+  - **IA** : 6 alertes « à garder » justes, 3 « nettoyable » justes, **1 réponse dangereuse** (le jQuery utilisé par un site, déjà vu en D-049) ;
+  - les 6 alertes portaient toutes sur des dossiers **déjà rouges** : elles confirmaient, sans rien apprendre ;
+  - sur 4 « nettoyable », un était faux : c'est justement l'avis qu'on ne peut pas suivre sans vérifier ;
+  - les sauvegardes de jeu, l'ancienne réponse dangereuse, ne sont même pas listées par les règles : l'IA ne les verrait jamais dans l'application.
+- **Règle de décision, fixée avant la mesure** : garder l'IA seulement avec **0 réponse dangereuse et au moins 3 avis utiles**. Elle ne passe pas.
+- **Décision** : le mode expert est retiré. Partent l'avis de l'IA et son bouton, l'encadré de l'accueil, `llm/`, `compose.llm.yaml`, et les commandes `expert`, `llm-download` et `llm-bench`. Ces commandes ne font plus que renvoyer à cette décision. Un ancien `models/.expert` est ignoré, et le modèle déjà téléchargé n'est pas supprimé : c'est à l'utilisateur de le faire (guide, chapitre 9).
+- **Pourquoi pas une IA plus forte** : un modèle local nettement meilleur demanderait une carte graphique bien plus puissante, et la ferait tourner à plein régime. Une IA en ligne (OpenAI, DeepSeek…) recevrait les noms des fichiers et des dossiers de l'utilisateur : c'est exclu, rien de ce que voit TreeAudit ne quitte la machine.
+- **Conservé** : tout le code du mode expert et la comparaison, sur la branche `legacy-expert-mode`. Une IA ne reviendrait que si elle battait les règles sur ces mêmes cas, sur une machine ordinaire.
+- **Retombée** : la comparaison a montré six dossiers à nettoyer que les règles ne listent pas (cache du dossier personnel, cache de shaders, Pods iOS, rapport de couverture…). C'est une piste d'amélioration des règles, notée dans `ROADMAP.md`.
+

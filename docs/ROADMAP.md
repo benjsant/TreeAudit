@@ -151,12 +151,14 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Sous-dossiers proposés par des règles fixes, pour tous, sans IA (D-050) : thèmes et mots communs, explicables, instantanés ; séries d'appareil photo écartées après un essai sur un vrai dossier.
 - [ ] À réfléchir : les photos sans nom parlant (64 % sur le vrai dossier). Idée du mainteneur : les trier soi-même en les regardant, les nommer, et s'aider de Czkawka (images semblables) ; ce que TreeAudit pourrait y apporter sans lire le contenu reste à définir.
 - [x] Suggestions de l'IA retirées de Ranger (D-051), gardées sur la branche `legacy-ai-subfolders`.
-- [ ] À décider, sur des mesures : l'avis de l'IA dans « À nettoyer » apporte-t-il plus qu'une règle ?
+- [x] Avis de l'IA dans « À nettoyer » mesuré contre les règles seules, puis mode expert retiré (D-052).
 
 ## Phase 9 bis — Mode expert, LLM local (D-040)
 - [x] Étape 1 : conteneur llama.cpp (Vulkan) sans Internet, téléchargement vérifié des modèles, banc d'essai ; Ministral 3 3B retenu (16/16, aucune réponse dangereuse).
 - [x] Second jeu de cas, jamais utilisé pour régler : 10/12, une réponse dangereuse (sauvegardes de jeu), d'où l'affichage asymétrique.
 - [x] Étape 2 : « Avis de l'IA » sur les dossiers à vérifier, en tâche de fond ; alertes mises en avant, aucune case touchée.
+- [x] Retiré (D-052) : une réponse dangereuse sur 14, et des alertes qui ne faisaient que confirmer le rouge des règles. Code gardé sur la branche `legacy-expert-mode`.
+- [ ] Règles : détecter les dossiers à nettoyer que la comparaison a montrés non listés (cache du dossier personnel, cache de shaders, Pods iOS, rapport de couverture).
 
 ## Phase 6 septies — Explorateur et panier (D-036)
 - [x] Explorateur : tri, pages, dates, repères (à nettoyer, en double, protégé).

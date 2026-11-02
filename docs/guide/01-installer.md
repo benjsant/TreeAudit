@@ -6,7 +6,6 @@ TreeAudit existe en deux versions. Elles font la même chose et offrent la même
 |---|---|---|
 | Ce qu'il faut | Docker et son plugin Compose | Linux 6.7 ou plus récent |
 | Disques | ceux branchés **avant** le démarrage | branchés à tout moment (« 🔄 Actualiser ») |
-| Mode expert (IA locale) | oui | non |
 | Données | `data/` et `archives/` dans le dossier du projet | `~/.local/share/treeaudit/` |
 
 Les deux versions ont chacune leur propre index : une analyse faite avec l'une n'apparaît pas dans l'autre.

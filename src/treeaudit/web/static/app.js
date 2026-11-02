@@ -205,10 +205,6 @@ function setupJobMonitor() {
     } else if (job.kind === "compact") {
       field("progress").textContent = "Compactage de l'index…";
       field("current").textContent = "";
-    } else if (job.kind === "opinions") {
-      field("progress").textContent =
-        `${p.done.toLocaleString("fr-FR")} / ${p.total.toLocaleString("fr-FR")} dossiers examinés par l'IA`;
-      field("current").textContent = "";
     } else if (job.kind === "archive") {
       field("progress").textContent = archiveProgress(p);
       field("current").textContent = p.problems ? `${p.problems} élément(s) à signaler` : "";
@@ -241,7 +237,7 @@ function setupJobMonitor() {
     } else if (job.kind === "dupes" && job.run_id) {
       target = `/dupes/${encodeURIComponent(job.run_id)}`;
     } else if (
-      (job.kind === "opinions" || job.kind === "compact") &&
+      job.kind === "compact" &&
       job.result_url &&
       (job.result_url.startsWith("/scans/") || job.result_url.startsWith("/?"))
     ) {
@@ -574,23 +570,6 @@ function setupForget() {
   });
 }
 
-function setupOpinions() {
-  for (const button of document.querySelectorAll("[data-start-opinions]")) {
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      try {
-        await post(`/api/scans/${encodeURIComponent(button.dataset.scan)}/parasites/opinions`, {
-          min_confidence: Number(button.dataset.minConfidence || 30),
-        });
-        window.location.assign("/jobs/current");
-      } catch (error) {
-        showError(button.closest(".actions"), error.message);
-        button.disabled = false;
-      }
-    });
-  }
-}
-
 // Proposed sub-folders: shown only, applied by the user's click (D-050).
 function setupSuggestions() {
   const accept = (button) => {
@@ -664,7 +643,6 @@ document.addEventListener("DOMContentLoaded", () => {
   setupQuit();
   setupCompactForms();
   setupSuggestions();
-  setupOpinions();
   setupForget();
   setupStartButtons();
   setupArchiveButtons();

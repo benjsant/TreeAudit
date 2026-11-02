@@ -124,55 +124,24 @@ def test_home_through_a_symbolic_link_is_mounted_by_its_real_path(
     assert values["TREEAUDIT_HOME_PATH"] == str(real.resolve())
 
 
-MODEL = "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf"
-
-
-def test_expert_choice_is_remembered_and_read_as_data(launcher: Path) -> None:
-    """./treeaudit expert writes models/.expert (D-048); the next start reads it."""
+def test_the_former_expert_mode_is_gone_and_its_files_ignored(launcher: Path) -> None:
+    """Removed (D-052): a choice left in models/.expert starts no AI container,
+    and the old commands only say so, writing nothing."""
     models = launcher.parent / "models"
     models.mkdir()
-    (models / MODEL).write_bytes(b"")
-    (models / ".expert").write_text(MODEL + "\n", encoding="utf-8")
-    values = settings(launcher)
-    assert values["TREEAUDIT_EXPERT"] == "1"
-    assert values["TREEAUDIT_LLM_MODEL"] == MODEL
-    assert values["COMPOSE"].endswith("-f compose.llm.yaml")
-    # The environment wins: off for one run.
-    assert settings(launcher, TREEAUDIT_EXPERT="0")["COMPOSE"].count("compose.llm.yaml") == 0
-
-
-@pytest.mark.parametrize(
-    "content", ["../../etc/passwd", "$(touch {marker})", "unknown.gguf", MODEL + "x"]
-)
-def test_expert_file_naming_no_known_model_is_ignored(launcher: Path, content: str) -> None:
-    marker = launcher.parent / "executed"
-    models = launcher.parent / "models"
-    models.mkdir()
-    (models / MODEL).write_bytes(b"")
-    (models / ".expert").write_text(content.format(marker=marker), encoding="utf-8")
-    values = settings(launcher)
-    assert values["TREEAUDIT_EXPERT"] == ""
-    assert "compose.llm.yaml" not in values["COMPOSE"]
-    assert not marker.exists()
-
-
-def test_expert_needs_the_model_downloaded(launcher: Path) -> None:
-    models = launcher.parent / "models"
-    models.mkdir()
-    (models / ".expert").write_text(MODEL, encoding="utf-8")  # chosen, file gone
-    assert "compose.llm.yaml" not in settings(launcher)["COMPOSE"]
-
-
-def test_expert_off_forgets_the_choice(launcher: Path) -> None:
-    models = launcher.parent / "models"
-    models.mkdir()
-    (models / ".expert").write_text(MODEL, encoding="utf-8")
+    (models / "model.gguf").write_bytes(b"")
+    (models / ".expert").write_text("model.gguf\n", encoding="utf-8")
+    values = settings(launcher, TREEAUDIT_EXPERT="1")
+    assert "llm" not in values["COMPOSE"] and "TREEAUDIT_EXPERT" not in values
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "COMPOSE_SELINUX": "0"}
-    subprocess.run(  # noqa: S603
-        ["bash", str(launcher), "expert", "off"],  # noqa: S607
-        env=env,
-        capture_output=True,
-        check=True,
-        timeout=30,
-    )
-    assert not (models / ".expert").exists()
+    for command in ("expert", "llm-download", "llm-bench"):
+        done = subprocess.run(  # noqa: S603
+            ["bash", str(launcher), command],  # noqa: S607
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+        assert "D-052" in done.stdout + done.stderr
+    assert sorted(p.name for p in models.iterdir()) == [".expert", "model.gguf"]

@@ -30,6 +30,6 @@ Ce ne sont que des estimations. Un dossier vert peut, exceptionnellement, conten
 
 Une sélection qui contient des éléments orange ou rouges est signalée au-dessus de la commande. Les avertissements de la [double vérification](10-commandes-et-securite.md) s'affichent au même endroit.
 
-## Avec l'IA locale
+## Et une IA ?
 
-En [mode expert](09-mode-expert.md), le bouton **« 💡 Avis de l'IA »** demande à une IA locale son avis sur les éléments orange et rouges, à partir de leurs noms, types et tailles seulement. Ses avis s'affichent sous chaque élément. **Ils ne cochent ni ne décochent rien** : c'est toi qui décides.
+TreeAudit a eu un mode expert, où une IA locale donnait son avis sur les éléments orange et rouges. Il a été retiré : voir [9. Pourquoi pas d'IA](09-mode-expert.md).

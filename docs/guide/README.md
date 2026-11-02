@@ -16,7 +16,7 @@ Ce guide suit l'ordre dans lequel on découvre l'application. Chaque chapitre se
 | [6. Ranger un dossier](06-ranger.md) | proposer un rangement par catégories, l'ajuster, et obtenir les scripts |
 | [7. Projets et logiciels](07-projets.md) | retrouver les projets informatiques et les jeux, leur âge, et la place recréable |
 | [8. Archives](08-archives.md) | faire une copie compressée et vérifiée avant de nettoyer |
-| [9. Mode expert (IA locale)](09-mode-expert.md) | demander l'avis d'une IA locale, sans qu'elle puisse rien toucher |
+| [9. Pourquoi pas d'IA](09-mode-expert.md) | le mode expert a été essayé, mesuré, puis retiré |
 | [10. Commandes proposées et sécurité](10-commandes-et-securite.md) | ce que contient une commande, la double vérification, et ce qu'il ne faut jamais faire |
 | [11. Dépannage](11-depannage.md) | les problèmes courants et leurs solutions |
 

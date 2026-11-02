@@ -241,34 +241,8 @@ def test_generated_disks_file_is_ignored_and_outside_the_data_dir() -> None:
     assert "\nDISKS_FILE=.treeaudit-disks.json\n" in launcher
 
 
-LLM_OVERRIDE = load("compose.llm.yaml")
-
-
-def test_llm_container_is_hardened_and_offline() -> None:
-    llm = LLM_OVERRIDE["services"]["llm"]
-    assert "@sha256:" in llm["image"]
-    assert llm["read_only"] is True and llm["cap_drop"] == ["ALL"]
-    assert "no-new-privileges:true" in llm["security_opt"]
-    assert not llm.get("privileged") and "ports" not in llm
-    assert llm["networks"] == ["llm"]
-    assert LLM_OVERRIDE["networks"]["llm"]["internal"] is True
-    # The GPU compute node only: never /dev, never a display or card node.
-    assert llm["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128"]
-    # Only the render node's own group, never a fixed one (0 would be root's).
-    assert llm["group_add"] == [
-        "${TREEAUDIT_RENDER_GID:?no GPU render node: ./treeaudit expert checks it}"
-    ]
-    assert all("group_add" not in s for n, s in COMPOSE["services"].items())
-    (volume,) = llm["volumes"]
-    assert volume["read_only"] is True and volume["target"] == "/models"
-    for flag in ("--no-webui", "--no-webui-mcp-proxy", "--offline"):
-        assert flag in llm["command"]
-    assert "--tools" not in llm["command"]
-
-
-def test_only_app_joins_the_llm_network() -> None:
-    joined = {
-        name for name, service in LLM_OVERRIDE["services"].items() if "llm" in service["networks"]
-    }
-    assert joined == {"llm", "app"}
-    assert "llm" not in str(COMPOSE["services"]["gateway"].get("networks"))
+def test_no_container_gets_a_device_nor_an_extra_group() -> None:
+    """The expert mode's AI container, the only one given the GPU, is gone (D-052)."""
+    assert not (REPO / "compose.llm.yaml").exists()
+    for service in COMPOSE["services"].values():
+        assert "devices" not in service and "group_add" not in service

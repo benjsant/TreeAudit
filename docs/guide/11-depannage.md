@@ -41,12 +41,6 @@ L'image a été modifiée ou déplacée depuis l'analyse, son contenu n'est pas 
 
 Elle exige Linux 6.7 ou plus récent, pour pouvoir s'enfermer elle-même (Landlock). Sur un noyau plus ancien, elle refuse plutôt que de tourner sans protection. Utilise Docker. `uname -r` affiche la version de ton noyau.
 
-## Le mode expert ne démarre pas
-
-- Relance `./treeaudit expert` : il dit ce qui manque (carte graphique, place disque, modèle) et le corrige quand il le peut.
-- « Mode expert ignoré : models/.expert ne désigne pas un modèle téléchargé » : le modèle a été supprimé. `./treeaudit expert` le télécharge à nouveau.
-- Carte NVIDIA, ou pas assez de mémoire vidéo : voir [9. Mode expert](09-mode-expert.md#ce-quil-faut).
-
 ## Signaler un problème
 
 Ouvre une [issue](https://github.com/benjsant/TreeAudit/issues) en décrivant ce que tu as fait, ce que tu attendais et ce qui s'est passé. **N'y colle pas tes chemins de fichiers ni ton index** s'ils sont personnels : un exemple reconstruit suffit.

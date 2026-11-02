@@ -30,7 +30,6 @@ Deux principes structurent tout le code :
 | `organize/` | « Ranger » : plan par catégories, ajustements, script de rangement et d'annulation, sous-dossiers par règles | `plan.py`, `script.py` (D-041), `subfolders.py`, `subfolder_bench.py`, `subfolder_cases*.py` (D-050) |
 | `projects/` | « Projets et logiciels » : inventaire depuis l'index | `detect.py` (D-044) |
 | `preview/` | aperçu des images : lecture sûre, type reconnu au contenu | `images.py` (D-046) |
-| `llm/` | mode expert : client du serveur local, avis, bancs d'essai | `client.py`, `opinion.py`, `facts.py`, `bench*.py` (D-040) |
 | `web/` | interface web : assemblage, pages, API JSON, exports, tâches de fond, sécurité HTTP | voir [Interface web](#interface-web) |
 | `shellcmd.py` | **toutes** les commandes de nettoyage proposées, et leur double vérification | D-025, D-045 |
 | `cli.py` | ligne de commande ; aussi le serveur web et le relais en Docker | |
@@ -43,7 +42,6 @@ Deux principes structurent tout le code :
 - `web/` et `cli.py` dépendent du moteur ; **le moteur ne dépend jamais de `web/`**.
 - Écritures sur disque : `db/` et `core/datadir.py` dans le dossier de données ; `archive/output.py` dans le dossier d'archives, et nulle part ailleurs. Aucun autre module n'ouvre un fichier en écriture.
 - Aucun module n'exécute de programme : pas de `subprocess`, pas de `os.system` (un test statique le vérifie).
-- Le module `llm/` ne reçoit que des métadonnées et ne renvoie que des données validées : il n'a accès à aucune fonction d'écriture ni à aucun outil.
 - Une regex ou un nom de dossier ne décide jamais de ce qui peut être lu ou écrit. Les noms disent seulement où regarder ; l'accès est décidé par l'identité (périphérique, inode) et par la validation des racines.
 
 ## Deux modes d'exécution
@@ -54,7 +52,6 @@ Deux principes structurent tout le code :
 flowchart LR
     B[Navigateur] -->|127.0.0.1:8765| G[gateway<br/>aucune donnée]
     G -->|réseau interne| A[app<br/>disques en lecture seule]
-    A -->|réseau interne llm| L[llm<br/>llama.cpp, GPU]
     A --- D[(data/<br/>index)]
     A --- R[(archives/)]
 ```
@@ -63,13 +60,12 @@ Le lanceur `./treeaudit` (bash, D-035) prépare tout **sur l'hôte**, puis appel
 
 1. il valide les dossiers demandés et le dossier d'archives avec la table des montages de l'hôte, via les services `check` et `check-archive` (sans réseau ni volume, la table leur est donnée sur l'entrée standard) ;
 2. il détecte les disques externes et les partitions de données (service `check-disks`), et écrit un fichier compose qui monte **chaque disque accepté, en lecture seule**, sous `/audit/disks/<id>` ;
-3. il démarre `app` et `gateway`, et `llm` en mode expert. `./treeaudit expert` vérifie la carte graphique (sysfs), télécharge le modèle et retient le choix dans `models/.expert`, relu ensuite comme une donnée : seul un nom de modèle connu et présent compte (D-048).
+3. il démarre `app` et `gateway`.
 
 | Service | Rôle | Réseau | Volumes |
 |---|---|---|---|
 | `app` | serveur web et moteur | interne, sans sortie | disques en lecture seule, `/data`, `/archives` |
 | `gateway` | publie le port sur `127.0.0.1` et relaie octet par octet | interne et `edge` | aucun |
-| `llm` | serveur llama.cpp (mode expert, `compose.llm.yaml`) | `llm`, interne | `models/` en lecture seule ; seul périphérique : `/dev/dri/renderD128`, avec le seul groupe de ce nœud (`group_add`) |
 | `check`, `check-disks`, `check-archive` | validations sur l'hôte | aucun | aucun |
 | `dev` | tests et outils de qualité | aucun | le dépôt sous `/app` |
 
@@ -142,14 +138,7 @@ Les commandes de recréation viennent du catalogue `rules.toml`, refusé au char
 1. **thèmes** : un index de mots-clés, construit une fois, donne le thème de chaque nom. Un sujet (*Voiture*) compte double face à un type de papier (*Factures*). Un thème qui n'a qu'un membre est laissé à l'étape suivante ;
 2. **mots communs** : parmi le reste, le mot partagé par le plus de noms forme un groupe. Un tas, recalculé paresseusement, évite de tout recompter à chaque groupe.
 
-Un groupe a au moins deux membres et jamais tous. Son nom passe par `clean_folder_name` et `is_generic_name`, comme un nom tapé par l'utilisateur ou proposé par l'IA. Chaque proposition porte sa raison, affichée au survol. `subfolder_bench.py` note les règles sur deux jeux : `subfolder_cases.py` (mis de côté, figé avant l'algorithme) et `subfolder_cases_earlier.py` (écrit pour l'IA). Les suggestions de l'IA ont été retirées (D-051) ; elles restent sur la branche `legacy-ai-subfolders`.
-
-### Le mode expert (`llm/`)
-
-- `client.py` parle au serveur llama.cpp par HTTP, **adresses locales seulement**, et force chaque réponse dans un **schéma JSON**. Ce qui revient est une donnée à valider, jamais une instruction.
-- `facts.py` construit ce que l'IA voit d'un dossier : métadonnées de l'index seulement.
-- `opinion.py` demande un avis, puis l'**ordre des champs** du schéma oblige le modèle à décrire le contenu avant de conclure. `guard()` corrige ensuite les réponses risquées. L'avis ne change jamais la classification ni la sélection.
-- `bench.py` et `bench_heldout.py` sont les cas d'essai. Le deuxième jeu n'a jamais servi à régler les consignes.
+Un groupe a au moins deux membres et jamais tous. Son nom passe par `clean_folder_name` et `is_generic_name`, comme un nom tapé par l'utilisateur. Chaque proposition porte sa raison, affichée au survol. `subfolder_bench.py` note les règles sur deux jeux : `subfolder_cases.py` (mis de côté, figé avant l'algorithme) et `subfolder_cases_earlier.py` (écrit pour l'IA). Les suggestions de l'IA ont été retirées (D-051) ; elles restent sur la branche `legacy-ai-subfolders`.
 
 ## Modèle de données (`db/schema.py`)
 
@@ -234,8 +223,8 @@ On ne teste jamais sur les vrais dossiers de l'utilisateur : uniquement des arbo
 ## Choix techniques
 
 - Python 3.12 ou plus récent (D-017) ; FastAPI et Uvicorn ; Jinja2. Toute dépendance est justifiée dans [DEPENDENCIES.md](DEPENDENCIES.md).
-- Bibliothèque standard pour le reste : `sqlite3`, `hashlib` (SHA-256), `re`, `fnmatch`, `tomllib`, `argparse`, `tarfile`, `logging`, `urllib` (client de l'IA).
-- Mode expert : llama.cpp (image Vulkan épinglée par empreinte), Ministral 3 3B en Q4_K_M, contexte de 16 384 jetons, 3,8 Gio de mémoire vidéo mesurés.
+- Bibliothèque standard pour le reste : `sqlite3`, `hashlib` (SHA-256), `re`, `fnmatch`, `tomllib`, `argparse`, `tarfile`, `logging`.
+- Pas d'IA : le mode expert (IA locale) a été mesuré puis retiré (D-052). Son code reste sur la branche `legacy-expert-mode`.
 
 ## À ne pas anticiper
 
