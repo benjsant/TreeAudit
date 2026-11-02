@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import time
 
 import pytest
@@ -110,6 +111,42 @@ def test_photos_named_by_a_device_are_not_grouped() -> None:
         "XY"
         in propose(DOCUMENTS, moves("XY_20210305_1.pdf", "XY_20210306_2.pdf", "a.pdf")).subfolders
     )
+
+
+def _words(count: int) -> list[str]:
+    """Distinct made-up words, letters only (digits never make a word), never
+    ending in s or x (plural and singular are grouped together)."""
+    last = "abcdefghijklmnopqrtu"
+    return ["mot" + chr(97 + i // len(last)) + last[i % len(last)] for i in range(count)]
+
+
+def test_beyond_the_limit_more_groups_are_announced() -> None:
+    names = [f"{word} {n}.pdf" for word in _words(MAX_SUBFOLDERS + 2) for n in "ab"]
+    found = propose(DOCUMENTS, moves(*names))
+    assert len(found.subfolders) == MAX_SUBFOLDERS and found.more
+    assert len(found.by_entry) == 2 * MAX_SUBFOLDERS  # the extra group is not shown
+    exact = propose(DOCUMENTS, moves(*names[: 2 * MAX_SUBFOLDERS]))
+    assert len(exact.subfolders) == MAX_SUBFOLDERS and not exact.more
+
+
+def test_the_next_batch_leaves_sorted_elements_and_their_names_alone() -> None:
+    names = [f"{word} {n}.pdf" for word in _words(MAX_SUBFOLDERS + 2) for n in "ab"]
+    first = propose(DOCUMENTS, moves(*names))
+    accepted = [
+        dataclasses.replace(move, subfolder=first.by_entry.get(move.entry_id))
+        for move in moves(*names)
+    ]
+    second = propose(DOCUMENTS, accepted)
+    assert len(second.subfolders) == 2 and not second.more
+    assert not set(second.by_entry) & set(first.by_entry)
+    assert not set(second.subfolders) & set(first.subfolders)
+
+
+def test_a_name_already_taken_is_not_proposed_again() -> None:
+    items = moves("Dupont devis.pdf", "Dupont plans.pdf", "Martin a.pdf", "Martin b.pdf", "x.pdf")
+    items[0] = dataclasses.replace(items[0], subfolder="Dupont")  # typed by the user
+    found = propose(DOCUMENTS, items)
+    assert groups(found) == {"Martin": [3, 4]}
 
 
 def test_names_by_category() -> None:

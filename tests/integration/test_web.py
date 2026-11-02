@@ -1074,6 +1074,43 @@ def test_rule_sub_folders_are_shown_never_applied(
             assert other.status_code in (200, 422) and "ai-panel" not in other.text
 
 
+def test_the_next_batch_of_sub_folders_after_accepting_the_first(
+    tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    from treeaudit.organize.subfolders import MAX_SUBFOLDERS
+
+    last = "abcdefghijklmnopqrtu"  # never s nor x: plurals are folded together
+    words = ["mot" + chr(97 + i // len(last)) + last[i % len(last)] for i in range(32)]
+    for word in words:
+        for n in "ab":
+            touch(root / "papiers" / f"{word} {n}.pdf", b"x")
+    touch(root / "papiers" / "c.mp3", b"c")  # a mixed folder: its files are proposed one by one
+    config = AppConfig(
+        data_dir=str(tmp_path / "data"),
+        roots=(RootConfig(id="main", path=str(root), label="Disque", display_path=DISPLAY),),
+    )
+    mounts = data_disk_table(str(tmp_path))
+    app = create_app(
+        config, evaluate_roots(config, mounts, home=None), mounts=lambda: mounts, home=lambda: None
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as plain:
+        scan_id = run_job(plain, "/api/scans", {"root_id": "main", "subpath": ""})["scan_id"]
+        url = f"/scans/{scan_id}/organize"
+        first = plain.get(url, params={"proposer": "Documents"}).text
+        pairs = re.findall(r'data-suggestion="([^"]+)" data-target="(sous_\d+)"', first)
+        assert len({name for name, _ in pairs}) == MAX_SUBFOLDERS
+        assert "➡ Proposer la suite" in first
+        # The user accepts the whole batch and asks for the next one (one form).
+        query = [(target, name) for name, target in pairs] + [("proposer", "Documents")]
+        second = plain.get(url, params=query).text
+        assert_safe_html(second)
+        again = re.findall(r'data-suggestion="([^"]+)" data-target="(sous_\d+)"', second)
+        assert len({name for name, _ in again}) == 2 and "➡ Proposer la suite" not in second
+        assert not {t for _, t in again} & {t for _, t in pairs}  # accepted ones left alone
+        for name, target in pairs[:3]:  # and kept in the preview
+            assert f'name="{target}" value="{name}"' in second
+
+
 def test_the_ai_no_longer_proposes_sub_folders(client: TestClient, scanned: int) -> None:
     """Removed in favour of the fixed rules (D-051): no button, no route."""
     page = client.get(f"/scans/{scanned}/organize").text

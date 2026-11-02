@@ -50,8 +50,13 @@
     {% if suggestions.by_entry %}
     <p class="small">Sous-dossiers proposés : {% for sub in suggestions.subfolders %}<strong>{{ sub }}</strong>{% if not loop.last %}, {% endif %}{% endfor %}. Ce ne sont que des propositions, affichées à côté de chaque élément : <strong>rien ne change tant que tu ne les acceptes pas</strong>, puis « Mettre à jour l'aperçu ».</p>
     <div class="actions"><button type="button" class="button small" data-accept-all-suggestions>Accepter toutes les suggestions</button></div>
+    {% if suggestions.more %}
+    <p class="small">D'autres éléments ont encore des mots en commun. Accepte d'abord ce qui te convient, puis :</p>
+    <div class="actions"><button type="submit" class="button small" name="proposer" value="{{ suggestions.category }}">➡ Proposer la suite</button></div>
+    <p class="muted small">La suite est cherchée parmi les éléments qui n'ont pas encore de sous-dossier ; une proposition que tu n'as pas acceptée peut donc revenir.</p>
+    {% endif %}
     {% else %}
-    <p class="small">Aucun groupe évident dans les noms de cette catégorie : rien à proposer.</p>
+    <p class="small">Plus aucun groupe évident dans les noms des éléments sans sous-dossier : rien à proposer.</p>
     {% endif %}
     <p class="muted small">Proposés par des règles fixes, d'après les noms seulement : un mot connu (« facture », « impôts »…) ou un mot que plusieurs noms partagent. Survole une proposition pour voir pourquoi.</p>
   </section>

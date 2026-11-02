@@ -91,6 +91,8 @@ class Suggestions:
     """Entry id -> suggested sub-folder (elements without one are absent)."""
     reasons: Mapping[int, str] = field(default_factory=dict)
     """Entry id -> why the sub-folder is proposed."""
+    more: bool = False
+    """More groups exist beyond MAX_SUBFOLDERS: offered once these are accepted."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -310,18 +312,24 @@ def _accept(name: str, used: set[str], category: str) -> str | None:
 
 
 def propose(category: str, moves: Sequence[Move]) -> Suggestions:
-    """Sub-folders for the elements of one category of the plan, by fixed rules."""
-    names = {m.entry_id: m.source.rsplit("/", 1)[-1] for m in moves}
+    """Sub-folders for the elements of one category of the plan, by fixed rules.
+
+    Elements that already have a sub-folder (accepted or typed by the user)
+    are left alone, and its name is not proposed again: proposing once more
+    after accepting a batch offers the next groups."""
+    names = {m.entry_id: m.source.rsplit("/", 1)[-1] for m in moves if m.subfolder is None}
     words = {entry: words_of(name) for entry, name in names.items()}
     count = len(moves)
     by_entry: dict[int, str] = {}
     reasons: dict[int, str] = {}
-    used: set[str] = set()
+    used: set[str] = {m.subfolder.casefold() for m in moves if m.subfolder is not None}
     order: list[str] = []
+    # One group beyond the limit is looked for: it only tells that more exist.
+    limit = MAX_SUBFOLDERS + 1
 
     def keep(folder: str, members: Sequence[int]) -> str | None:
         """The sub-folder's name if it is kept: enough members, but not all."""
-        if len(order) >= MAX_SUBFOLDERS or not MIN_MEMBERS <= len(members) < count:
+        if len(order) >= limit or not MIN_MEMBERS <= len(members) < count:
             return None
         name = _accept(folder, used, category)
         if name is not None:
@@ -356,7 +364,7 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
             forms[_key(word)][written] += 1
     heap = [(-len(e), -len(k), k) for k, e in holders.items() if len(e) >= MIN_MEMBERS]
     heapq.heapify(heap)
-    while heap and len(order) < MAX_SUBFOLDERS:
+    while heap and len(order) < limit:
         size, length, key = heapq.heappop(heap)
         group = holders[key] - by_entry.keys()
         if len(group) < MIN_MEMBERS:
@@ -380,4 +388,10 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
         for entry in group if name is not None else ():
             reasons[entry] = f"mot en commun : « {name} »"
 
-    return Suggestions(category, tuple(order), by_entry, reasons)
+    more = len(order) > MAX_SUBFOLDERS
+    if more:
+        extra = order.pop()
+        for entry in [e for e, name in by_entry.items() if name == extra]:
+            del by_entry[entry]
+            reasons.pop(entry, None)
+    return Suggestions(category, tuple(order), by_entry, reasons, more)

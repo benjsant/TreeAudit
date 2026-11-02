@@ -149,6 +149,7 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Étape B : sous-dossiers suggérés par l'IA (mode expert), affichés seulement, appliqués par l'utilisateur ; banc d'essai (Ministral 98 %, piège sans effet).
 - [x] Suggestions en tâche de fond, avec progression et annulation.
 - [x] Sous-dossiers proposés par des règles fixes, pour tous, sans IA (D-050) : thèmes et mots communs, explicables, instantanés ; séries d'appareil photo écartées après un essai sur un vrai dossier.
+- [x] Au-delà de 30 sous-dossiers : « Proposer la suite », lot par lot (D-054).
 - [ ] À réfléchir : les photos sans nom parlant (64 % sur le vrai dossier). Idée du mainteneur : les trier soi-même en les regardant, les nommer, et s'aider de Czkawka (images semblables) ; ce que TreeAudit pourrait y apporter sans lire le contenu reste à définir.
 - [x] Suggestions de l'IA retirées de Ranger (D-051), gardées sur la branche `legacy-ai-subfolders`.
 - [x] Avis de l'IA dans « À nettoyer » mesuré contre les règles seules, puis mode expert retiré (D-052).

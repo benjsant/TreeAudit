@@ -703,3 +703,17 @@ Précise la mise en œuvre de D-024.
 - **`.cache` n'est jamais coché d'office** : en principe jetable, il contient parfois plus que du cache (l'historique local d'un éditeur, par exemple). Il est listé en orange, pour être regardé avant.
 - **Limite** : le dossier personnel est reconnu par ses voisins `.config` et `.local`, pas par son chemin. Un `.cache` placé ailleurs à côté de ces deux dossiers serait aussi listé, mais en orange seulement.
 
+## D-054 — Sous-dossiers par lots : « Proposer la suite » (2026-11-02)
+- **Constat** (D-050) : sur le vrai dossier, la limite de 30 sous-dossiers était atteinte dans Documents, et 165 documents avec des mots en commun restaient sans proposition.
+- **Décision** : la limite reste à 30 par lot, pour que chaque lot reste lisible. Quand d'autres groupes existent, le panneau le dit et propose **« ➡ Proposer la suite »**. Ce bouton envoie le formulaire de l'aperçu, avec ce que l'utilisateur a accepté. La suite est cherchée parmi les éléments **sans sous-dossier** : ceux qui en ont un, accepté ou tapé, ne sont plus touchés, et un nom déjà pris n'est pas reproposé.
+- **Pas d'acceptation automatique** : le bouton n'accepte rien de lui-même, pour qu'un groupe puisse être refusé. En contrepartie, une proposition non acceptée peut revenir au lot suivant ; le panneau le dit.
+- **Savoir s'il reste des groupes** : l'algorithme cherche un groupe de plus que la limite, sans l'afficher.
+- **Mesure sur le vrai dossier** (index lu en lecture seule, chiffres seulement, en acceptant tout à chaque lot) :
+
+  | Documents (505) | Lot 1 | Lot 2 | Lot 3 |
+  |---|---|---|---|
+  | classés en tout | 321 (64 %) | 405 (80 %) | 429 (85 %) |
+  | groupes de 2 dans le lot | 1 / 30 | 13 / 30 | 12 / 12 |
+
+  Photos : 131, puis 159 sur 1 330 (les autres n'ont pas de nom parlant, D-050). Les lots suivants apportent de moins en moins, et surtout des paires.
+
