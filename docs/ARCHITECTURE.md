@@ -24,7 +24,7 @@ Deux principes structurent tout le code :
 | `scanner/` | parcours d'une racine par descripteurs (`O_NOFOLLOW`), sélecteur de dossiers, exécution d'une analyse | `walker.py` (D-013, D-022), `browse.py`, `runner.py`, `models.py` |
 | `db/` | schéma et migrations, écriture par lots, lecture des analyses et doublons, cache des résumés | `schema.py`, `connection.py`, `scans.py`, `dupes.py`, `cache.py` |
 | `filters/` | recherche : critères, compilation unique des motifs, parcours de l'index en flux | `spec.py`, `search.py` ([FILTERS_AND_REGEX.md](FILTERS_AND_REGEX.md)) |
-| `parasites/` | dossiers « à nettoyer » : catalogue de 41 règles, détection sur l'index, confiance expliquée, cache | `rules.toml`, `rules.py`, `detect.py` (D-023), `cached.py` |
+| `parasites/` | dossiers « à nettoyer » : catalogue de 45 règles, détection sur l'index, confiance expliquée, cache | `rules.toml`, `rules.py`, `detect.py` (D-023), `cached.py` |
 | `duplicates/` | doublons exacts : lecture sûre, empreintes en étapes, ordre physique, groupes et copie à garder | `reader.py`, `hashing.py`, `placement.py`, `runner.py` (D-015, D-030), `groups.py` (D-026) |
 | `archive/` | archive vérifiée : dossier d'archives, écriture, relecture et comparaison | `destination.py`, `output.py`, `runner.py`, `verify.py` (D-024, D-032) |
 | `organize/` | « Ranger » : plan par catégories, ajustements, script de rangement et d'annulation, sous-dossiers par règles | `plan.py`, `script.py` (D-041), `subfolders.py`, `subfolder_bench.py`, `subfolder_cases*.py` (D-050) |

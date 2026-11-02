@@ -61,7 +61,7 @@ Aucun parcours de fichiers dans cette phase.
   Le mainteneur mesure lui-même sur ses données réelles (aucune donnée personnelle n'est transmise).
 
 ## Phase 3 — Dossiers parasites (D-023, D-025)
-- [x] Catalogue de règles versionné (`src/treeaudit/parasites/rules.toml`, 41 règles) : Python, JavaScript, JVM, Rust, .NET, PHP, Dart, Elixir, Haskell, CMake, Terraform, restes macOS / Windows / Linux, verrous et sauvegardes d'éditeurs, fichiers auxiliaires LaTeX, bibliothèques recopiées.
+- [x] Catalogue de règles versionné (`src/treeaudit/parasites/rules.toml`, 41 règles, 45 depuis D-053) : Python, JavaScript, JVM, Rust, .NET, PHP, Dart, Elixir, Haskell, CMake, Terraform, restes macOS / Windows / Linux, verrous et sauvegardes d'éditeurs, fichiers auxiliaires LaTeX, bibliothèques recopiées.
 - [x] Indices et contre-indices (ex. `pyvenv.cfg`, `package.json` ou `.csproj` à côté, fichier étranger dans un `__pycache__`), analyse sur l'index uniquement.
 - [x] Indicateur de confiance en pourcentage (vert ≥ 80, orange ≥ 50, rouge en dessous ; seuil d'affichage 30 %) avec l'explication des indices.
 - [x] Commande de recréation affichée ; corbeille, suppression et archivage proposés, **jamais exécutés**.
@@ -158,7 +158,7 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Second jeu de cas, jamais utilisé pour régler : 10/12, une réponse dangereuse (sauvegardes de jeu), d'où l'affichage asymétrique.
 - [x] Étape 2 : « Avis de l'IA » sur les dossiers à vérifier, en tâche de fond ; alertes mises en avant, aucune case touchée.
 - [x] Retiré (D-052) : une réponse dangereuse sur 14, et des alertes qui ne faisaient que confirmer le rouge des règles. Code gardé sur la branche `legacy-expert-mode`.
-- [ ] Règles : détecter les dossiers à nettoyer que la comparaison a montrés non listés (cache du dossier personnel, cache de shaders, Pods iOS, rapport de couverture).
+- [x] Règles : les quatre dossiers à nettoyer que la comparaison a montrés non listés sont détectés (D-053).
 
 ## Phase 6 septies — Explorateur et panier (D-036)
 - [x] Explorateur : tri, pages, dates, repères (à nettoyer, en double, protégé).

@@ -22,7 +22,7 @@
 |---|---|
 | Analyse d'un dossier : tailles, nombre de fichiers, types, éléments inaccessibles signalés | ✅ disponible |
 | Exploration de l'espace, dossier par dossier | ✅ disponible |
-| **Dossiers et fichiers à nettoyer** : caches, `node_modules`, `.venv`, `__pycache__`, `__MACOSX`, `.DS_Store`, `Thumbs.db`… (41 règles), avec un pourcentage de confiance expliqué | ✅ disponible |
+| **Dossiers et fichiers à nettoyer** : caches, `node_modules`, `.venv`, `__pycache__`, `__MACOSX`, `.DS_Store`, `Thumbs.db`… (45 règles), avec un pourcentage de confiance expliqué | ✅ disponible |
 | **Doublons exacts** (empreinte SHA-256), copie à garder suggérée, copies dans les logiciels, jeux et dépôts git protégées | ✅ disponible |
 | **Petits fichiers en double** et fichiers vides (« micro-nettoyage ») | ✅ disponible |
 | Recherche : nom, extension, motif, regex, taille, type | ✅ disponible |

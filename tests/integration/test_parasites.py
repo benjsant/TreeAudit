@@ -228,3 +228,58 @@ def test_detection_is_read_only_and_deterministic(
     second = find_parasites(conn, 1, RULES, min_confidence=0)
     assert conn.total_changes == changes  # analysing writes nothing
     assert [f.rel_path for f in second] == [f.rel_path for f in first.values()]
+
+
+# --- rules found missing by the comparison with the AI (D-053) -------------------------------
+
+
+def test_cocoapods_needs_a_podfile(root: Path, analyse: Callable[..., dict[str, Finding]]) -> None:
+    touch(root / "app" / "Podfile", b"platform :ios")
+    touch(root / "app" / "Podfile.lock", b"x")
+    touch(root / "app" / "Pods" / "Manifest.lock", b"x")
+    touch(root / "Musique" / "Pods" / "episode-001.mp3", b"x")  # podcasts
+    found = analyse()
+    assert found["app/Pods"].band is Band.GREEN
+    assert found["app/Pods"].recreate is not None
+    assert found["app/Pods"].recreate.command == "pod install"
+    assert found["Musique/Pods"].confidence < 30  # hidden with the default threshold
+
+
+def test_js_coverage_needs_its_report(
+    root: Path, analyse: Callable[..., dict[str, Finding]]
+) -> None:
+    touch(root / "api" / "package.json", b"{}")
+    touch(root / "api" / "coverage" / "lcov.info", b"x")
+    touch(root / "api" / "coverage" / "lcov-report" / "index.html", b"x")
+    touch(root / "Assurance" / "coverage" / "contrat.pdf", b"x")
+    found = analyse()
+    assert found["api/coverage"].band is Band.GREEN
+    assert found["Assurance/coverage"].confidence < 30
+
+
+def test_steam_shader_cache_only_inside_steam(
+    root: Path, analyse: Callable[..., dict[str, Finding]]
+) -> None:
+    steam = root / "Steam" / "steamapps"
+    touch(steam / "shadercache" / "730" / "foz", b"x")
+    touch(steam / "common" / "Jeu" / "jeu.bin", b"x")
+    touch(steam / "compatdata" / "730" / "x", b"x")
+    touch(steam / "appmanifest_730.acf", b"x")
+    touch(root / "Projets" / "moteur" / "shadercache" / "mes-shaders.glsl", b"x")
+    found = analyse()
+    assert found["Steam/steamapps/shadercache"].band is Band.GREEN
+    assert found["Projets/moteur/shadercache"].confidence < 30
+
+
+def test_home_cache_is_never_checked_by_default(
+    root: Path, analyse: Callable[..., dict[str, Finding]]
+) -> None:
+    touch(root / "me" / ".cache" / "thumbnails" / "a.png", b"x")
+    touch(root / "me" / ".config" / "app.conf", b"x")
+    touch(root / "me" / ".local" / "share" / "x", b"x")
+    touch(root / "Jeux" / "MonJeu" / "cache" / "partie-1.sav", b"x")  # game saves
+    touch(root / "Jeux" / "MonJeu" / ".cache" / "partie-2.sav", b"x")  # no home around
+    found = analyse()
+    assert found["me/.cache"].band is Band.ORANGE  # listed, unchecked: look first
+    assert "Jeux/MonJeu/cache" not in found
+    assert found["Jeux/MonJeu/.cache"].confidence < 30

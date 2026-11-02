@@ -1,6 +1,6 @@
 # 3. Nettoyer
 
-La page **🧹 À nettoyer** liste ce qui se recrée tout seul ou avec une commande : dépendances de projets (`node_modules`, `.venv`), caches d'outils (`__pycache__`, `.mypy_cache`), sorties de compilation (`target`, `obj`), restes de systèmes (`__MACOSX`, `.DS_Store`, `Thumbs.db`)… TreeAudit connaît 41 règles.
+La page **🧹 À nettoyer** liste ce qui se recrée tout seul ou avec une commande : dépendances de projets (`node_modules`, `.venv`), caches d'outils (`__pycache__`, `.mypy_cache`), sorties de compilation (`target`, `obj`), restes de systèmes (`__MACOSX`, `.DS_Store`, `Thumbs.db`), caches d'applications (`.cache` du dossier personnel, shaders de Steam)… TreeAudit connaît 45 règles.
 
 ## Les couleurs
 

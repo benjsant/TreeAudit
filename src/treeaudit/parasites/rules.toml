@@ -460,7 +460,69 @@ evidence = [
 ]
 recreate_note = "Recréé à la prochaine compilation du document."
 
-# --- Copied libraries (ambiguous: candidates for the local AI, phase 9) ----------------
+# --- Found missing by the comparison with the AI (D-052, D-053) ----------------------
+# Without their evidence these rules stay hidden (under 30): a folder of
+# podcasts named "Pods" or of papers named "coverage" is never listed.
+
+[[rule]]
+id = "cocoapods"
+label = "Dépendances CocoaPods"
+target = "dir"
+names = ["Pods"]
+base = 10
+explanation = "Bibliothèques installées par CocoaPods pour une application iOS ou macOS ; se réinstallent depuis le Podfile."
+evidence = [
+  { kind = "sibling", value = "Podfile", weight = 60, label = "Podfile à côté" },
+  { kind = "sibling", value = "Podfile.lock", weight = 15, label = "Podfile.lock à côté" },
+  { kind = "child", value = "Manifest.lock", weight = 10, label = "Manifest.lock dedans" },
+]
+recreate = [{ command = "pod install" }]
+
+[[rule]]
+id = "js-coverage"
+label = "Rapport de couverture de tests"
+target = "dir"
+names = ["coverage"]
+base = 10
+explanation = "Rapport généré par les tests (Jest, Vitest, nyc…) ; se régénère en relançant les tests avec la couverture."
+evidence = [
+  { kind = "sibling", value = "package.json", weight = 25, label = "package.json à côté" },
+  { kind = "child", value = "lcov-report", weight = 35, label = "dossier lcov-report dedans" },
+  { kind = "child", value = "lcov.info", weight = 25, label = "fichier lcov.info dedans" },
+]
+recreate_note = "Recréé en relançant les tests avec la couverture."
+
+[[rule]]
+id = "steam-shader-cache"
+label = "Cache de shaders Steam"
+target = "dir"
+names = ["shadercache"]
+base = 20
+explanation = "Shaders précompilés par Steam pour chaque jeu ; Steam les recrée au lancement des jeux, qui peuvent alors saccader un moment."
+evidence = [
+  { kind = "sibling", value = "common", weight = 35, label = "dossier des jeux (common) à côté" },
+  { kind = "sibling", value = "compatdata", weight = 15, label = "dossier compatdata à côté" },
+  { kind = "sibling_glob", value = "appmanifest_*.acf", weight = 25, label = "manifestes de jeux Steam à côté" },
+]
+recreate_note = "Recréé par Steam au lancement des jeux."
+
+[[rule]]
+id = "home-cache"
+label = "Cache du dossier personnel"
+target = "dir"
+names = [".cache"]
+base = 20
+# Never checked by default: some applications keep more than caches there
+# (an editor's local history, for instance).
+max_confidence = 75
+explanation = "Caches des applications (miniatures, téléchargements de pip, navigateurs…), qu'elles recréent. Certaines y rangent pourtant davantage : regarde avant de supprimer."
+evidence = [
+  { kind = "sibling", value = ".config", weight = 30, label = ".config à côté (dossier personnel)" },
+  { kind = "sibling", value = ".local", weight = 25, label = ".local à côté (dossier personnel)" },
+]
+recreate_note = "Les applications le recréent au besoin."
+
+# --- Copied libraries (ambiguous: always to check) ----------------------------------
 
 [[rule]]
 id = "vendored-web-library"

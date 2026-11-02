@@ -688,3 +688,18 @@ Précise la mise en œuvre de D-024.
 - **Conservé** : tout le code du mode expert et la comparaison, sur la branche `legacy-expert-mode`. Une IA ne reviendrait que si elle battait les règles sur ces mêmes cas, sur une machine ordinaire.
 - **Retombée** : la comparaison a montré six dossiers à nettoyer que les règles ne listent pas (cache du dossier personnel, cache de shaders, Pods iOS, rapport de couverture…). C'est une piste d'amélioration des règles, notée dans `ROADMAP.md`.
 
+## D-053 — Quatre règles trouvées manquantes par la comparaison avec l'IA (2026-11-02)
+- **Constat** (D-052) : sur les cas reconstruits, quatre dossiers à nettoyer n'étaient pas listés du tout, faute de règle. Les trois autres dossiers non listés étaient à garder : c'est voulu.
+- **Ajout** au catalogue (`parasites/rules.toml`) :
+
+  | Règle | Cible | Indices | Au mieux |
+  |---|---|---|---|
+  | `cocoapods` | `Pods` | `Podfile`, `Podfile.lock` à côté ; `Manifest.lock` dedans | vert, `pod install` |
+  | `js-coverage` | `coverage` | `package.json` à côté ; `lcov-report`, `lcov.info` dedans | vert |
+  | `steam-shader-cache` | `shadercache` | `common`, `compatdata`, `appmanifest_*.acf` à côté | vert |
+  | `home-cache` | `.cache` | `.config` et `.local` à côté | **orange (plafond 75)** |
+
+- **Sans leurs indices, ces règles restent sous 30**, donc invisibles : un dossier de podcasts « Pods », un dossier d'assurance « coverage », des shaders écrits à la main ou un `.cache` de sauvegardes de jeu ne sont jamais listés. Chaque règle a un test avec une arborescence piège.
+- **`.cache` n'est jamais coché d'office** : en principe jetable, il contient parfois plus que du cache (l'historique local d'un éditeur, par exemple). Il est listé en orange, pour être regardé avant.
+- **Limite** : le dossier personnel est reconnu par ses voisins `.config` et `.local`, pas par son chemin. Un `.cache` placé ailleurs à côté de ces deux dossiers serait aussi listé, mais en orange seulement.
+
