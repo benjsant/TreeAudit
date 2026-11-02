@@ -10,7 +10,14 @@ import pytest
 from treeaudit.organize.plan import DOCUMENTS, MUSIC, PHOTOS, Move, clean_folder_name
 from treeaudit.organize.subfolder_bench import run_rules_bench
 from treeaudit.organize.subfolder_cases import HELDOUT_CASES
-from treeaudit.organize.subfolders import MAX_SUBFOLDERS, is_generic_name, propose, words_of
+from treeaudit.organize.subfolders import (
+    MAX_SUBFOLDERS,
+    _splitter,
+    _themes_for,
+    is_generic_name,
+    propose,
+    words_of,
+)
 
 
 def moves(*names: str, category: str = DOCUMENTS) -> list[Move]:
@@ -147,6 +154,54 @@ def test_a_name_already_taken_is_not_proposed_again() -> None:
     items[0] = dataclasses.replace(items[0], subfolder="Dupont")  # typed by the user
     found = propose(DOCUMENTS, items)
     assert groups(found) == {"Martin": [3, 4]}
+
+
+def test_a_glued_word_is_cut_when_a_piece_is_a_theme_word() -> None:
+    found = propose(DOCUMENTS, moves("FactureEDF.pdf", "facture-sfr.pdf", "notes.txt"))
+    assert groups(found) == {"Factures": [1, 2]}
+    assert found.reasons[1] == "le nom contient « Facture »"
+
+
+def test_a_glued_word_is_cut_when_its_pieces_are_words_elsewhere() -> None:
+    found = propose(
+        DOCUMENTS,
+        moves(
+            "CompteRendu-mai.docx", "compte rendu juin.docx", "compte rendu juillet.docx", "x.pdf"
+        ),
+    )
+    assert groups(found) == {"Compte Rendu": [1, 2, 3]}
+
+
+@pytest.mark.parametrize("brand", ["WhatsApp", "YouTube", "PowerPoint"])
+def test_a_brand_stays_whole(brand: str) -> None:
+    found = propose(
+        DOCUMENTS, moves(f"{brand} 1.pdf", f"{brand} 2.pdf", "Apps notes.pdf", "Tube.pdf", "y.pdf")
+    )
+    assert groups(found) == {brand: [1, 2]}
+
+
+def test_glued_words_alone_still_group_together() -> None:
+    found = propose(DOCUMENTS, moves("CompteRendu-mai.docx", "CompteRendu-juin.docx", "x.pdf"))
+    assert groups(found) == {"CompteRendu": [1, 2]}
+
+
+def test_a_glued_device_prefix_is_still_a_device_series() -> None:
+    """Seen on a real folder (D-055): cut, the prefix escaped the filter."""
+    names = [f"SunCam_2021030{i}_10111{i}.jpg" for i in range(1, 6)]
+    items = moves(*names, "Sun plage.jpg", "Cam voiture.jpg", category=PHOTOS)
+    # "Sun" and "Cam" are words elsewhere: the prefix is indeed cut...
+    split = _splitter(_themes_for(PHOTOS), [m.source.rsplit("/", 1)[-1] for m in items])
+    assert [w for w, _ in words_of(names[0], split)] == ["sun", "cam"]
+    # ...and the series is still recognized as a camera's.
+    assert propose(PHOTOS, items).by_entry == {}
+
+
+def test_capitals_alone_are_never_cut() -> None:
+    assert words_of("FACTURE-EDF.pdf", lambda pieces: True) == [
+        ("facture", "FACTURE"),
+        ("edf", "EDF"),
+    ]
+    assert [w for w, _ in words_of("PDFReport.pdf", lambda pieces: True)] == ["pdf", "report"]
 
 
 def test_names_by_category() -> None:

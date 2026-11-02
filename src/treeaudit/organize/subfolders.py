@@ -19,7 +19,7 @@ import heapq
 import re
 import unicodedata
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from treeaudit.organize.plan import (
@@ -170,6 +170,9 @@ _WORD_BREAKS = re.compile(r"[\W_]+")
 _SEPARATORS = re.compile(r"[^0-9a-z]+")
 _DIGITS = re.compile(r"[0-9]+")
 _DIGITS_ONLY = re.compile(r"[^0-9]+")
+# Inside a word, before a capital that follows a small letter ("Facture|EDF")
+# or that starts a word after capitals ("PDF|Report").
+_CAMEL = re.compile(r"(?<=[a-zà-ÿ])(?=[A-ZÀ-Þ])|(?<=[A-ZÀ-Þ])(?=[A-ZÀ-Þ][a-zà-ÿ])")
 
 
 def _stem(name: str) -> str:
@@ -183,18 +186,24 @@ def _plain(text: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
-def words_of(name: str) -> list[tuple[str, str]]:
+def words_of(name: str, split: Callable[[list[str]], bool] | None = None) -> list[tuple[str, str]]:
     """(normalized word, word as written) of a file name, in order.
 
     Case, accents and digits are dropped ("TD1" -> "td", "Réseaux" ->
-    "reseaux"); words that say nothing of the content are left out.
+    "reseaux"); words that say nothing of the content are left out. A glued
+    word ("FactureEDF") is cut at its capitals only if ``split`` agrees, given
+    the normalized pieces: "WhatsApp" must stay whole (D-055).
     """
     out: list[tuple[str, str]] = []
     for part in _WORD_BREAKS.split(_stem(name)):
         written = _DIGITS.sub("", part)
-        for piece in _SEPARATORS.split(_plain(written)):
-            if len(piece) >= 2 and piece not in _STOP_WORDS:
-                out.append((piece, written))
+        pieces = _CAMEL.split(written)
+        if len(pieces) < 2 or split is None or not split([_plain(p) for p in pieces]):
+            pieces = [written]
+        for piece_written in pieces:
+            for piece in _SEPARATORS.split(_plain(piece_written)):
+                if len(piece) >= 2 and piece not in _STOP_WORDS:
+                    out.append((piece, piece_written))
     return out
 
 
@@ -235,6 +244,29 @@ def _index(themes: tuple[_Theme, ...]) -> _ThemeIndex:
         tuple(sorted({len(k) for k in prefixes})),
         {k: tuple(v) for k, v in phrases.items()},
     )
+
+
+def _in_a_theme(index: _ThemeIndex, word: str) -> bool:
+    return word in index.exact or any(
+        word[:length] in index.prefixes for length in index.lengths if len(word) > length
+    )
+
+
+def _splitter(themes: tuple[_Theme, ...], names: Iterable[str]) -> Callable[[list[str]], bool]:
+    """When to cut a glued word (D-055): a piece is a theme's word ("Facture"
+    in "FactureEDF"), or every piece is also a word of its own in the other
+    names of the category ("CompteRendu" next to "compte rendu"). Otherwise
+    it stays whole: "WhatsApp", "YouTube"."""
+    index = _index(themes)
+    alone = {word for name in names for word, _ in words_of(name)}
+
+    def split(pieces: list[str]) -> bool:
+        kept = [p for p in pieces if len(p) >= 2]
+        return any(_in_a_theme(index, p) for p in kept) or (
+            bool(kept) and all(p in alone for p in kept)
+        )
+
+    return split
 
 
 def _best_theme(
@@ -283,19 +315,22 @@ def _display(forms: Counter[str]) -> str:
     return form[:1].upper() + form[1:] if form.islower() else form
 
 
-def _device_series(
-    group: set[int], key: str, words: Mapping[int, list[tuple[str, str]]], names: Mapping[int, str]
-) -> bool:
-    """Photos named by a camera or an app: the shared word and a date or a long
-    number, nothing else ("XY_20210305_101112"). It says where they come from,
-    not what they show; a series named by a person keeps a short number
-    ("Vacances 001"). Seen on a real folder (D-050)."""
-    device = sum(
-        1
-        for entry in group
-        if {_key(w) for w, _ in words[entry]} <= {key}
-        and len(_DIGITS_ONLY.sub("", _stem(names[entry]))) >= DEVICE_DIGITS
-    )
+def _device_series(group: set[int], key: str, names: Mapping[int, str]) -> bool:
+    """Photos named by a camera or an app: one word and a date or a long
+    number, nothing else ("XY_20210305_101112", "MonAppli_20210305101112").
+    It says where they come from, not what they show; a series named by a
+    person keeps a short number ("Vacances 001"). Seen on a real folder
+    (D-050). The name is judged before glued words are cut (D-055): cut,
+    "MonAppli" would count as two words and escape."""
+    device = 0
+    for entry in group:
+        whole = {_key(w) for w, _ in words_of(names[entry])}
+        if (
+            len(whole) == 1
+            and key in next(iter(whole))
+            and len(_DIGITS_ONLY.sub("", _stem(names[entry]))) >= DEVICE_DIGITS
+        ):
+            device += 1
     return device >= DEVICE_SHARE * len(group)
 
 
@@ -318,7 +353,9 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
     are left alone, and its name is not proposed again: proposing once more
     after accepting a batch offers the next groups."""
     names = {m.entry_id: m.source.rsplit("/", 1)[-1] for m in moves if m.subfolder is None}
-    words = {entry: words_of(name) for entry, name in names.items()}
+    themes = _themes_for(category)
+    split = _splitter(themes, names.values())
+    words = {entry: words_of(name, split) for entry, name in names.items()}
     count = len(moves)
     by_entry: dict[int, str] = {}
     reasons: dict[int, str] = {}
@@ -342,7 +379,6 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
     # 1. Themes. Fewer than two members: left to the shared words.
     themed: dict[str, list[int]] = defaultdict(list)
     matched: dict[int, str] = {}
-    themes = _themes_for(category)
     for entry, pairs in words.items():
         found = _best_theme(themes, pairs)
         if found is not None:
@@ -372,16 +408,15 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
         if len(group) < -size:  # some were taken since: put it back at its true rank
             heapq.heappush(heap, (-len(group), length, key))
             continue
-        if category in (PHOTOS, VIDEOS) and _device_series(group, key, words, names):
+        if category in (PHOTOS, VIDEOS) and _device_series(group, key, names):
             continue
         # Words every member shares make the name, in the order they are
         # written: "Daft Punk", not "Daft"; "Cours Python", not "Chapitre".
         # A word every element shares tells them apart from nothing: "EDF",
         # not "Facture EDF", in a folder of bills.
-        first = names[min(group)]
         shared = [
             k
-            for k in dict.fromkeys(_key(w) for w, _ in words_of(first))
+            for k in dict.fromkeys(_key(w) for w, _ in words[min(group)])
             if k == key or (len(k) >= 3 and group <= holders[k] and len(holders[k]) < count)
         ][:MAX_NAME_WORDS]
         name = keep(" ".join(_display(forms[k]) for k in shared), sorted(group))

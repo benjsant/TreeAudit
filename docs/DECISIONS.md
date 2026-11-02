@@ -717,3 +717,10 @@ Précise la mise en œuvre de D-024.
 
   Photos : 131, puis 159 sur 1 330 (les autres n'ont pas de nom parlant, D-050). Les lots suivants apportent de moins en moins, et surtout des paires.
 
+## D-055 — Mots collés : coupés seulement quand c'est utile (2026-11-02)
+- **Problème** : « FactureEDF » était lu comme un seul mot. Couper à chaque majuscule cassait « WhatsApp » en « Whats App » (D-050).
+- **Décision** : un mot avec des majuscules au milieu est coupé (« Facture|EDF », « PDF|Report ») seulement si **un morceau est un mot d'un thème**, ou si **chaque morceau existe seul** dans d'autres noms de la même catégorie. Sinon, il reste entier : « WhatsApp », « YouTube », « PowerPoint » ; deux « CompteRendu » restent groupés par leur mot entier. Un mot tout en majuscules n'est jamais coupé.
+- **Piège trouvé à la mesure** (vrai dossier, chiffres seulement) : un groupe de 33 photos, dont 31 à mot collé, avec en moyenne 11 chiffres par nom. C'est un préfixe d'application suivi d'un numéro. Une fois coupé, le préfixe comptait deux mots et échappait au filtre des séries d'appareil (D-050). Ce filtre juge désormais le nom **avant** découpage. Un test reproduit le cas, et échoue avec l'ancien filtre.
+- **Résultat sur le vrai dossier** : 48 mots collés dans Documents, dont 8 coupés ; aucun changement du nombre d'éléments classés (429 sur 505 après tous les lots), ni ailleurs. Les deux jeux de cas restent à 100 % et 99 %. Le gain est réel pour des noms du genre « FactureEDF », mais ce dossier en contient peu.
+- **Limite** : une marque est coupée à tort si ses deux morceaux existent seuls ailleurs dans la catégorie (« PowerPoint » à côté de « power » et « point ») ; ce n'est qu'une proposition.
+
