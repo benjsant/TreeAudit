@@ -43,6 +43,7 @@ from treeaudit.core.sandbox import Policy, SandboxError, restrict
 from treeaudit.filters.spec import FilterSpec
 from treeaudit.llm.bench import CASES, run_bench
 from treeaudit.llm.bench_heldout import HELDOUT_CASES
+from treeaudit.llm.bench_rules import compare, run_rules_view
 from treeaudit.llm.client import LlmClient, LlmError, client_from_environment
 from treeaudit.organize.subfolder_bench import BenchResult, case_moves, run_rules_bench
 from treeaudit.organize.subfolder_cases import HELDOUT_CASES as SUBFOLDER_CASES
@@ -310,6 +311,17 @@ def build_parser() -> argparse.ArgumentParser:
     llm_bench.add_argument("--wait", type=float, default=300.0, help="attente du chargement (s)")
     llm_bench.add_argument(
         "--heldout", action="store_true", help="second jeu de cas, jamais utilisé pour régler"
+    )
+    llm_bench.add_argument(
+        "--rules",
+        action="store_true",
+        help="comparer aux règles seules, sur des arborescences reconstruites (D-052)",
+    )
+    llm_bench.add_argument(
+        "--pause",
+        type=float,
+        default=0.0,
+        help="secondes de repos de la carte graphique entre deux avis (avec --rules)",
     )
 
     commands.add_parser(
@@ -674,6 +686,8 @@ def _cmd_llm_bench(args: argparse.Namespace) -> int:
     client = _llm_client()
     if not client.wait_until_ready(args.wait):
         raise LlmError("le LLM n'est pas prêt (modèle trop long à charger ?)")
+    if args.rules:
+        return _llm_bench_rules(client, args.label or client.url, args.heldout, args.pause)
     results = run_bench(client, HELDOUT_CASES if args.heldout else CASES)
     label = (args.label or client.url) + (" (second jeu)" if args.heldout else "")
     for result in results:
@@ -696,6 +710,46 @@ def _cmd_llm_bench(args: argparse.Namespace) -> int:
         f"dangereux {sum(r.dangerous for r in results)}, "
         f"format respecté {len(answered)}/{len(results)}, "
         f"{speed:.0f} jetons/s, {seconds:.1f} s par avis"
+    )
+    return EXIT_OK
+
+
+def _llm_bench_rules(client: LlmClient, label: str, heldout: bool, pause: float) -> int:
+    """Rules alone, then the AI where the page offers it (D-052). Made-up cases only."""
+    cases = HELDOUT_CASES if heldout else CASES
+    label += " (second jeu)" if heldout else ""
+    results = compare(run_rules_view(cases), client, pause=max(0.0, min(pause, 60.0)))
+    for result in results:
+        view = result.view
+        rule = f"{view.band} {view.confidence}" if view.shown else "non listé"
+        if not result.asked:
+            ai = "(pas d'avis : vert ou non listé)"
+        else:
+            ai = result.verdict or "erreur"
+            ai += (
+                " ← alerte utile"
+                if result.alert
+                else " ← aide"
+                if result.helps
+                else " ← DANGEREUX"
+                if result.dangerous
+                else ""
+            )
+        expected = "à nettoyer" if view.to_clean else "à garder"
+        print(f"{view.case.name:36} {expected:11} règles : {rule:12} IA : {ai}")
+    views = [r.view for r in results]
+    print(
+        f"BILAN règles {label} : dangereux (vert alors qu'à garder) "
+        f"{sum(v.dangerous for v in views)}, "
+        f"à nettoyer mis en vert {sum(v.checked and v.to_clean for v in views)}"
+        f"/{sum(v.to_clean for v in views)}, "
+        f"non listés {sum(not v.shown for v in views)}"
+    )
+    print(
+        f"BILAN IA {label} : avis demandés {sum(r.asked for r in results)}, "
+        f"alertes utiles {sum(r.alert for r in results)}, "
+        f"aides {sum(r.helps for r in results)}, "
+        f"dangereux {sum(r.dangerous for r in results)}"
     )
     return EXIT_OK
 
