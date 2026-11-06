@@ -131,6 +131,29 @@ def test_plan_keeps_albums_and_projects_whole(
     assert plan.categories()["Photos"][0] == 3  # the album and two loose photos
 
 
+def test_a_copied_photo_goes_by_the_date_in_its_name(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    # A backup copy: every file got the date of the copy (2024).
+    copy_time = 1_717_000_000
+    root = tmp_path / "Sauvegarde"
+    touch(root / "Vrac" / "IMG_20170812_101010.jpg", b"a", copy_time)
+    touch(root / "Vrac" / "plage.jpg", b"b", copy_time)
+    touch(root / "Vrac" / "notes.txt", b"c", copy_time)
+    for i in range(3):
+        touch(root / "Album" / f"IMG_2015070{i + 1}_120000.jpg", b"p" * (i + 1), copy_time)
+    plan, _ = scan_and_plan(tmp_path, root, data_disk_table)
+    moves = {move.source: move for move in plan.moves}
+    dated = moves["Vrac/IMG_20170812_101010.jpg"]
+    assert dated.target == f"{DESTINATION}/Photos/2017/IMG_20170812_101010.jpg"
+    assert "année tirée du nom" in dated.reason
+    plain = moves["Vrac/plage.jpg"]
+    assert plain.target == f"{DESTINATION}/Photos/2024/plage.jpg"
+    assert "année tirée du nom" not in plain.reason
+    # An album moves whole, under the year most of its names give.
+    assert moves["Album"].target == f"{DESTINATION}/Photos/2015/Album"
+
+
 def test_scripts_tidy_then_restore_everything_exactly(
     tmp_path: Path, messy: Path, data_disk_table: Callable[..., MountTable]
 ) -> None:

@@ -724,3 +724,10 @@ Précise la mise en œuvre de D-024.
 - **Résultat sur le vrai dossier** : 48 mots collés dans Documents, dont 8 coupés ; aucun changement du nombre d'éléments classés (429 sur 505 après tous les lots), ni ailleurs. Les deux jeux de cas restent à 100 % et 99 %. Le gain est réel pour des noms du genre « FactureEDF », mais ce dossier en contient peu.
 - **Limite** : une marque est coupée à tort si ses deux morceaux existent seuls ailleurs dans la catégorie (« PowerPoint » à côté de « power » et « point ») ; ce n'est qu'une proposition.
 
+
+## D-056 — Ranger : l'année d'une photo lue dans son nom (2026-11-06)
+- **Problème** : les photos et vidéos étaient classées par année de **modification**. Sur une copie (sauvegarde, disque USB), cette date est souvent celle de la copie : tout tombait dans la même année. Vu au passage Playwright sur un dossier inventé.
+- **Décision** : une **date complète** écrite dans le nom (`20230512`, `2024-01-02`, `2019_07_14`), au mois et au jour valides, donne l'année, à deux conditions : elle n'est pas avant 1990, et elle n'est **pas postérieure à la date de modification** (une copie rajeunit un fichier, jamais l'inverse). Sinon, la date de modification reste la règle. Une année seule (« DSC_2019 ») n'est pas prise : ce peut être un compteur.
+- La ligne de l'élément l'indique (« année tirée du nom ») ; un album déplacé en entier prend l'année que donnent la plupart de ses fichiers, noms compris.
+- **Pourquoi pas les métadonnées EXIF** : il faudrait lire le contenu des fichiers, ce que l'inventaire ne fait pas.
+- **Aussi** : dans Ranger, les catégories dépliées le restent après « Mettre à jour l'aperçu » ; le tableau des catégories ne déborde plus sur téléphone.

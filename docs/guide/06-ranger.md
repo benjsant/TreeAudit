@@ -8,12 +8,13 @@ Tout irait dans un nouveau dossier, **`Rangé/`** par défaut, à l'intérieur d
 
 | Catégorie | Contenu |
 |---|---|
-| Photos, Vidéos | classées **par année** (date de modification) : `Rangé/Photos/2019/` |
+| Photos, Vidéos | classées **par année** : `Rangé/Photos/2019/` (voir plus bas) |
 | Musique, Documents, Archives, Installateurs, Code, Polices | par type de fichier |
 | **Projets** | les projets informatiques, **déplacés en entier** (un dossier avec `package.json`, `.git`…). Un `requirements.txt` ou un `Makefile` seul ne compte que si le dossier ne contient pas d'autre projet. |
 | **Logiciels** | les jeux et logiciels, **déplacés en entier** (Steam, préfixe Wine, programme Windows…) |
 | Autres | le reste |
 
+- **L'année d'une photo** : celle d'une date complète écrite dans son nom (`IMG_20190714_…`, `Capture d'écran 2024-01-02…`), sinon sa date de modification. Une copie (sauvegarde, disque USB) prend souvent la date du jour de la copie : le nom est alors plus fiable. Une date du nom plus récente que la modification n'est pas crue. La ligne de l'élément indique « année tirée du nom ».
 - Un **album** (un dossier qui ne contient qu'un seul type de fichiers) garde son nom et est déplacé tel quel.
 - Un dossier mélangé est réparti fichier par fichier.
 - Restent toujours en place : les fichiers cachés, les liens symboliques, les dossiers vides, et ce qu'on ne peut pas écrire sans ambiguïté dans un script.
@@ -25,7 +26,7 @@ Dans l'aperçu, tu peux :
 
 - **renommer** le dossier `Rangé` et chaque catégorie ;
 - pour chaque élément : **le laisser en place**, **changer sa catégorie**, ou lui donner un **sous-dossier** ;
-- cliquer sur **« 🔄 Mettre à jour l'aperçu »** pour voir le résultat, et sur **« Annuler mes ajustements »** pour repartir du plan proposé.
+- cliquer sur **« 🔄 Mettre à jour l'aperçu »** pour voir le résultat (les catégories dépliées le restent), et sur **« Annuler mes ajustements »** pour repartir du plan proposé.
 
 ### Sous-dossiers proposés
 

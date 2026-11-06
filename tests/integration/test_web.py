@@ -1034,6 +1034,26 @@ def test_organize_adjustments_reach_the_scripts(client: TestClient, scanned: int
     assert "Ajustement refusé" in refused.text
 
 
+def test_unfolded_categories_stay_unfolded(client: TestClient, scanned: int) -> None:
+    import re
+
+    def unfolded(params: dict[str, str | list[str]]) -> set[str]:
+        page = client.get(f"/scans/{scanned}/organize", params=params)
+        assert page.status_code == 200
+        found = re.findall(r'<input type="hidden" name="ouvert" value="([^"]+)">', page.text)
+        opened = re.findall(r'<details class="group-band" data-unfold open>', page.text)
+        assert len(found) == len(opened)
+        return set(found)
+
+    first = unfolded({})
+    assert len(first) == 1  # the first category, as before
+    assert unfolded({"ouvert": "Projets"}) == {"Projets"}
+    assert unfolded({"ouvert": ["Projets", "Photos"]}) == {"Projets", "Photos"}
+    assert unfolded({"ouvert": "Projets", "proposer": "Photos"}) == {"Projets", "Photos"}
+    # An unknown name is ignored, and never echoed back.
+    assert unfolded({"ouvert": "<b>x</b>"}) == first
+
+
 def test_rule_sub_folders_are_shown_never_applied(
     tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
 ) -> None:

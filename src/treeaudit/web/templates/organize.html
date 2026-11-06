@@ -24,7 +24,7 @@
     <p>
       <label>Tout irait dans <span class="path">{{ folder }}/</span><input type="text" name="destination" value="{{ plan.destination }}" data-default="Rangé" maxlength="60" size="14" aria-label="Nom du dossier de rangement"></label>
     </p>
-    <table>
+    <table class="organize-totals">
       <tbody>
       {% for name, total in plan.categories().items() %}
         <tr>
@@ -36,7 +36,7 @@
     </table>
     <ul class="plain small muted">
       <li>📁 Les albums et dossiers d'un seul type gardent leur nom ; les projets, jeux et logiciels sont déplacés en entier.</li>
-      <li>Les photos et vidéos sont classées par année (date de modification).</li>
+      <li>Les photos et vidéos sont classées par année : celle d'une date écrite dans le nom (« IMG_20190714… »), sinon la date de modification.</li>
       <li>Tu peux renommer les dossiers ci-dessus, et pour chaque élément : le laisser en place ou changer sa catégorie.</li>
       {% if plan.renamed %}<li>⚠ {{ plan.renamed | length }} élément(s) portent le même nom qu'un autre : ils recevront un numéro « (2) ».</li>{% endif %}
     </ul>
@@ -62,8 +62,9 @@
   </section>
   {% endif %}
   {% for name, moves in by_category.items() %}
-  <details class="group-band"{% if (suggestions and name == suggestions.category) or (not suggestions and loop.first) %} open{% endif %}>
+  <details class="group-band" data-unfold{% if name in unfolded %} open{% endif %}>
     <summary><strong>{{ plan.destination }}/{{ names.folder(name) }}</strong> — {{ moves | length | number }} élément(s){% if name not in no_subfolders %} <a class="button small" href="?{{ base_query }}{{ '&' if base_query }}proposer={{ name | urlencode }}">📂 Proposer des sous-dossiers</a>{% endif %}</summary>
+    <input type="hidden" name="ouvert" value="{{ name }}"{% if name not in unfolded %} disabled{% endif %}>
     <ul class="plain small organize-list">
     {# The category with proposals is shown whole: "accept all" must reach every one (D-049). #}
     {% set limit = none if (suggestions and name == suggestions.category) else shown_per_category %}

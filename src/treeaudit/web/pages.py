@@ -520,6 +520,12 @@ def organize_page(
     found = None
     if proposer in by_category and proposer not in NO_SUBFOLDERS:
         found = subfolders.propose(proposer, by_category[proposer])
+    # The categories the user had unfolded stay so after "Mettre à jour l'aperçu".
+    unfolded = {name for name in request.query_params.getlist("ouvert") if name in by_category}
+    if found is not None:
+        unfolded.add(found.category)
+    if not unfolded and by_category:
+        unfolded.add(next(iter(by_category)))
     return render(
         request,
         "organize.html",
@@ -542,6 +548,7 @@ def organize_page(
             if key not in ("tout", "proposer")
         ),
         suggestions=found,
+        unfolded=unfolded,
         no_subfolders=NO_SUBFOLDERS,
     )
 

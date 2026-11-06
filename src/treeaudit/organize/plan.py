@@ -8,13 +8,14 @@ From the most careful to the finest:
 2. homogeneous folders (all their files of one category, e.g. an album)
    move whole, under their own name: the user's own sorting is kept;
 3. loose files of mixed folders move one by one, by type (and by year for
-   photos and videos).
+   photos and videos: a date in the name, else the modification date, D-056).
 Hidden entries, links, special files, names a command cannot carry
 unambiguously, and the destination folder itself stay where they are.
 """
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
@@ -425,6 +426,35 @@ def _year(mtime_ns: int) -> int:
         return 0
 
 
+# A full date in a name, as cameras and phones write it: 20230512, 2024-01-02,
+# 2019_07_14. A year alone ("DSC_2019") may be a counter: not taken.
+_NAME_DATE = re.compile(
+    r"(?<!\d)((?:19|20)\d\d)([-_.]?)(0[1-9]|1[0-2])\2(0[1-9]|[12]\d|3[01])(?!\d)"
+)
+FIRST_PHOTO_YEAR = 1990
+NAME_YEAR = "année tirée du nom"
+
+
+def _name_year(name: str, mtime_year: int) -> int | None:
+    """The year of a date written in the name, if it is plausible (D-056).
+
+    A copy (a backup, a USB disk) gives a file the date of the copy: the date in
+    the name, never later than the modification date, is then the right one.
+    """
+    for match in _NAME_DATE.finditer(name):
+        year = int(match.group(1))
+        if year >= FIRST_PHOTO_YEAR and (mtime_year == 0 or year <= mtime_year):
+            return year
+    return None
+
+
+def _photo_year(name: str, mtime_ns: int) -> tuple[int, bool]:
+    """(year, taken from the name); year 0 when unknown."""
+    mtime_year = _year(mtime_ns)
+    year = _name_year(name, mtime_year)
+    return (year, True) if year is not None else (mtime_year, False)
+
+
 def _load(conn: sqlite3.Connection, scan_id: int, start_id: int) -> _Node:
     rows = conn.execute(LOAD_SQL, (start_id, scan_id, scan_id, MAX_ENTRIES + 1)).fetchall()
     if len(rows) > MAX_ENTRIES:
@@ -507,7 +537,7 @@ def _summarize(node: _Node) -> None:
                 category = category_of(child.extension)
                 current.categories[category] += 1
                 if category in BY_YEAR:
-                    current.years[_year(child.mtime_ns)] += 1
+                    current.years[_photo_year(child.name_display, child.mtime_ns)[0]] += 1
             else:  # symlink or special file: never moved alone
                 current.unmovable = True
 
@@ -590,9 +620,13 @@ class _Planner:
             category, reason = chosen, "catégorie choisie par toi"
         year: int | None = None
         if category in BY_YEAR:
-            year = (
-                _year(node.mtime_ns) if node.kind != "dir" else node.years.most_common(1)[0][0]
-            ) or None
+            if node.kind == "dir":
+                year = node.years.most_common(1)[0][0] or None
+            else:
+                found, from_name = _photo_year(node.name_display, node.mtime_ns)
+                year = found or None
+                if from_name:
+                    reason = f"{reason} · {NAME_YEAR}"
         sub = self.adjust.subfolders.get(node.entry_id)
         target, renamed = self._target(category, year, sub, node.name_display)
         self.plan.moves.append(

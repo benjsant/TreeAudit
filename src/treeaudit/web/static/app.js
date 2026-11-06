@@ -588,6 +588,13 @@ function setupSuggestions() {
 }
 
 function setupCompactForms() {
+  // Ranger: an unfolded category is sent along, so it stays unfolded.
+  for (const band of document.querySelectorAll("details[data-unfold]")) {
+    band.addEventListener("toggle", () => {
+      const marker = band.querySelector(":scope > input[name=ouvert]");
+      if (marker) marker.disabled = !band.open;
+    });
+  }
   for (const form of document.querySelectorAll("form[data-compact-query]")) {
     form.addEventListener("submit", () => {
       for (const field of form.querySelectorAll("input[type=text], select")) {
