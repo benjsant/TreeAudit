@@ -19,6 +19,7 @@ Tout irait dans un nouveau dossier, **`Rangé/`** par défaut, à l'intérieur d
 - Un dossier mélangé est réparti fichier par fichier.
 - Restent toujours en place : les fichiers cachés, les liens symboliques, les dossiers vides, et ce qu'on ne peut pas écrire sans ambiguïté dans un script.
 - Deux éléments du même nom au même endroit : le second reçoit un numéro, « (2) ».
+- Si tu as cherché les doublons, un fichier qui existe en plusieurs exemplaires porte la marque **« 📑 en double »** ; clique dessus pour voir où sont les autres. Ranger ne l'écarte pas : à toi de décider.
 
 ## Ajuster le plan
 
@@ -37,7 +38,7 @@ Sur chaque catégorie, **« 📂 Proposer des sous-dossiers »** regroupe ses é
 
 Les mots collés sont coupés quand c'est utile : « FactureEDF » rejoint *Factures*, « CompteRendu » rejoint les « compte rendu ». Une marque comme « WhatsApp » ou « YouTube » reste entière.
 
-Un sous-dossier regroupe au moins deux éléments, et jamais tous (il ne rangerait rien). Au plus 30 sous-dossiers sont proposés à la fois, les plus fournis d'abord. S'il en reste, accepte ce qui te convient, puis clique sur **« ➡ Proposer la suite »** : la suite est cherchée parmi les éléments qui n'ont pas encore de sous-dossier, sans toucher à ceux que tu as acceptés ou tapés. Une proposition que tu n'as pas acceptée peut revenir. Survole une proposition pour voir pourquoi elle est faite. Clique dessus pour l'accepter, ou sur « Accepter toutes les suggestions », puis sur « 🔄 Mettre à jour l'aperçu ». **Rien ne change tant que tu ne les acceptes pas.**
+Un sous-dossier regroupe au moins deux éléments, et jamais tous (il ne rangerait rien). Au plus 30 sous-dossiers sont proposés à la fois, les plus fournis d'abord. S'il en reste, accepte ce qui te convient, puis clique sur **« ➡ Proposer la suite »** : la suite est cherchée parmi les éléments qui n'ont pas encore de sous-dossier, sans toucher à ceux que tu as acceptés ou tapés. Une proposition que tu n'as pas acceptée peut revenir. Survole une proposition pour voir pourquoi elle est faite. Les éléments d'un même sous-dossier sont affichés les uns à la suite des autres. Clique dessus pour l'accepter, ou sur « Accepter toutes les suggestions », puis sur « 🔄 Mettre à jour l'aperçu ». **Rien ne change tant que tu ne les acceptes pas.**
 
 Les photos et les vidéos sont déjà rangées par année : les sous-dossiers se placent à l'intérieur. Les noms donnés par un appareil ou une application (un préfixe suivi d'une date ou d'un long numéro) ne forment pas de groupe : ils disent d'où vient la photo, pas ce qu'elle montre.
 

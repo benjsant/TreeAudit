@@ -480,6 +480,45 @@ def projects_page(
     )
 
 
+ORGANIZE_SHOWN = 30
+"""Elements shown per category; all of them are in the script."""
+
+
+def _grouped_by_subfolder(
+    moves: list[organize_plan.Move], found: subfolders.Suggestions | None
+) -> list[organize_plan.Move]:
+    """The same moves, those going to one sub-folder next to each other.
+
+    Proposed sub-folders first, in the order proposed (themes, then shared words), then the
+    sub-folders already chosen, then the rest; only the display order changes.
+    """
+    proposed = found.by_entry if found is not None else {}
+    rank = {name: index for index, name in enumerate(found.subfolders if found else ())}
+    if not proposed and not any(move.subfolder for move in moves):
+        return moves
+
+    def key(move: organize_plan.Move) -> tuple[int, int, str]:
+        idea = proposed.get(move.entry_id)
+        if idea is not None:
+            return (0, rank.get(idea, len(rank)), idea)
+        if move.subfolder:
+            return (1, 0, move.subfolder.casefold())
+        return (2, 0, "")
+
+    return sorted(moves, key=key)  # stable: the plan's order within a group
+
+
+def _copies_of(
+    conn: sqlite3.Connection, scan_id: int, moves: list[organize_plan.Move]
+) -> dict[int, int]:
+    """Entry -> identical files, for the files shown, once duplicates were searched."""
+    run = explorer.latest_dupes_run(conn, scan_id)
+    files = [move.entry_id for move in moves if move.kind == "file"]
+    if run is None or not files:
+        return {}
+    return explorer.copy_counts(conn, scan_id, run["id"], files)
+
+
 @router.get("/scans/{scan_id}/organize")
 def organize_page(
     request: Request,
@@ -526,6 +565,18 @@ def organize_page(
         unfolded.add(found.category)
     if not unfolded and by_category:
         unfolded.add(next(iter(by_category)))
+    shown_per_category = None if tout else ORGANIZE_SHOWN
+    for name, moves in by_category.items():
+        by_category[name] = _grouped_by_subfolder(moves, found)
+    shown = [
+        move
+        for name, moves in by_category.items()
+        for move in (
+            moves
+            if shown_per_category is None or (found and name == found.category)
+            else moves[:shown_per_category]
+        )
+    ]
     return render(
         request,
         "organize.html",
@@ -538,7 +589,8 @@ def organize_page(
         folder=folder,
         by_category=by_category,
         scripts_possible=safe_root(folder),
-        shown_per_category=None if tout else 30,
+        shown_per_category=shown_per_category,
+        copies=_copies_of(conn, scan_id, shown),
         show_all=tout,
         categories=organize_plan.CATEGORIES,
         query=request.url.query,

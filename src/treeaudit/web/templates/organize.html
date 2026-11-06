@@ -75,9 +75,9 @@
           <option value="">{{ names.folder(move.category) }}</option>
           {% for other in categories if other != move.category %}<option value="{{ other }}">→ {{ names.folder(other) }}</option>{% endfor %}
         </select>
-        <input type="text" name="sous_{{ move.entry_id }}" value="{{ move.subfolder or '' }}" data-default="" placeholder="sous-dossier" maxlength="60" size="12" aria-label="Sous-dossier pour « {{ move.source }} »">
+        <input type="text" name="sous_{{ move.entry_id }}" value="{{ move.subfolder or '' }}" data-default="" placeholder="sous-dossier" maxlength="60" size="18" aria-label="Sous-dossier pour « {{ move.source }} »">
         {% if suggestions and move.entry_id in suggestions.by_entry %}{% set idea = suggestions.by_entry[move.entry_id] %}<button type="button" class="button small ai-idea" data-suggestion="{{ idea }}" data-target="sous_{{ move.entry_id }}" title="{{ suggestions.reasons.get(move.entry_id, '') }} : cliquer pour l'accepter">📂 {{ idea }}</button>{% endif %}
-        {{ "📁" if move.kind == "dir" else "📄" }} <span class="path">{{ move.target[plan.destination | length + 1:] }}</span>{% if move.renamed %} <span class="badge">renommé</span>{% endif %}<br>
+        {{ "📁" if move.kind == "dir" else "📄" }} <span class="path">{{ move.target[plan.destination | length + 1:] }}</span>{% if move.renamed %} <span class="badge">renommé</span>{% endif %}{% set same = copies.get(move.entry_id, 0) %}{% if same > 1 %} <a class="badge" href="/scans/{{ scan.id }}/entries/{{ move.entry_id }}" title="{{ same }} fichiers identiques : voir où sont les autres">📑 en double</a>{% endif %}<br>
         <span class="muted">depuis <span class="path">{{ move.source }}</span> · {{ move.reason }}{% if move.kind == "dir" %} · {{ move.files | number }} fichier(s){% endif %}</span>
       </li>
     {% endfor %}

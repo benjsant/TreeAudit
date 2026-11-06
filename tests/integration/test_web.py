@@ -1054,6 +1054,34 @@ def test_unfolded_categories_stay_unfolded(client: TestClient, scanned: int) -> 
     assert unfolded({"ouvert": "<b>x</b>"}) == first
 
 
+def test_organize_marks_copies_once_duplicates_are_known(client: TestClient, scanned: int) -> None:
+    photos = entry_ids(client, scanned)[b"photos"]
+    url = f"/scans/{scanned}/organize?dir={photos}"
+    before = client.get(url).text
+    assert "📑 en double" not in before  # not searched yet: nothing claimed
+    run_job(client, f"/api/scans/{scanned}/dupes", {"micro": False})
+    after = client.get(url).text
+    assert_safe_html(after)
+    assert after.count("📑 en double") == 3
+    assert 'title="3 fichiers identiques : voir où sont les autres"' in after
+    assert re.search(rf'href="/scans/{scanned}/entries/\d+" title="3 fichiers', after)
+    # Only shown: the script is the same.
+    assert client.get(f"/export/scans/{scanned}/organize.sh?dir={photos}").status_code == 200
+
+
+def test_organize_lists_lines_by_sub_folder(client: TestClient, scanned: int) -> None:
+    ids = entry_ids(client, scanned)
+    photos = ids[b"photos"]
+    names = [b"photos/a.jpg", f"photos/{XSS}.jpg".encode(), f"photos/{FORMULA}.jpg".encode()]
+    last = ids[names[-1]]
+    page = client.get(
+        f"/scans/{scanned}/organize", params={"dir": str(photos), f"sous_{last}": "Zeta"}
+    ).text
+    order = [int(n) for n in re.findall(r'name="sous_(\d+)"', page)]
+    assert order[0] == last  # the one with a sub-folder comes first
+    assert sorted(order) == sorted(ids[name] for name in names)  # nothing lost
+
+
 def test_rule_sub_folders_are_shown_never_applied(
     tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable]
 ) -> None:
@@ -1081,6 +1109,8 @@ def test_rule_sub_folders_are_shown_never_applied(
         assert "📂 Sous-dossiers proposés" in page and "règles fixes" in page
         assert page.count('data-suggestion="Factures"') == 3
         assert page.count('data-suggestion="Impôts"') == 2
+        # Lines of one proposed sub-folder are next to each other, in the order proposed.
+        assert re.findall(r'data-suggestion="([^"]+)"', page) == ["Factures"] * 3 + ["Impôts"] * 2
         assert "le nom contient « facture »" in page
         assert "onerror" not in page.split("ai-panel")[1].split("</section>")[0]
         # Shown only: the plan and its script are unchanged until the user submits.

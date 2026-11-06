@@ -74,7 +74,7 @@ def _chunks(values: Sequence[int]) -> Iterable[Sequence[int]]:
         yield values[start : start + _CHUNK]
 
 
-def _copy_counts(
+def copy_counts(
     conn: sqlite3.Connection, scan_id: int, run_id: int, entry_ids: Sequence[int]
 ) -> dict[int, int]:
     """Entry -> number of identical files. Hard links share the digest of their inode."""
@@ -144,7 +144,7 @@ class MarkSource:
         copies: dict[int, int] = {}
         files = [entry_id for entry_id, _, kind in entries if kind == "file"]
         if self.dupes_run is not None and files:
-            copies = _copy_counts(self._conn, self._scan_id, self.dupes_run["id"], files)
+            copies = copy_counts(self._conn, self._scan_id, self.dupes_run["id"], files)
         result: dict[int, Marks] = {}
         for entry_id, rel_path, kind in entries:
             finding = self.findings.get(entry_id)
