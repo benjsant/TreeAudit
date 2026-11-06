@@ -37,6 +37,7 @@ def test_a_full_date_in_the_name_gives_the_year(name: str, year: int) -> None:
         "IMG_20230001_1421.jpg",  # month 00
         "IMG_20231301.jpg",  # month 13
         "IMG_20230532.jpg",  # day 32
+        "IMG_20230231.jpg",  # 31 February
         "IMG_2023-05_12.jpg",  # mixed separators
         "photo_120230512.jpg",  # more digits before: not a date
         "IMG_202305121.jpg",  # more digits after

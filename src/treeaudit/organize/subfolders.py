@@ -6,6 +6,8 @@ Deterministic and explainable, for everyone (no AI, no graphics card):
    of paper ("facture");
 2. shared words: among what is left, the names sharing a rare word ("maths",
    "Dupont", "Daft Punk") are grouped under that word, the most shared first.
+3. days: photos and videos left over, often named by a camera, go to the day
+   they were taken ("2019-07-14"), when at least MIN_DAY share it (D-057).
 A sub-folder holds at least two elements and never all of them (it would sort
 nothing); its name goes through the same checks as a name typed by the user.
 Photos and videos are already sorted by year by the plan itself. Nothing
@@ -16,11 +18,13 @@ from __future__ import annotations
 
 import functools
 import heapq
+import itertools
 import re
 import unicodedata
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
 
 from treeaudit.organize.plan import (
     CATEGORIES,
@@ -31,6 +35,7 @@ from treeaudit.organize.plan import (
     VIDEOS,
     Move,
     clean_folder_name,
+    name_date,
 )
 
 MAX_SUBFOLDERS = 30
@@ -40,6 +45,10 @@ MIN_MEMBERS = 2
 MAX_NAME_WORDS = 2
 DEVICE_DIGITS = 6
 DEVICE_SHARE = 0.8
+MIN_DAY = 5
+"""Photos of one day below this are not worth a sub-folder (D-057)."""
+COPY_GAP_S = 1
+"""Files of one day mostly this close together were written by a copy."""
 
 # Names that say nothing of the content: where the files came from, or one of
 # the plan's own categories (D-049, seen on a real folder).
@@ -334,6 +343,53 @@ def _device_series(group: set[int], key: str, names: Mapping[int, str]) -> bool:
     return device >= DEVICE_SHARE * len(group)
 
 
+def _mtime_day(seconds: int) -> date | None:
+    try:
+        return datetime.fromtimestamp(seconds, UTC).date()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _looks_copied(times: list[int]) -> bool:
+    """Files written one after another by a copy, not taken by a camera.
+
+    A copy that does not keep dates writes many files per second; photos of
+    one outing are seconds or minutes apart, even in bursts (D-057)."""
+    ordered = sorted(times)
+    gaps = sorted(b - a for a, b in itertools.pairwise(ordered))
+    return bool(gaps) and gaps[len(gaps) // 2] <= COPY_GAP_S
+
+
+def _days(moves: Sequence[Move]) -> dict[date, tuple[list[int], str]]:
+    """Day -> (files taken that day, where the date comes from), fullest first.
+
+    The date written in the name first; else the modification date, unless
+    the files of that day look like a copy. Folders (albums) keep their own
+    sorting and are left out."""
+    by_name: dict[date, list[int]] = defaultdict(list)
+    by_mtime: dict[date, list[Move]] = defaultdict(list)
+    for move in moves:
+        if move.kind != "file":
+            continue
+        mtime_day = _mtime_day(move.mtime_s)
+        found = name_date(
+            move.source.rsplit("/", 1)[-1], 0 if mtime_day is None else mtime_day.year
+        )
+        if found is not None:
+            by_name[found].append(move.entry_id)
+        elif mtime_day is not None:
+            by_mtime[mtime_day].append(move)
+    days: dict[date, tuple[list[int], str]] = {}
+    for day, entries in by_name.items():
+        days[day] = (entries, "date écrite dans le nom")
+    for day, group in by_mtime.items():
+        if day in days or _looks_copied([m.mtime_s for m in group]):
+            continue
+        days[day] = ([m.entry_id for m in group], "date de modification")
+    fullest = sorted(days.items(), key=lambda item: (-len(item[1][0]), item[0]))
+    return {day: found for day, found in fullest if len(found[0]) >= MIN_DAY}
+
+
 def _accept(name: str, used: set[str], category: str) -> str | None:
     clean = clean_folder_name(name)
     if (
@@ -422,6 +478,14 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
         name = keep(" ".join(_display(forms[k]) for k in shared), sorted(group))
         for entry in group if name is not None else ():
             reasons[entry] = f"mot en commun : « {name} »"
+
+    # 3. Photos and videos whose name says nothing: the day they were taken.
+    if category in (PHOTOS, VIDEOS):
+        rest = [m for m in moves if m.subfolder is None and m.entry_id not in by_entry]
+        for day, (members, source) in _days(rest).items():
+            if keep(day.isoformat(), members) is not None:
+                for entry in members:
+                    reasons[entry] = f"même journée ({day:%d/%m/%Y}, {source})"
 
     more = len(order) > MAX_SUBFOLDERS
     if more:

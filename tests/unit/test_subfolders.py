@@ -120,6 +120,61 @@ def test_photos_named_by_a_device_are_not_grouped() -> None:
     )
 
 
+NOON = 1_563_105_600  # 2019-07-14 12:00 UTC
+
+
+def timed(times: list[int], *names: str, kind: str = "file") -> list[Move]:
+    return [
+        dataclasses.replace(move, mtime_s=at, kind=kind)
+        for move, at in zip(moves(*names, category=PHOTOS), times, strict=True)
+    ]
+
+
+def test_photos_of_one_day_by_the_date_in_their_name() -> None:
+    names = [f"IMG_20190714_{h:02d}0000.jpg" for h in range(8, 14)]  # six that day
+    names += ["IMG_20190715_100000.jpg", "IMG_20200101_100000.jpg"]
+    found = propose(PHOTOS, timed([NOON + 10**8] * 8, *names))  # copied much later
+    assert groups(found) == {"2019-07-14": [1, 2, 3, 4, 5, 6]}
+    assert found.reasons[1] == "même journée (14/07/2019, date écrite dans le nom)"
+
+
+def test_too_few_photos_make_no_day() -> None:
+    names = [f"IMG_20190714_{h:02d}0000.jpg" for h in range(8, 12)]  # four
+    names += [f"IMG_20190801_{h:02d}0000.jpg" for h in range(8, 12)]
+    assert groups(propose(PHOTOS, timed([NOON] * 8, *names))) == {}
+
+
+def test_photos_of_one_day_by_their_modification_date() -> None:
+    # Named by numbers only; taken minutes apart that day, and on another day.
+    times = [NOON + 300 * i for i in range(6)] + [NOON + 86_400 * 30, NOON + 86_400 * 31]
+    found = propose(PHOTOS, timed(times, *(f"{i:04d}.jpg" for i in range(8))))
+    assert groups(found) == {"2019-07-14": [1, 2, 3, 4, 5, 6]}
+    assert found.reasons[6] == "même journée (14/07/2019, date de modification)"
+
+
+def test_the_date_of_a_copy_makes_no_day() -> None:
+    # A copy that did not keep dates: many files in a few seconds.
+    times = [NOON + i // 3 for i in range(12)] + [NOON + 86_400 * 40] * 2
+    found = propose(PHOTOS, timed(times, *(f"{i:04d}.jpg" for i in range(14))))
+    assert groups(found) == {}
+
+
+def test_days_never_split_albums_nor_documents() -> None:
+    times = [NOON + 300 * i for i in range(6)] + [NOON + 86_400 * 30]
+    names = [f"{i:04d}" for i in range(7)]
+    assert groups(propose(PHOTOS, timed(times, *names, kind="dir"))) == {}
+    documents = [dataclasses.replace(m, category=DOCUMENTS) for m in timed(times, *names)]
+    assert groups(propose(DOCUMENTS, documents)) == {}
+
+
+def test_words_come_before_days() -> None:
+    names = [f"Plage Bretagne IMG_20190714_{h:02d}0000.jpg" for h in range(8, 11)]
+    names += [f"IMG_20190714_{h:02d}0000.jpg" for h in range(11, 17)]
+    names += ["IMG_20200101_100000.jpg"]
+    found = propose(PHOTOS, timed([NOON + 10**8] * 10, *names))
+    assert groups(found) == {"Plage Bretagne": [1, 2, 3], "2019-07-14": [4, 5, 6, 7, 8, 9]}
+
+
 def _words(count: int) -> list[str]:
     """Distinct made-up words, letters only (digits never make a word), never
     ending in s or x (plural and singular are grouped together)."""

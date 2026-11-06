@@ -731,3 +731,12 @@ Précise la mise en œuvre de D-024.
 - La ligne de l'élément l'indique (« année tirée du nom ») ; un album déplacé en entier prend l'année que donnent la plupart de ses fichiers, noms compris.
 - **Pourquoi pas les métadonnées EXIF** : il faudrait lire le contenu des fichiers, ce que l'inventaire ne fait pas.
 - **Aussi** : dans Ranger, les catégories dépliées le restent après « Mettre à jour l'aperçu » ; le tableau des catégories ne déborde plus sur téléphone.
+
+## D-057 — Ranger : les photos sans nom parlant, regroupées par journée (2026-11-06)
+- **Problème** : 64 % des photos du vrai dossier n'ont aucun mot utilisable (noms d'appareil ou d'application, D-050) ; seules 159 sur 1 330 trouvaient un sous-dossier.
+- **Décision** : après les thèmes et les mots communs, les photos et vidéos restantes sont regroupées **par journée** (`2019-07-14`), dès qu'au moins **5** fichiers la partagent. Un nom de date se renomme à la main (« 2019-07-14 Plage »).
+- **La date** : celle écrite dans le nom (D-056) ; sinon la date de modification, **sauf si les fichiers de ce jour ressemblent à une copie** : la moitié au moins espacés d'une seconde ou moins. Une copie qui ne garde pas les dates écrit plusieurs fichiers par seconde ; les photos d'une sortie sont espacées de secondes ou de minutes, même en rafale. Jour en UTC, comme l'année du plan.
+- Les dossiers (albums) gardent leur propre rangement et ne sont jamais répartis par journée. Les documents ne sont pas concernés.
+- **Mesure sur le vrai dossier** (chiffres seulement) : 159 → **809** photos classées sur 1 330, en 4 lots et 110 sous-dossiers (médiane 6 photos) ; 636 par la date du nom, 14 par la date de modification (le reste de ces dates ressemblait à une copie : jusqu'à 23 fichiers dans la même seconde). Seuil 4 : 977 classées et 152 sous-dossiers ; seuil 8 : 625 et 79.
+- **Toujours sans lire le contenu** : la date EXIF serait plus sûre, mais demanderait de lire les fichiers (décision à part, non prise).
+- **Limites** : une sortie à cheval sur minuit est coupée en deux ; deux sorties le même jour sont réunies.

@@ -20,7 +20,7 @@ import sqlite3
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from treeaudit.core.sizes import shown_file_size
 from treeaudit.duplicates.groups import SOFTWARE_DIRS
@@ -435,17 +435,26 @@ FIRST_PHOTO_YEAR = 1990
 NAME_YEAR = "année tirée du nom"
 
 
-def _name_year(name: str, mtime_year: int) -> int | None:
-    """The year of a date written in the name, if it is plausible (D-056).
+def name_date(name: str, mtime_year: int) -> date | None:
+    """A date written in the name, if it is plausible (D-056).
 
     A copy (a backup, a USB disk) gives a file the date of the copy: the date in
     the name, never later than the modification date, is then the right one.
     """
     for match in _NAME_DATE.finditer(name):
         year = int(match.group(1))
-        if year >= FIRST_PHOTO_YEAR and (mtime_year == 0 or year <= mtime_year):
-            return year
+        if year < FIRST_PHOTO_YEAR or (mtime_year != 0 and year > mtime_year):
+            continue
+        try:
+            return date(year, int(match.group(3)), int(match.group(4)))
+        except ValueError:  # 31 February
+            continue
     return None
+
+
+def _name_year(name: str, mtime_year: int) -> int | None:
+    found = name_date(name, mtime_year)
+    return None if found is None else found.year
 
 
 def _photo_year(name: str, mtime_ns: int) -> tuple[int, bool]:
