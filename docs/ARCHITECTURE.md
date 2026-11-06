@@ -27,6 +27,7 @@ Deux principes structurent tout le code :
 | `parasites/` | dossiers « à nettoyer » : catalogue de 45 règles, détection sur l'index, confiance expliquée, cache | `rules.toml`, `rules.py`, `detect.py` (D-023), `cached.py` |
 | `duplicates/` | doublons exacts : lecture sûre, empreintes en étapes, ordre physique, groupes et copie à garder | `reader.py`, `hashing.py`, `placement.py`, `runner.py` (D-015, D-030), `groups.py` (D-026) |
 | `archive/` | archive vérifiée : dossier d'archives, écriture, relecture et comparaison | `destination.py`, `output.py`, `runner.py`, `verify.py` (D-024, D-032) |
+| `similar/` | dossiers presque identiques : paires trouvées par les doublons, comparaison en faits et suppositions, familles | `trees.py` (D-058) |
 | `organize/` | « Ranger » : plan par catégories, ajustements, script de rangement et d'annulation, sous-dossiers par règles | `plan.py`, `script.py` (D-041), `subfolders.py`, `subfolder_bench.py`, `subfolder_cases*.py` (D-050) |
 | `projects/` | « Projets et logiciels » : inventaire depuis l'index | `detect.py` (D-044) |
 | `preview/` | aperçu des images : lecture sûre, type reconnu au contenu | `images.py` (D-046) |

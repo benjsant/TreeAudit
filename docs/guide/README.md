@@ -19,6 +19,7 @@ Ce guide suit l'ordre dans lequel on découvre l'application. Chaque chapitre se
 | [9. Pourquoi pas d'IA](09-mode-expert.md) | le mode expert a été essayé, mesuré, puis retiré |
 | [10. Commandes proposées et sécurité](10-commandes-et-securite.md) | ce que contient une commande, la double vérification, et ce qu'il ne faut jamais faire |
 | [11. Dépannage](11-depannage.md) | les problèmes courants et leurs solutions |
+| [12. Dossiers presque identiques](12-dossiers-presque-identiques.md) | retrouver les copies de dossiers et voir ce qui diffère |
 
 ## Les trois règles à retenir
 

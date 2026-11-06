@@ -223,3 +223,15 @@ def test_an_analysis_of_a_sub_folder(analyse: Callable[..., Report | None]) -> N
     pair = only(analyse(tree, subpath="Disque"))
     assert {pair.a_path, pair.b_path} == {"Disque/Sauvegarde", "Disque/Copie"}
     assert pair.score == 1.0
+
+
+def test_a_backup_inside_a_sub_folder_pairs_with_the_original(
+    analyse: Callable[..., Report | None],
+) -> None:
+    # "Photos" and "Sauvegarde/Photos": the analysed folder and "Sauvegarde"
+    # would be a folder and its own sub-folder.
+    tree = {f"Photos/{p}": c for p, c in PHOTOS.items()}
+    tree |= {f"Sauvegarde/Photos/{p}": c for p, c in PHOTOS.items()}
+    pair = only(analyse(tree))
+    assert {pair.a_path, pair.b_path} == {"Photos", "Sauvegarde/Photos"}
+    assert pair.score == 1.0

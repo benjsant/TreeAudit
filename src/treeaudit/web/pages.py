@@ -21,6 +21,7 @@ from urllib.parse import quote
 
 import jinja2
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import Path as PathParam
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
@@ -47,6 +48,7 @@ from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
 from treeaudit.scanner.walker import SubpathError, parse_subpath
 from treeaudit.shellcmd import host_path, safe_root
+from treeaudit.similar import trees as similar_trees
 from treeaudit.web import explorer, queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, browse_root, root_display
 from treeaudit.web.live import refresh_roots
@@ -645,6 +647,70 @@ def parasites_page(
         check=[r for r in rows if r["finding"].band is Band.ORANGE],
         doubt=[r for r in rows if r["finding"].band is Band.RED],
         min_confidence=min_confidence,
+    )
+
+
+def _similar_note(conn: sqlite3.Connection, scan_id: int) -> dict[str, Any]:
+    """What the page says before any comparison: searches done or to do."""
+    return {
+        "run": explorer.latest_dupes_run(conn, scan_id),
+        "micro": similar_trees.latest_run(conn, scan_id, micro=True),
+    }
+
+
+@router.get("/scans/{scan_id}/similar")
+def similar_page(request: Request, scan_id: int, conn: Db, config: Config) -> Response:
+    """Folders that are almost the same (D-058): facts from the duplicates search."""
+    scan = _scan_or_404(conn, scan_id)
+    report = similar_trees.similar_folders(conn, scan_id)
+    return render(
+        request,
+        "similar.html",
+        scan=scan,
+        title=analysis_title(config, scan),
+        prefix=path_prefix(config, scan),
+        report=report,
+        **_similar_note(conn, scan_id),
+    )
+
+
+@router.get("/scans/{scan_id}/similar/{a_id}/{b_id}")
+def similar_pair_page(
+    request: Request,
+    scan_id: int,
+    a_id: Annotated[int, PathParam(ge=1)],
+    b_id: Annotated[int, PathParam(ge=1)],
+    conn: Db,
+    config: Config,
+) -> Response:
+    """Two folders compared file by file: facts, then suppositions apart."""
+    scan = _scan_or_404(conn, scan_id)
+    for entry_id in (a_id, b_id):
+        node = queries.get_node(conn, scan_id, entry_id)
+        if node is None or node.kind != "dir":
+            raise HTTPException(404, "Ce dossier n'existe pas dans cette analyse.")
+    if a_id == b_id:
+        raise HTTPException(404, "Un dossier comparé à lui-même : rien à montrer.")
+    run = similar_trees.latest_run(conn, scan_id)
+    if run is None:
+        raise HTTPException(404, "Les doublons n'ont pas encore été cherchés pour cette analyse.")
+    knowledge = similar_trees.knowledge_of(conn, scan_id, run)
+    try:
+        pair = similar_trees.compare(conn, scan_id, a_id, b_id, knowledge)
+    except similar_trees.TooLargeError as exc:
+        raise HTTPException(
+            413, "Un des deux dossiers contient trop de fichiers pour être comparé ici."
+        ) from exc
+    return render(
+        request,
+        "similar_pair.html",
+        scan=scan,
+        title=analysis_title(config, scan),
+        prefix=path_prefix(config, scan),
+        pair=pair,
+        complete=run.complete,
+        shown=similar_trees.SHOWN,
+        **_similar_note(conn, scan_id),
     )
 
 

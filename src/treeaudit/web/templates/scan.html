@@ -29,6 +29,7 @@
       <p class="big-number">{{ dupes.recoverable | size }}</p>
       <p>en double ({{ dupes.removable }} copie(s) en trop)</p>
       <a class="button primary" href="/dupes/{{ dupes.run.id }}">Voir les doublons</a>
+      <p><a href="/scans/{{ scan.id }}/similar">🪞 Dossiers presque identiques</a></p>
     {% else %}
       <p>Pas encore cherchés : TreeAudit lit les fichiers de même taille pour les comparer.</p>
       <div class="actions">

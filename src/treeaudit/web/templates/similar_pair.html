@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "paths.html" import full_path %}
+{% block title %}Comparer deux dossiers · {{ title }}{% endblock %}
+{% macro listing(heading, items, note, open=false) %}
+  <details class="group-band"{% if open %} open{% endif %}>
+    <summary><strong>{{ heading }}</strong> — {{ items.count | number }} fichier(s), {{ items.size | size }}</summary>
+    {% if note %}<p class="muted small">{{ note }}</p>{% endif %}
+    <ul class="plain small">
+    {% for item in items.items %}
+      {% if item.path_a is defined %}
+      <li><span class="path">{{ item.path_a }}</span> → <span class="path">{{ item.path_b }}</span> <span class="muted">· {{ item.size | size }}</span></li>
+      {% else %}
+      <li><span class="path">{{ item.path }}</span> <span class="muted">· {{ item.size | size }}</span></li>
+      {% endif %}
+    {% endfor %}
+    </ul>
+    {% if items.count > items.items | length %}<p class="muted small">… et {{ (items.count - items.items | length) | number }} autre(s) : seuls les {{ shown | number }} premiers sont affichés.</p>{% endif %}
+  </details>
+{% endmacro %}
+{% block content %}
+<p class="back"><a href="/scans/{{ scan.id }}/similar">← Dossiers presque identiques</a></p>
+<h1>🪞 Comparer deux dossiers</h1>
+<p class="lead">Fichier par fichier, d'après leur place dans chaque dossier. <strong>Rien n'est supprimé.</strong></p>
+{% if not complete %}<p class="notice warn" role="alert">La recherche de doublons n'a pas pu tout lire : des fichiers comptent comme « non vérifiés ».</p>{% endif %}
+
+<section class="panel">
+  <p><strong>A</strong> · 📁 {{ full_path(prefix, pair.a_path) }} <span class="muted">· {{ pair.files_a | number }} fichier(s), {{ pair.bytes_a | size }}</span> <a class="small" href="/scans/{{ scan.id }}/space?dir={{ pair.a_id }}">explorer</a></p>
+  <p><strong>B</strong> · 📁 {{ full_path(prefix, pair.b_path) }} <span class="muted">· {{ pair.files_b | number }} fichier(s), {{ pair.bytes_b | size }}</span> <a class="small" href="/scans/{{ scan.id }}/space?dir={{ pair.b_id }}">explorer</a></p>
+  <ul class="plain">
+    <li>{{ (pair.found_in_other("a") * 100) | round | int }} % de A se retrouve dans B.</li>
+    <li>{{ (pair.found_in_other("b") * 100) | round | int }} % de B se retrouve dans A.</li>
+    {% if pair.contains("a") and pair.contains("b") %}<li><strong>✅ Fait : A et B ont exactement les mêmes contenus.</strong></li>
+    {% elif pair.contains("a") %}<li><strong>✅ Fait : tout ce qui est dans B se trouve aussi dans A.</strong></li>
+    {% elif pair.contains("b") %}<li><strong>✅ Fait : tout ce qui est dans A se trouve aussi dans B.</strong></li>{% endif %}
+  </ul>
+</section>
+
+<h2>Faits</h2>
+{{ listing("Identiques, au même endroit", pair.same, "", false) }}
+{{ listing("Identiques, mais ailleurs (déplacés ou renommés)", pair.moved, "Chemin dans A → chemin dans B.", pair.moved.count > 0) }}
+{{ listing("Modifiés", pair.modified, "Même chemin, contenu différent. La taille indiquée est la plus grande des deux.", pair.modified.count > 0) }}
+{{ listing("Seulement dans A", pair.only_a, "", pair.only_a.count > 0) }}
+{{ listing("Seulement dans B", pair.only_b, "", pair.only_b.count > 0) }}
+
+{% if pair.unverified.count %}
+<h2>Suppositions</h2>
+{{ listing("Même chemin et même taille, contenu jamais lu", pair.unverified, "Fichiers trop petits pour la recherche de doublons, ou illisibles : sans doute identiques, mais rien ne le prouve." ~ ("" if micro else " Lance « Petits fichiers en double » depuis le bilan pour les vérifier."), true) }}
+{% endif %}
+<p class="muted small">Les dossiers vides et les liens symboliques ne sont pas comparés. Les dates ne servent jamais à trancher.</p>
+{% endblock %}

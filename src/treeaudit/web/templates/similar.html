@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "paths.html" import full_path %}
+{% block title %}Dossiers presque identiques · {{ title }}{% endblock %}
+{% block content %}
+<p class="back"><a href="/scans/{{ scan.id }}">← Bilan de {{ title }}</a></p>
+<h1>🪞 Dossiers presque identiques</h1>
+<p class="lead">Des dossiers copiés, puis parfois un peu modifiés : une sauvegarde et sa copie, un ancien et un nouveau classement. <strong>Rien n'est supprimé</strong> : TreeAudit montre ce qui est pareil et ce qui diffère.</p>
+
+{% if report is none %}
+  <p class="notice info">Pour comparer des dossiers, TreeAudit s'appuie sur la recherche de doublons : elle n'a pas encore été faite pour cette analyse.</p>
+  <div class="actions">
+    <button type="button" class="button primary" data-start-dupes data-scan="{{ scan.id }}" data-micro="0">Chercher les doublons</button>
+    <p class="error-text" data-error role="alert" hidden></p>
+  </div>
+{% else %}
+  {% if not report.complete %}<p class="notice warn" role="alert">La recherche de doublons n'a pas pu tout lire : des fichiers comptent comme « non vérifiés ».</p>{% endif %}
+  {% if report.skipped_large %}<p class="muted">{{ report.skipped_large }} paire(s) de dossiers trop gros pour être comparés ici.</p>{% endif %}
+  {% set unverified = report.unverified %}
+  {% if unverified and micro is none %}
+  <div class="notice info">
+    <p>{{ unverified | number }} petit(s) fichier(s) de même taille n'ont jamais été lus : ils restent des suppositions. Lance « Petits fichiers en double » pour les vérifier, puis reviens ici.</p>
+    <div class="actions"><button type="button" class="button small" data-start-dupes data-scan="{{ scan.id }}" data-micro="1">Petits fichiers en double</button><p class="error-text" data-error role="alert" hidden></p></div>
+  </div>
+  {% endif %}
+
+  {% if not report.families %}
+    <p class="notice info">Aucun dossier presque identique trouvé : aucun dossier ne se retrouve à plus de moitié dans un autre.</p>
+  {% endif %}
+
+  {% for family in report.families %}
+  <section class="panel similar-family">
+    {% set first = family.comparisons[0] %}
+    <h2>{% if family.members > 2 %}{{ family.members }} exemplaires{% else %}Deux dossiers{% endif %}</h2>
+    <p>📁 {{ full_path(prefix, first.a_path) }} <span class="muted">· {{ first.files_a | number }} fichier(s), {{ first.bytes_a | size }}</span> <a class="small" href="/scans/{{ scan.id }}/space?dir={{ first.a_id }}">explorer</a></p>
+    <ul class="plain similar-others">
+    {% for pair in family.comparisons %}
+      <li>
+        <p>📁 {{ full_path(prefix, pair.b_path) }} <span class="muted">· {{ pair.files_b | number }} fichier(s), {{ pair.bytes_b | size }}</span> <a class="small" href="/scans/{{ scan.id }}/space?dir={{ pair.b_id }}">explorer</a></p>
+        <p class="small">
+          {% if pair.contains("a") and pair.contains("b") %}<span class="badge">identiques</span>
+          {% elif pair.contains("a") %}<span class="badge">entièrement dans le premier</span>
+          {% elif pair.contains("b") %}<span class="badge">contient tout le premier</span>{% endif %}
+          {{ (pair.found_in_other("b") * 100) | round | int }} % de celui-ci se retrouve dans le premier ; {{ (pair.found_in_other("a") * 100) | round | int }} % du premier se retrouve dans celui-ci.
+          {% if pair.unverified.count %}<span class="muted">{{ pair.unverified.count | number }} non vérifié(s).</span>{% endif %}
+          <a class="button small" href="/scans/{{ scan.id }}/similar/{{ pair.a_id }}/{{ pair.b_id }}">Comparer en détail</a>
+        </p>
+      </li>
+    {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+
+  <p class="muted small">Faits : contenus lus par la recherche de doublons (même taille et même empreinte), ou d'une taille qu'aucun autre fichier n'a. Les pourcentages comptent les octets et les fichiers et retiennent le plus faible. Les dates ne servent jamais à trancher.</p>
+{% endif %}
+{% endblock %}

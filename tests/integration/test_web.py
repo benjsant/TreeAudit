@@ -1301,3 +1301,43 @@ def test_the_analysed_folder_is_named_as_the_user_knows_it(
         assert ">My Disk</a>" in crumbs.group(1) and ">root</a>" not in crumbs.group(1)
     projects = client.get(f"/scans/{scanned}/projects").text
     assert re.search(r"recréables · <strong>\d+ coché", projects)
+
+
+def test_almost_identical_folders_pages(client: TestClient, root: Path) -> None:
+    def blob(tag: str) -> bytes:
+        return tag.encode().ljust(64, b"_") * 50
+
+    for name in "abc":
+        touch(root / "Sauvegarde" / f"{name}.jpg", blob(name))
+        touch(root / f"{XSS} copie" / f"{name}.jpg", blob(name))
+    touch(root / f"{XSS} copie" / "en plus.jpg", blob("plus"))
+    scan_id = run_job(client, "/api/scans", {"root_id": "main", "subpath": ""})["scan_id"]
+    url = f"/scans/{scan_id}/similar"
+
+    before = client.get(url)
+    assert before.status_code == 200 and "data-start-dupes" in before.text
+    assert "/similar" not in client.get(f"/scans/{scan_id}").text  # offered once searched
+
+    run_job(client, f"/api/scans/{scan_id}/dupes", {"micro": False})
+    assert f'href="{url}"' in client.get(f"/scans/{scan_id}").text
+    page = client.get(url).text
+    assert_safe_html(page)
+    # The bigger one (one file more) comes first; the other is entirely in it.
+    assert "Deux dossiers" in page and "entièrement dans le premier" in page
+    assert "&lt;img src=x onerror=alert(1)&gt; copie" in page and XSS not in page
+    link = re.search(rf'href="(/scans/{scan_id}/similar/(\d+)/(\d+))"', page)
+    assert link is not None
+
+    detail = client.get(link.group(1))
+    assert detail.status_code == 200
+    assert_safe_html(detail.text)
+    assert "✅ Fait : tout ce qui est dans B se trouve aussi dans A." in detail.text
+    assert "Seulement dans A</strong> — 1 fichier(s)" in detail.text
+    assert XSS not in detail.text
+
+    a_id, b_id = link.group(2), link.group(3)
+    assert client.get(f"{url}/{a_id}/{a_id}").status_code == 404  # itself
+    assert client.get(f"{url}/999999/{b_id}").status_code == 404
+    a_file = entry_ids(client, scan_id)[b"Sauvegarde/a.jpg"]
+    assert client.get(f"{url}/{a_file}/{b_id}").status_code == 404  # a file, not a folder
+    assert client.get(f"{url}/0/{b_id}").status_code == 422

@@ -199,10 +199,11 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Revue de sécurité dédiée (2026-10-21, `SECURITY.md`) : 3 défauts corrigés et testés, risques résiduels documentés.
 
 ## Phase 7 — Similarité (fichiers et arborescences)
-- [ ] Définir les critères d'identité (mêmes chemins relatifs, mêmes empreintes).
-- [ ] Définir un score de similarité explicable.
-- [ ] Tester arbres renommés, sous-ensembles et fichiers manquants.
-- [ ] Distinguer faits et heuristiques dans l'affichage.
+- [x] Définir les critères d'identité (mêmes chemins relatifs, mêmes empreintes) (D-058).
+- [x] Définir un score de similarité explicable : part de chaque côté retrouvée dans l'autre, octets et fichiers (D-058).
+- [x] Tester arbres renommés, sous-ensembles et fichiers manquants (aussi modifiés, déplacés, liens physiques, petits fichiers, familles).
+- [x] Distinguer faits et heuristiques dans l'affichage : suppositions à part, jamais comptées.
+- [ ] Plus tard : comparer deux analyses (deux disques analysés séparément).
 
 ## Phase 8 — Validation Linux
 - [ ] Tests complets sous Linux Mint et Fedora/Nobara.

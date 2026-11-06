@@ -216,14 +216,20 @@ def knowledge_of(conn: sqlite3.Connection, scan_id: int, run: _Run) -> _Knowledg
 def _folders(path_a: bytes, path_b: bytes) -> tuple[bytes, bytes] | None:
     """The pair of folders two copies of one file stand for, or None.
 
-    The file names go, then the folders both paths end with. A folder and one
-    of its own sub-folders make no pair."""
+    The file names go, then the folders both paths end with, as long as
+    neither folder becomes one of the other's parents: "Photos" and
+    "Sauvegarde/Photos" stay a pair, not the analysed folder and "Sauvegarde".
+    A folder and one of its own sub-folders make no pair."""
+
+    def nested(x: list[bytes], y: list[bytes]) -> bool:
+        return x == y[: len(x)] or y == x[: len(y)]
+
     a = path_a.split(b"/")[:-1]
     b = path_b.split(b"/")[:-1]
-    while a and b and a[-1] == b[-1]:
+    while a and b and a[-1] == b[-1] and not nested(a[:-1], b[:-1]):
         a.pop()
         b.pop()
-    if a == b or a == b[: len(a)] or b == a[: len(b)]:
+    if nested(a, b):
         return None
     return b"/".join(a), b"/".join(b)
 
@@ -428,6 +434,11 @@ class Report:
     families: list[Family] = field(default_factory=list)
     skipped_large: int = 0
     small_files_read: bool = False
+
+    @property
+    def unverified(self) -> int:
+        """Files of the families shown whose content was never read."""
+        return sum(c.unverified.count for f in self.families for c in f.comparisons)
 
 
 def _inside(path: str, folder: str) -> bool:
