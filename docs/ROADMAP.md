@@ -78,7 +78,7 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Copies protégées : fichiers-marqueurs, dépôts git, logiciels et dépendances installés ; une copie hors logiciel toujours gardée.
 - [x] Copie à garder suggérée et expliquée ; commande unique (corbeille ou suppression) pour les autres copies.
 - [x] Mesures (2026-10-20, arborescence synthétique de 152 970 entrées, Docker) : analyse principale 0,3 s (8,9 Mio lus) ; micro-nettoyage 0,16 s en natif après correction d'une requête SQL (2 s auparavant) ; affichage du micro-nettoyage 0,5 s et 32 Mio (159 Mio auparavant).
-- [ ] Rapport JSON et CSV : reporté à la phase 6 (interface et rapports).
+- [x] Rapport JSON et CSV : fait à la phase 6 (exports de l'analyse, des parasites et des doublons, dans « Détails techniques »).
 
 ## Phase 5 — Filtres (D-027)
 - [x] Extension, nom exact, glob de nom, glob de chemin, regex sur le nom et sur le chemin relatif, type, taille.
@@ -211,6 +211,8 @@ Aucun parcours de fichiers dans cette phase.
 - [ ] Aucune anomalie critique connue avant de déclarer la V1 terminée.
 
 ## Phase 9 — IA locale (optionnelle)
+**Abandonnée** (D-052, 2026-11-02) : mesurée, l'IA locale n'apportait rien que les règles ne fassent mieux, et une IA en ligne enverrait les noms de fichiers à l'extérieur. Lignes gardées pour l'historique ; le code est sur la branche `legacy-expert-mode`.
+
 - [ ] Cas visés : trancher les détections ambiguës (bibliothèque recopiée ou modifiée, dossier `bin` incertain…) et expliquer les résultats.
 - [ ] Comparer runtimes et modèles par benchmark ; documenter taille, RAM et performances.
 - [ ] N'envoyer que les métadonnées nécessaires.

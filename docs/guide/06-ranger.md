@@ -31,14 +31,14 @@ Dans l'aperçu, tu peux :
 
 ### Sous-dossiers proposés
 
-Sur chaque catégorie, **« 📂 Proposer des sous-dossiers »** regroupe ses éléments d'après leurs noms, sans IA et sans carte graphique :
+Sur chaque catégorie d'au moins trois éléments, **« 📂 Proposer des sous-dossiers »** regroupe ses éléments d'après leurs noms, sans IA et sans carte graphique :
 
 - un **mot connu** donne un thème : « facture » ou « invoice » vont dans *Factures*, « avis d'imposition » dans *Impôts*, « fiche de paie » dans *Salaires*, « capture d'écran » dans *Captures d'écran*… Un sujet l'emporte sur un type de papier : « facture-garage-vidange » va dans *Voiture* ;
 - parmi le reste, les noms qui **partagent un mot** sont regroupés sous ce mot : « TD1_maths », « examen_maths » dans *Maths* ; « Daft Punk - … » dans *Daft Punk*.
 
 Les mots collés sont coupés quand c'est utile : « FactureEDF » rejoint *Factures*, « CompteRendu » rejoint les « compte rendu ». Une marque comme « WhatsApp » ou « YouTube » reste entière.
 
-Un sous-dossier regroupe au moins deux éléments, et jamais tous (il ne rangerait rien). Au plus 30 sous-dossiers sont proposés à la fois, les plus fournis d'abord. S'il en reste, accepte ce qui te convient, puis clique sur **« ➡ Proposer la suite »** : la suite est cherchée parmi les éléments qui n'ont pas encore de sous-dossier, sans toucher à ceux que tu as acceptés ou tapés. Une proposition que tu n'as pas acceptée peut revenir. Survole une proposition pour voir pourquoi elle est faite. Les éléments d'un même sous-dossier sont affichés les uns à la suite des autres. Clique dessus pour l'accepter, ou sur « Accepter toutes les suggestions », puis sur « 🔄 Mettre à jour l'aperçu ». **Rien ne change tant que tu ne les acceptes pas.**
+Un sous-dossier regroupe au moins deux éléments, et jamais tous (il ne rangerait rien). Au plus 30 sous-dossiers sont proposés à la fois, les plus fournis d'abord. S'il en reste, accepte ce qui te convient, puis clique sur **« ➡ Proposer la suite »** : la suite est cherchée parmi les éléments qui n'ont pas encore de sous-dossier, sans toucher à ceux que tu as acceptés ou tapés. Une proposition que tu n'as pas acceptée peut revenir. Les éléments d'un même sous-dossier sont affichés les uns à la suite des autres, et la raison de chaque proposition est écrite sous l'élément. Clique sur une proposition pour l'accepter, ou sur « Accepter toutes les suggestions », puis sur « 🔄 Mettre à jour l'aperçu ». **Rien ne change tant que tu ne les acceptes pas.**
 
 Les photos et les vidéos sont déjà rangées par année : les sous-dossiers se placent à l'intérieur. Les noms donnés par un appareil ou une application (un préfixe suivi d'une date ou d'un long numéro) ne forment pas de groupe : ils disent d'où vient la photo, pas ce qu'elle montre.
 

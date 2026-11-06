@@ -200,6 +200,11 @@ def _latest_run(conn: sqlite3.Connection, scan_id: int, *, micro: bool) -> sqlit
     return None
 
 
+def _free_pages(conn: sqlite3.Connection) -> int:
+    row = conn.execute("PRAGMA freelist_count").fetchone()
+    return int(row[0]) if row is not None else 0
+
+
 @router.get("/")
 def index(request: Request, conn: Db) -> Response:
     refresh_roots(request.app)
@@ -229,6 +234,9 @@ def index(request: Request, conn: Db) -> Response:
         can_analyse=any(s.accepted for s in statuses.values())
         or request.app.state.external_enabled,
         index_size=index_size(config.data_dir),
+        # Nothing to compact on a fresh install; after forgetting the last
+        # analysis, its free pages are what compacting gives back.
+        can_compact=bool(analyses) or _free_pages(conn) > 0,
         compacted=request.query_params.get("compacte") is not None,
         container_mode=config.container_mode,
     )
@@ -602,6 +610,8 @@ def organize_page(
         suggestions=found,
         unfolded=unfolded,
         no_subfolders=NO_SUBFOLDERS,
+        # A group holds at least MIN_MEMBERS elements and never all of them.
+        min_to_propose=subfolders.MIN_MEMBERS + 1,
     )
 
 

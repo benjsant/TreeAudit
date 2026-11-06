@@ -132,6 +132,23 @@ def assert_safe_html(text: str) -> None:
 # --- pages ------------------------------------------------------------------------------
 
 
+def test_compacting_is_offered_only_when_it_can_give_space_back(
+    client: TestClient, root: Path
+) -> None:
+    assert "data-compact-index" not in client.get("/").text  # fresh install: nothing to do
+    scan_id = run_job(client, "/api/scans", {"root_id": "main", "subpath": ""})["scan_id"]
+    assert "data-compact-index" in client.get("/").text
+    for i in range(300):  # enough rows for the forgotten analysis to leave free pages
+        touch(root / "many" / f"{i:04d}-{'x' * 120}.txt", b"x")
+    big = run_job(client, "/api/scans", {"root_id": "main", "subpath": ""})["scan_id"]
+    for forgotten in (scan_id, big):
+        assert (
+            client.post(f"/api/scans/{forgotten}/forget", json={}, headers=CSRF).status_code == 200
+        )
+    # No analysis left, but their place is still in the index: compacting gives it back.
+    assert "data-compact-index" in client.get("/").text
+
+
 def test_index_and_security_headers(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
@@ -1063,6 +1080,7 @@ def test_organize_marks_copies_once_duplicates_are_known(client: TestClient, sca
     after = client.get(url).text
     assert_safe_html(after)
     assert after.count("📑 en double") == 3
+    assert "depuis <span" not in after  # loose files of the folder itself: the name says it all
     assert 'title="3 fichiers identiques : voir où sont les autres"' in after
     assert re.search(rf'href="/scans/{scanned}/entries/\d+" title="3 fichiers', after)
     # Only shown: the script is the same.
@@ -1104,7 +1122,12 @@ def test_rule_sub_folders_are_shown_never_applied(
         # For everyone: no expert mode needed (D-050).
         assert "📂 Proposer des sous-dossiers" in page and "💡" not in page
         assert "proposer=Documents" in page and "ai-panel" not in page
+        assert "proposer=Musique" not in page  # one element: nothing could be proposed
+        assert 'depuis <span class="path">papiers/' in page  # from a sub-folder: said so
         page = plain.get(f"/scans/{scan_id}/organize", params={"proposer": "Documents"}).text
+        # The reason, in the tooltip and written under the element (no hover on phones).
+        assert 'title="le nom contient « facture ». Clique pour l\'accepter."' in page
+        assert "· 📂 le nom contient « facture »" in page
         assert_safe_html(page)
         assert "📂 Sous-dossiers proposés" in page and "règles fixes" in page
         assert page.count('data-suggestion="Factures"') == 3

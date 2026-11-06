@@ -35,8 +35,10 @@
 {% if index_size %}
 <section class="actions" aria-label="Index de TreeAudit">
   <span class="muted small">Index de TreeAudit : {{ index_size | size }} sur le disque.</span>
+  {% if can_compact %}
   <button type="button" class="button small" data-compact-index>Compacter l'index</button>
   <span class="muted small">rend au disque la place des analyses oubliées</span>
+  {% endif %}
   <p class="error-text" data-error role="alert" hidden></p>
 </section>
 {% endif %}
