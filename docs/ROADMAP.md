@@ -206,7 +206,7 @@ Aucun parcours de fichiers dans cette phase.
 - [ ] Plus tard : comparer deux analyses (deux disques analysés séparément).
 
 ## Phase 8 — Validation Linux
-- [ ] Tests complets sous Linux Mint et Fedora/Nobara.
+- [ ] Tests complets sous Linux Mint et Fedora/Nobara. Nobara 44 (noyau 7.3) fait le 2026-11-09 : suite complète en Docker ; AppImage en natif (analyse, doublons, serveur sur 127.0.0.1 seulement, liens non suivis, sonde du bac à sable 34/34 sur l'hôte). Reste Linux Mint.
 - [ ] Volumes externes (ext4, btrfs, NTFS, exFAT), noms particuliers.
 - [x] Revue de sécurité complète (2026-11-09, `SECURITY.md` « Revue V1 ») : 5 défauts corrigés et testés, risques résiduels documentés.
 - [x] Documentation installation, désinstallation, emplacement et suppression de la base locale (guide 01, « Où sont tes données » et « Désinstaller »).
