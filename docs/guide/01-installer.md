@@ -4,11 +4,32 @@ TreeAudit existe en deux versions. Elles font la même chose et offrent la même
 
 | | Docker | AppImage |
 |---|---|---|
-| Ce qu'il faut | Docker et son plugin Compose | Linux 6.7 ou plus récent |
+| Ce qu'il faut | Docker et son plugin Compose | Linux 6.7 ou plus récent, FUSE |
 | Disques | ceux branchés **avant** le démarrage | branchés à tout moment (« 🔄 Actualiser ») |
 | Données | `data/` et `archives/` dans le dossier du projet | `~/.local/share/treeaudit/` |
 
 Les deux versions ont chacune leur propre index : une analyse faite avec l'une n'apparaît pas dans l'autre.
+
+## Prérequis
+
+```bash
+./treeaudit requirements      # ou ./treeaudit prerequis
+```
+
+Cette commande **vérifie sans rien installer** : Docker, son plugin Compose, l'accès au service, Buildx (pour construire l'AppImage), puis, pour l'AppImage, le noyau et FUSE. Pour chaque manque, elle affiche la commande à lancer pour ta distribution. Le lanceur fait la même vérification avant chaque commande qui a besoin de Docker. TreeAudit n'installe jamais rien lui-même : c'est toi qui lances ces commandes.
+
+Installer Docker avec les paquets de ta distribution :
+
+| | Ubuntu, Linux Mint (et dérivées d'Ubuntu) | Fedora, Nobara |
+|---|---|---|
+| Installer | `sudo apt install docker.io docker-compose-v2 docker-buildx` | `sudo dnf install moby-engine docker-compose docker-buildx` |
+| Démarrer le service | (automatique) | `sudo systemctl enable --now docker` |
+| Utiliser Docker sans `sudo` | `sudo usermod -aG docker "$USER"`, puis déconnecte-toi et reconnecte-toi | idem |
+
+- **Si Docker vient déjà du dépôt de Docker** (`docker-ce`), garde-le : les plugins s'appellent alors `docker-compose-plugin` et `docker-buildx-plugin`. Ne mélange pas les deux sources, leurs paquets sont en conflit.
+- **Autres distributions** (Debian, Arch, Rocky...) : suis la [documentation de Docker](https://docs.docker.com/engine/install/). Le lanceur ne devine pas de commande pour elles.
+- **Le groupe `docker`** donne des droits équivalents à `root` sur ta machine : tout membre peut lancer un conteneur qui lit n'importe quel fichier. C'est le fonctionnement normal de Docker, pas de TreeAudit. L'AppImage n'en a pas besoin pour tourner (seulement pour être construite, une fois).
+- **Podman** à la place de Docker (paquet `podman-docker`) n'est pas pris en charge : le lanceur le signale.
 
 ## Avec Docker
 

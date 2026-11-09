@@ -210,6 +210,7 @@ Aucun parcours de fichiers dans cette phase.
 - [ ] Volumes externes (ext4, btrfs, NTFS, exFAT), noms particuliers.
 - [x] Revue de sécurité complète (2026-11-09, `SECURITY.md` « Revue V1 ») : 5 défauts corrigés et testés, risques résiduels documentés.
 - [x] Documentation installation, désinstallation, emplacement et suppression de la base locale (guide 01, « Où sont tes données » et « Désinstaller »).
+- [x] Prérequis vérifiés et expliqués, jamais installés : `./treeaudit requirements` (D-059).
 - [ ] Aucune anomalie critique connue avant de déclarer la V1 terminée.
 
 ## Phase 9 — IA locale (optionnelle)

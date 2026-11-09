@@ -40,7 +40,7 @@ Des outils comme [Czkawka](https://github.com/qarmin/czkawka) trouvent très bie
 
 ## Démarrage rapide
 
-**Prérequis :** Linux, [Docker](https://docs.docker.com/engine/install/) avec le plugin Compose. Rien d'autre n'est installé sur ta machine : tout tourne dans des conteneurs. **Aucun fichier de configuration à remplir.**
+**Prérequis :** Linux, [Docker](https://docs.docker.com/engine/install/) avec le plugin Compose. `./treeaudit requirements` vérifie ce qui manque et affiche la commande pour Ubuntu, Mint, Fedora ou Nobara, sans rien installer ([guide](docs/guide/01-installer.md#prérequis)). Rien d'autre n'est installé sur ta machine : tout tourne dans des conteneurs. **Aucun fichier de configuration à remplir.**
 
 ```bash
 git clone https://github.com/benjsant/TreeAudit.git

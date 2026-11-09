@@ -116,6 +116,145 @@ if [[ $TREEAUDIT_EXTERNAL_DISKS == 1 ]]; then
 fi
 DEV=("${COMPOSE_BASE[@]}" run --rm dev)
 
+# --- Prerequisites (D-059) --------------------------------------------------
+# Checked before every command that needs Docker. TreeAudit never installs
+# anything: it names what is missing and the command for this distribution,
+# which the user runs. The two overrides below exist for the tests only.
+OS_RELEASE="${TREEAUDIT_OS_RELEASE:-/etc/os-release}"
+DOCKER_SOCKET="${TREEAUDIT_DOCKER_SOCKET:-/var/run/docker.sock}"
+DOCKER_DOCS="https://docs.docker.com/engine/install/"
+
+# ubuntu, fedora or other. /etc/os-release is read as data, never sourced.
+# The family is told by the exact ID: Rocky or Alma also say "ID_LIKE=fedora"
+# but have no moby-engine package.
+distro_family() {
+    local line id="" like=""
+    [[ -r $OS_RELEASE ]] || { echo other; return 0; }
+    while IFS= read -r line || [[ -n $line ]]; do
+        case $line in
+            ID=*) id="${line#ID=}" ;;
+            ID_LIKE=*) like="${line#ID_LIKE=}" ;;
+        esac
+    done < "$OS_RELEASE"
+    id="${id//[\"\']/}"
+    like="${like//[\"\']/}"
+    case $id in
+        fedora | nobara | ultramarine) echo fedora; return 0 ;;
+        ubuntu | linuxmint | pop | zorin | elementary) echo ubuntu; return 0 ;;
+    esac
+    if [[ " $like " == *" ubuntu "* ]]; then
+        echo ubuntu
+    else
+        echo other
+    fi
+}
+
+# Docker from scratch: the distribution's own packages, never a mix with
+# Docker's repository (docker-ce), which conflicts with them.
+hint_install() {
+    case $1 in
+        ubuntu) say "  sudo apt install docker.io docker-compose-v2 docker-buildx" ;;
+        fedora)
+            say "  sudo dnf install moby-engine docker-compose docker-buildx"
+            say "  sudo systemctl enable --now docker"
+            ;;
+        *) say "  voir $DOCKER_DOCS"; return 0 ;;
+    esac
+    say '  sudo usermod -aG docker "$USER"   (puis déconnecte-toi et reconnecte-toi)'
+    say "  Le groupe docker donne des droits équivalents à root : docs/guide/01-installer.md"
+}
+
+# One missing plugin: its name depends on where Docker came from.
+hint_plugin() {
+    local family="$1" what="$2" distro plugin
+    if [[ $what == compose ]]; then
+        plugin=docker-compose-plugin
+        distro=docker-compose
+        [[ $family != ubuntu ]] || distro=docker-compose-v2
+    else
+        plugin=docker-buildx-plugin
+        distro=docker-buildx
+    fi
+    case $family in
+        ubuntu) say "  sudo apt install $distro" ;;
+        fedora) say "  sudo dnf install $distro" ;;
+        *) say "  voir $DOCKER_DOCS"; return 0 ;;
+    esac
+    say "  (si Docker vient du dépôt de Docker, docker-ce : $plugin à la place)"
+}
+
+# Says what is missing on stderr; fails if Docker cannot be used yet.
+check_docker() {
+    local family missing=0
+    family="$(distro_family)"
+    if ! command -v docker >/dev/null 2>&1; then
+        say "✘ Docker n'est pas installé. Pour l'installer :"
+        hint_install "$family"
+        return 1
+    fi
+    if [[ "$(docker --version 2>/dev/null || true)" == [Pp]odman* ]]; then
+        say "✘ La commande docker est Podman (paquet podman-docker) : TreeAudit a besoin de Docker."
+        say "  voir $DOCKER_DOCS"
+        return 1
+    fi
+    if ! docker compose version >/dev/null 2>&1; then
+        say "✘ Il manque le plugin Docker Compose :"
+        hint_plugin "$family" compose
+        missing=1
+    fi
+    if ! docker info >/dev/null 2>&1; then
+        if [[ -n ${DOCKER_HOST:-} ]]; then
+            say "✘ Docker ne répond pas à DOCKER_HOST=$DOCKER_HOST (docker info échoue)."
+        elif [[ ! -S $DOCKER_SOCKET ]]; then
+            say "✘ Le service Docker n'est pas démarré :"
+            say "  sudo systemctl enable --now docker"
+        elif [[ ! -w $DOCKER_SOCKET ]]; then
+            say "✘ Ton utilisateur n'a pas accès à Docker :"
+            say '  sudo usermod -aG docker "$USER"   (puis déconnecte-toi et reconnecte-toi)'
+            say "  Le groupe docker donne des droits équivalents à root : docs/guide/01-installer.md"
+        else
+            say "✘ Docker ne répond pas (docker info échoue)."
+        fi
+        missing=1
+    fi
+    return "$missing"
+}
+
+check_buildx() {
+    docker buildx version >/dev/null 2>&1 && return 0
+    say "✘ Il manque le plugin Docker Buildx (pour construire l'AppImage) :"
+    hint_plugin "$(distro_family)" buildx
+    return 1
+}
+
+need_docker() { check_docker || die "TreeAudit ne peut pas démarrer : installe d'abord ce qui manque."; }
+
+# The AppImage needs no Docker to run, but a recent kernel (it refuses to start
+# without Landlock's network rules, D-038) and FUSE to mount itself.
+check_appimage_host() {
+    local kernel missing=0
+    kernel="$(uname -r)"
+    if [[ $kernel =~ ^([0-9]+)\.([0-9]+) ]] &&
+        (( BASH_REMATCH[1] > 6 || (BASH_REMATCH[1] == 6 && BASH_REMATCH[2] >= 7) )); then
+        say "✔ noyau $kernel (6.7 ou plus récent)"
+    else
+        say "✘ noyau $kernel : l'AppImage demande Linux 6.7 ou plus récent. Utilise Docker."
+        missing=1
+    fi
+    if [[ -e /dev/fuse ]] && { command -v fusermount3 || command -v fusermount; } >/dev/null 2>&1; then
+        say "✔ FUSE"
+    else
+        say "✘ FUSE absent :"
+        case "$(distro_family)" in
+            ubuntu) say "  sudo apt install fuse3" ;;
+            fedora) say "  sudo dnf install fuse3" ;;
+            *) say "  installe le paquet fuse3 de ta distribution" ;;
+        esac
+        missing=1
+    fi
+    return "$missing"
+}
+
 # --- Preparation, on the host -----------------------------------------------
 build() { "${COMPOSE_BASE[@]}" --profile dev build; }
 
@@ -221,6 +360,26 @@ cmd_cli() {
     exec "${COMPOSE[@]}" run --rm "${tty[@]}" app "$@"
 }
 
+# Checks only, installs nothing. Fails if Docker cannot be used; the AppImage
+# part is for information (it needs neither Docker nor this script to run).
+cmd_requirements() {
+    exec 2>&1
+    local status=0
+    say "Avec Docker :"
+    if check_docker; then
+        say "✔ Docker, Compose et l'accès au service"
+        if check_buildx; then
+            say "✔ Buildx (pour construire l'AppImage)"
+        fi
+    else
+        status=1
+    fi
+    say ""
+    say "Avec l'AppImage :"
+    check_appimage_host || true
+    return "$status"
+}
+
 cmd_settings() {
     local name
     for name in "${SETTINGS[@]}" TREEAUDIT_HOME_PATH TREEAUDIT_TZ COMPOSE_SELINUX; do
@@ -290,6 +449,7 @@ Usage : ./treeaudit [commande]
   disks              Disques externes proposés ou refusés, et pourquoi
   cli ARGS...        Ligne de commande de TreeAudit (./treeaudit cli --help)
   settings           Réglages utilisés (sans rien lancer)
+  requirements       Vérifie les prérequis (Docker, Compose...), n'installe rien
   help               Cette aide
 
 Développement :
@@ -306,12 +466,23 @@ EOF
 
 command="${1:-start}"
 [[ $# -eq 0 ]] || shift
+# Say what is missing before Docker fails with its own, less helpful, message.
+case "$command" in
+    start | up | stop | down | disks | cli | build | lock | appimage | test | lint | format | \
+        typecheck | check)
+        need_docker
+        ;;
+esac
+if [[ $command == appimage ]]; then
+    check_buildx || die "L'AppImage ne peut pas être construite : installe d'abord ce qui manque."
+fi
 case "$command" in
     start | up) cmd_start ;;
     stop | down) cmd_stop ;;
     disks) cmd_disks ;;
     cli) cmd_cli "$@" ;;
     settings) cmd_settings ;;
+    requirements | prerequis) cmd_requirements ;;
     env) cmd_env ;;
     build) build ;;
     lock) cmd_lock ;;
