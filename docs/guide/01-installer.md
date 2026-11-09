@@ -62,12 +62,40 @@ TREEAUDIT_HOME=0 ./treeaudit           # ne pas proposer le dossier personnel
 
 La liste complète est dans le [README](../../README.md#ancien-mode-par-fichier-env-expérimental-non-testé).
 
+## Où sont tes données
+
+| | Docker | AppImage |
+|---|---|---|
+| Index (tes analyses) | `data/treeaudit.sqlite3` dans le dossier du projet | `~/.local/share/treeaudit/index/treeaudit.sqlite3` |
+| Archives faites par le bouton « Archiver » | `archives/` dans le dossier du projet | `~/.local/share/treeaudit/archives/` |
+| Fichiers temporaires (grands tris de SQLite) | `data/tmp/` | `$XDG_RUNTIME_DIR/treeaudit/` (vidé à la déconnexion), sinon `~/.cache/treeaudit/` |
+
+**Ce que contient l'index** : les chemins, tailles, dates et droits des fichiers analysés, et les empreintes calculées par la recherche de doublons. **Jamais le contenu des fichiers.** Il reste sur ta machine, lisible par toi seul, mais les chemins en disent long : ne le partage pas.
+
+**Effacer une analyse** : sur l'accueil, « Oublier » à côté de l'analyse, puis « Compacter l'index » pour rendre la place au disque. Rien n'est touché sur tes disques.
+
+**Tout effacer sans désinstaller** : arrête TreeAudit, puis supprime le fichier d'index (et, s'ils existent, `treeaudit.sqlite3-wal` et `treeaudit.sqlite3-shm` à côté). Un index vide est recréé au prochain démarrage.
+
+Deux choses sont écrites ailleurs, mais seulement par **toi**, quand tu lances ce que TreeAudit propose :
+
+- les commandes « archiver » (page *À nettoyer* ou *Panier*) écrivent dans `~/treeaudit-archives/` ;
+- les scripts de Ranger que tu télécharges vont dans `~/Téléchargements/`.
+
 ## Désinstaller
 
-TreeAudit n'a rien mis ailleurs que dans son dossier. Pour tout retirer :
+**Avec Docker** :
 
-1. `./treeaudit stop`
-2. Garde tes archives si tu en as besoin : elles sont dans `archives/`.
-3. Supprime le dossier `TreeAudit` (son index `data/` contient les chemins de tes fichiers : ne le partage pas).
-4. Supprime les images Docker : `docker image ls | grep treeaudit`, puis `docker image rm` sur celles listées. Si tu as utilisé le mode expert, l'image `ghcr.io/ggml-org/llama.cpp` aussi.
-5. Pour l'AppImage : supprime le fichier et `~/.local/share/treeaudit/`.
+1. `./treeaudit stop` (arrête les conteneurs et retire leur réseau).
+2. Garde ce dont tu as besoin : `archives/`, et `~/treeaudit-archives/` si tu as lancé des commandes d'archive.
+3. Supprime le dossier `TreeAudit` : son index `data/` part avec lui, ainsi que `models/` si tu avais essayé le mode expert.
+4. Supprime les images de TreeAudit : `docker image ls | grep treeaudit`, puis `docker image rm treeaudit-app:local treeaudit-dev:local`. Si tu as utilisé le mode expert, l'image `ghcr.io/ggml-org/llama.cpp` aussi.
+5. Facultatif, **avec prudence** : la construction a aussi téléchargé `python:3.14-slim` et `ghcr.io/astral-sh/uv`, et laissé un cache de construction (`docker builder prune`). D'autres projets peuvent s'en servir : ne les retire que si tu sais qu'ils ne servent à rien d'autre.
+
+**Avec l'AppImage** :
+
+1. Quitte TreeAudit (« ⏻ Quitter »).
+2. Garde `~/.local/share/treeaudit/archives/` et `~/treeaudit-archives/` si tu en as besoin.
+3. Supprime le fichier AppImage, `~/.local/share/treeaudit/` et `~/.cache/treeaudit/` (s'il existe).
+4. Si tu avais créé un fichier de réglages (ancien mode) : `~/.config/treeaudit/`.
+
+Rien d'autre n'est installé : ni service, ni tâche planifiée, ni programme hors de ces dossiers.
