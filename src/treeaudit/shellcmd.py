@@ -30,7 +30,10 @@ from typing import Protocol
 ARCHIVE_DIR = '"$HOME/treeaudit-archives"'
 _ARCHIVE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,120}")
 _CONTINUATION = " \\\n  "
-_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+# Control characters (C0, DEL, C1) and the invisible marks that change the
+# writing direction: "photo\u202egpj.exe" would read "photoexe.jpg" (security
+# review V1). Such a name gets no command, like a name with a newline.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
 
 _LOG = logging.getLogger(__name__)

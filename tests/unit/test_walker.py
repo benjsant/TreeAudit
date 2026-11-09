@@ -495,3 +495,38 @@ def test_a_walk_cannot_start_inside_a_private_or_own_folder(tmp_path: Path) -> N
     own = run(home, ("data",), own_dirs=frozenset({identity(home / "data")}))
     assert not entries(own)
     assert [e.message for e in errors(own)] == ["TreeAudit's own folder"]
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        ".npmrc",
+        ".pypirc",
+        ".cargo/credentials.toml",
+        ".config/rclone/rclone.conf",
+        ".config/Signal/config.json",
+        ".local/share/TelegramDesktop/tdata/key",
+        ".config/discord/Local Storage/x",
+        ".var/app/com.bitwarden.desktop/data.json",
+        ".var/app/org.keepassxc.KeePassXC/config",
+        ".bash_history",
+        ".zsh_history",
+        ".local/share/fish/fish_history",
+        ".python_history",
+    ],
+)
+def test_the_secrets_found_missing_by_the_review_are_never_examined(
+    tmp_path: Path, secret: str
+) -> None:
+    """Security review V1: these were listed and could be read or archived."""
+    from treeaudit.roots.personal import PRIVATE_PATHS
+
+    home = tmp_path / "home"
+    (home / secret).parent.mkdir(parents=True, exist_ok=True)
+    (home / secret).write_bytes(b"token")
+    (home / "notes.txt").write_bytes(b"ok")
+    found = entries(run(home, private_paths=PRIVATE_PATHS))
+    assert b"notes.txt" in found
+    assert not any(path == secret.encode() or path.startswith(secret.encode()) for path in found)
+    top = secret.split("/")
+    assert all(not path.startswith(b"/".join(p.encode() for p in top)) for path in found)

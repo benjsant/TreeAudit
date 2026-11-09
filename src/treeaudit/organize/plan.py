@@ -19,7 +19,7 @@ import re
 import sqlite3
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 
 from treeaudit.core.sizes import shown_file_size
@@ -713,4 +713,28 @@ def make_plan(
     if start.kind != "dir":
         raise KeyError(start_id)
     _summarize(start)
-    return _Planner(start, adjustments or Adjustments()).run()
+    return _Planner(start, _free_destination(start, adjustments or Adjustments())).run()
+
+
+def _free_destination(start: _Node, adjustments: Adjustments) -> Adjustments:
+    """A destination that is a real folder, or not there yet (security review V1).
+
+    A link (or a file) with the destination's name would take the moves
+    elsewhere, outside the chosen folder: the default name gives way to
+    "Rangé (2)"..., a name the user chose is refused."""
+    taken = {child.name_display: child.kind for child in start.children}
+
+    def clashes(name: str) -> bool:
+        return taken.get(name, "dir") != "dir"
+
+    if not clashes(adjustments.destination):
+        return adjustments
+    if adjustments.destination != DESTINATION:
+        raise AdjustmentError(
+            f"« {adjustments.destination} » existe déjà et n'est pas un dossier : "
+            "choisis un autre nom"
+        )
+    number = 2
+    while clashes(f"{DESTINATION} ({number})"):
+        number += 1
+    return replace(adjustments, destination=f"{DESTINATION} ({number})")

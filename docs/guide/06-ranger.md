@@ -4,7 +4,7 @@
 
 ## Ce que fait le plan
 
-Tout irait dans un nouveau dossier, **`Rangé/`** par défaut, à l'intérieur du dossier choisi :
+Tout irait dans un nouveau dossier, **`Rangé/`** par défaut, à l'intérieur du dossier choisi (« Rangé (2) » si un fichier ou un lien porte déjà ce nom) :
 
 | Catégorie | Contenu |
 |---|---|
@@ -54,8 +54,9 @@ Le script est prudent :
 
 - avant chaque déplacement, il vérifie que l'élément est toujours là, et qu'un fichier a encore **la taille et la date** vues par l'analyse ;
 - il **n'écrase jamais rien** (`mv -n`) : si la place est prise, il passe ;
+- il ne passe **jamais par un lien** : si un dossier du chemin d'arrivée est un lien symbolique, l'élément reste en place ;
 - tout élément ignoré est affiché avec sa raison, et un bilan s'affiche à la fin.
 
-**Garde le script d'annulation** : il remet chaque élément à sa place d'origine, puis retire seulement les dossiers que le rangement a laissés vides.
+**Garde le script d'annulation** : il remet chaque élément à sa place d'origine, puis retire seulement les dossiers que le rangement a pu créer, s'ils sont vides. Tes propres dossiers vides restent.
 
 Au-delà de 300 000 éléments, le plan serait trop long : choisis plutôt un sous-dossier.

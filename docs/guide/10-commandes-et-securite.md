@@ -12,7 +12,7 @@ gio trash -- \
 
 - **`gio trash`** met à la corbeille, **`rm -rf`** supprime définitivement, **`tar`** archive. Il n'y a jamais d'autre programme.
 - Chaque chemin est entre apostrophes, et précédé de `--` : un nom de fichier piégé comme `$(commande)`, `-rf` ou `a; b` reste un simple nom, jamais une instruction.
-- Un chemin qui contient des caractères invisibles (retour à la ligne, tabulation) ou un encodage invalide ne reçoit **aucune commande** : il ne pourrait pas être affiché sans ambiguïté. Il est signalé.
+- Un chemin qui contient des caractères invisibles (retour à la ligne, tabulation, marques qui inversent le sens d'écriture comme dans « photo[U+202E]gpj.exe ») ou un encodage invalide ne reçoit **aucune commande** : il ne pourrait pas être affiché sans ambiguïté. Il est signalé.
 
 ## La double vérification
 

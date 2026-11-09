@@ -737,6 +737,9 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 server_header=False,
                 proxy_headers=False,
                 log_level="info",
+                # URLs carry searched words and typed folder names: not logged
+                # (security review V1). Errors still are.
+                access_log=False,
             )
         )
     )

@@ -170,7 +170,7 @@ Relecture critique de tout le code d'archivage, centrée sur le seul module qui 
 ## Disque système, dossier personnel et dossier de TreeAudit (D-037)
 - **Partitions de données du disque système** : proposées seulement si elles ne partagent **aucune partition** avec un point de montage du système (`/`, `/boot`, `/boot/efi`, `/efi`, `/home`, `/usr`, `/var`). Un conteneur LUKS ou LVM partagé avec le système compte comme partagé, donc refusé. Le système de fichiers du système, remonté ailleurs, est refusé lui aussi. Comme pour les disques externes, la décision est prise sur l'hôte, puis vérifiée à nouveau dans le conteneur. Un disque annoncé comme externe et situé sur le disque système est refusé.
 - **Dossier personnel** : monté en lecture seule, de façon récursive, sous `/audit/home`. Son chemin vient toujours de `$HOME` (chemin réel) et n'est jamais lu dans `.env` ou dans l'environnement. Le lanceur vérifie qu'il s'agit d'un dossier appartenant à l'utilisateur, puis le valide comme toute racine, sans la règle « dossier personnel entier ».
-- **Secrets jamais lus** : une liste de chemins (`.ssh`, `.gnupg`, `.password-store`, trousseaux, profils de navigateur et de messagerie, identifiants cloud, `.netrc`…) est écartée **avant même un `stat`**. Ces chemins sont absents de l'index et du sélecteur, et une analyse ou une archive ne peut pas commencer à l'intérieur. Cette liste ne fait que **réduire l'exposition** : la protection reste la lecture seule et l'absence de réseau (règle 11). Un secret rangé ailleurs serait lu comme un fichier ordinaire, pour les doublons par exemple, mais jamais stocké ni transmis.
+- **Secrets jamais lus** : une liste de chemins (`.ssh`, `.gnupg`, `.password-store`, trousseaux, profils de navigateur et de messagerie, messageries, identifiants cloud et de développement, `.netrc`, historiques de shell…, complétée par la revue V1) est écartée **avant même un `stat`**. Ces chemins sont absents de l'index et du sélecteur, et une analyse ou une archive ne peut pas commencer à l'intérieur. Cette liste ne fait que **réduire l'exposition** : la protection reste la lecture seule et l'absence de réseau (règle 11). Un secret rangé ailleurs serait lu comme un fichier ordinaire, pour les doublons par exemple, mais jamais stocké ni transmis.
 - **Le dossier de TreeAudit sur un disque analysé** : `data/` et `archives/` sont reconnus par leur **identité** (périphérique, inode), relevée au moment de l'analyse, et non par leur nom. Ils sont écartés du parcours (exclusion « dossier de TreeAudit »), cachés dans le sélecteur, et une archive qui les contiendrait est refusée avant toute écriture. Dans l'explorateur et le panier, un dossier qui les contient, ou qui contient des secrets, est marqué « protégé » : le mettre à la corbeille les emporterait.
 - **Exposition** : le conteneur voit en plus, en lecture seule, le dossier personnel et les partitions de données. Il n'a toujours pas d'accès à Internet, et rien n'est transmis.
 
@@ -185,6 +185,30 @@ Relecture critique de tout le code d'archivage, centrée sur le seul module qui 
 
 ### Relecture de sécurité du bac à sable (2026-10-22)
 Elle a cherché à contourner le bac à sable et a tout essayé pour de vrai. Deux contournements ont été trouvés et fermés : les sockets « flux » SCTP et MPTCP, et `chattr` sur un fichier ouvert en lecture seule. Pour ce dernier, seccomp applique désormais une **liste blanche** d'`ioctl`. Une configuration trop large (`data_dir` sur le dossier personnel ou un dossier système) est refusée, et `treeaudit gateway` est refusée en natif. Le détail, piste par piste, est dans D-038.
+
+## Revue de sécurité V1 (2026-11-09)
+Relecture de tout ce qui a changé depuis la revue du 2026-10-21 (le bac à sable a eu la sienne le 2026-10-22) : explorateur et panier, double vérification des commandes, scripts de Ranger, aperçu des images, oubli d'une analyse et compactage, dossier personnel et partitions, pages Projets et Dossiers presque identiques, lanceur après le retrait de l'IA, journaux.
+
+**Défauts trouvés et corrigés** (chacun a un test ; ceux de Ranger lancent réellement les scripts) :
+1. **Ranger pouvait déplacer des fichiers hors du dossier choisi** (moyen) : un lien symbolique nommé comme la destination (« Rangé »), ou comme un de ses sous-dossiers, était suivi par `mkdir -p` et `mv`. Désormais, le plan prend « Rangé (2) » si « Rangé » existe sans être un vrai dossier, et refuse un nom choisi dans ce cas. Avant chaque déplacement, le script vérifie qu'**aucun dossier du chemin de la cible n'est un lien** ; sinon l'élément est ignoré et signalé. Le test du lien piégé échoue sans cette vérification.
+2. **Secrets du dossier personnel : liste incomplète** (moyen) : jetons de développement (`.npmrc`, `.pypirc`, `.cargo/credentials`, `.config/rclone`), messageries (Signal, Telegram, Discord, Element, Slack, Evolution), versions Flatpak (Bitwarden, KeePassXC, 1Password, Vivaldi, Edge, Opera, LibreWolf, Epiphany) et historiques de shell et de consoles. Ils pouvaient être lus par la recherche de doublons ou archivés ; ils sont maintenant écartés avant tout `stat`.
+3. **Le script d'annulation retirait tous les dossiers vides de la destination** (faible), y compris ceux de l'utilisateur : il ne retire plus que les dossiers que le rangement a pu créer, les plus profonds d'abord, s'ils sont vides.
+4. **Journal d'accès du serveur** (faible) : chaque URL, donc un mot recherché ou un nom de sous-dossier tapé, était journalisée (et gardée dans les journaux Docker). Il est coupé ; les erreurs restent journalisées.
+5. **Marques de sens d'écriture et contrôles C1** (faible) : « photo[U+202E]gpj.exe » s'affiche « photoexe.jpg ». Un nom qui contient ces caractères (U+202A–U+202E, U+2066–U+2069, U+200E, U+200F, U+061C, U+0080–U+009F) ne reçoit plus de commande et reste en place dans Ranger, comme un nom avec un retour à la ligne.
+
+**Vérifié sans défaut** :
+- Titre en tête des scripts : il passe par `safe_root`, aucun retour à la ligne possible.
+- Commandes de nettoyage : double vérification (cibles bornées, relecture comme le shell, aucun programme privilégié).
+- Aperçu des images : lecteur sûr (`O_NOFOLLOW`, même fichier avant et après), type tiré des octets, SVG refusé, en-tête `sandbox`, dossiers privés non lus.
+- CSRF et en-têtes de sécurité : middleware global, y compris oublier et compacter ; aucune action en GET.
+- Paramètres des pages bornés ; noms de sous-dossiers tapés filtrés puis mis entre guillemets ; identifiants des nouvelles pages vérifiés ; noms piégés échappés.
+- Journaux applicatifs sans contenu de fichier ; dossier de données en `0700` ; lanceur sans accès GPU ni conteneur d'IA.
+- 173 tests de sécurité, dont la sonde du bac à sable, passés sans test ignoré.
+
+**Risques résiduels acceptés** :
+- **Entre l'analyse et le lancement d'un script** : un dossier *parent d'une source* remplacé par un lien. Le script vérifie l'élément lui-même (taille, date) et le chemin de la cible, pas tous les parents de la source. Un tel changement suppose un programme malveillant du même utilisateur, hors du modèle de menace ; rien n'est jamais écrasé (`mv -n`).
+- **Une page énorme** (« Tout afficher » sur 300 000 éléments) peut ralentir le serveur : un déni de service local, pour soi seulement.
+- **Dépendances** : pas d'audit en ligne (`pip-audit`), qui demanderait un accès réseau. Les versions sont figées dans `uv.lock` et justifiées dans `DEPENDENCIES.md`.
 
 ## Toute future fonction destructive est interdite
 Elle exigera une spécification et une revue de sécurité séparées, un aperçu avant action, une confirmation explicite, une journalisation, une stratégie de restauration ou de quarantaine et des tests d'interruption et d'échec.

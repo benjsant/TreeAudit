@@ -372,3 +372,86 @@ def test_a_backup_with_a_loose_requirements_txt_is_not_moved_whole(
     assert moves["sauvegarde_cle/agent"] == f"{DESTINATION}/Projets/agent"
     assert moves["sauvegarde_cle/photo.jpg"].startswith(f"{DESTINATION}/Photos/2019/")
     assert moves["script"] == f"{DESTINATION}/Projets/script"
+
+
+# --- security review V1 ------------------------------------------------------------
+
+
+def _tidy_then_undo(
+    tmp_path: Path, root: Path, data_disk_table: Callable[..., MountTable], **adjust: str
+) -> tuple[Plan, subprocess.CompletedProcess[str], subprocess.CompletedProcess[str]]:
+    from treeaudit.organize.plan import adjustments_from_query
+
+    config = AppConfig(
+        data_dir=str(tmp_path / "data"), roots=(RootConfig(id="r", path=str(root), label="r"),)
+    )
+    outcome = execute_scan(
+        config,
+        ScanRequest(root=config.roots[0]),
+        mounts=data_disk_table(str(tmp_path)),
+        home=None,
+        cancel=threading.Event(),
+    )
+    conn = connect(config.data_dir)
+    try:
+        start = conn.execute(
+            "SELECT entry_id FROM entry WHERE scan_id = ? AND depth = 0", (outcome.scan_id,)
+        ).fetchone()[0]
+        plan = make_plan(conn, outcome.scan_id, start, adjustments_from_query(list(adjust.items())))
+    finally:
+        conn.close()
+    meta = {"title": "t", "scan_id": outcome.scan_id, "date": "d"}
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(exist_ok=True)
+    tidied = run_script(tidy_script(plan, str(root), **meta), scripts)
+    restored = run_script(undo_script(plan, str(root), **meta), scripts)
+    return plan, tidied, restored
+
+
+def test_a_link_named_like_the_destination_never_leads_outside(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    outside.mkdir()
+    touch(root / "facture.pdf", b"f")
+    touch(root / "photo.jpg", b"p", PHOTO_TIME)
+    (root / DESTINATION).symlink_to(outside)  # planted: "Rangé" leads elsewhere
+    plan, tidied, restored = _tidy_then_undo(tmp_path, root, data_disk_table)
+    assert plan.destination == f"{DESTINATION} (2)"
+    assert tidied.returncode == 0, tidied.stderr
+    assert list(outside.iterdir()) == []  # nothing went through the link
+    assert restored.returncode == 0 and (root / "facture.pdf").exists()
+
+
+def test_a_chosen_destination_that_is_not_a_folder_is_refused(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    from treeaudit.organize.plan import AdjustmentError
+
+    root = tmp_path / "root"
+    touch(root / "facture.pdf", b"f")
+    touch(root / "Classement", b"a file")
+    with pytest.raises(AdjustmentError, match="n'est pas un dossier"):
+        _tidy_then_undo(tmp_path, root, data_disk_table, destination="Classement")
+
+
+def test_a_link_inside_the_destination_is_never_followed(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    outside.mkdir()
+    touch(root / "facture.pdf", b"f")
+    touch(root / "chanson.mp3", b"m")
+    (root / DESTINATION).mkdir()
+    (root / DESTINATION / "Documents").symlink_to(outside)  # planted inside
+    (root / DESTINATION / "Mes vieux dossiers vides").mkdir()  # the user's own
+    _, tidied, restored = _tidy_then_undo(tmp_path, root, data_disk_table)
+    assert tidied.returncode == 0
+    assert "facture.pdf (un dossier du chemin est un lien" in tidied.stderr
+    assert list(outside.iterdir()) == [] and (root / "facture.pdf").exists()
+    assert restored.returncode == 0, restored.stderr
+    # Undo: everything back, the user's own empty folder kept, the link untouched.
+    assert (root / "chanson.mp3").exists()
+    assert (root / DESTINATION / "Mes vieux dossiers vides").is_dir()
+    assert (root / DESTINATION / "Documents").is_symlink()
+    assert not (root / DESTINATION / "Musique").exists()  # created by the tidying: removed

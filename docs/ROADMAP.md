@@ -208,7 +208,7 @@ Aucun parcours de fichiers dans cette phase.
 ## Phase 8 — Validation Linux
 - [ ] Tests complets sous Linux Mint et Fedora/Nobara.
 - [ ] Volumes externes (ext4, btrfs, NTFS, exFAT), noms particuliers.
-- [ ] Revue de sécurité complète.
+- [x] Revue de sécurité complète (2026-11-09, `SECURITY.md` « Revue V1 ») : 5 défauts corrigés et testés, risques résiduels documentés.
 - [ ] Documentation installation, désinstallation, emplacement et suppression de la base locale.
 - [ ] Aucune anomalie critique connue avant de déclarer la V1 terminée.
 

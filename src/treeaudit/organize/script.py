@@ -3,8 +3,10 @@
 Paths are relative to the chosen folder, where the script first goes, and
 quoted with shlex.quote. Before each move the script checks the element is
 still there and, for a file, has the size and date the analysis saw; the
-target must be free; mv -n never overwrites. The undo script moves everything
-back in reverse order, then removes only the folders it left empty.
+target must be free and no folder on its way a link (it would lead outside the
+chosen folder); mv -n never overwrites. The undo script moves everything back
+in reverse order, then removes the folders the tidying may have created, if
+they are empty: never another empty folder (security review V1).
 """
 
 from __future__ import annotations
@@ -25,8 +27,17 @@ cd -- {folder} || exit 1
 done_count=0
 skipped=0
 skip() {{ printf 'ignoré : %s (%s)\\n' "$1" "$2" >&2; skipped=$((skipped + 1)); }}
+linked() {{  # a folder on the way to $1 is a link: it would lead elsewhere
+    local path=$1
+    while [[ $path == */* ]]; do
+        path=${{path%/*}}
+        if [[ -L $path ]]; then return 0; fi
+    done
+    return 1
+}}
 place() {{
     if [[ -e $2 || -L $2 ]]; then skip "$1" "la place est déjà prise : $2"; return; fi
+    if linked "$2"; then skip "$1" "un dossier du chemin est un lien : $2"; return; fi
     mkdir -p -- "$(dirname -- "$2")" || {{ skip "$1" "dossier impossible à créer"; return; }}
     if mv -n -- "$1" "$2" && [[ ( -e $2 || -L $2 ) && ! -e $1 && ! -L $1 ]]; then
         done_count=$((done_count + 1))
@@ -78,6 +89,17 @@ def _check_moves(plan: Plan) -> None:
             raise ValueError(f"unsafe path in tidying plan: {path!r}")
 
 
+def _created_folders(plan: Plan) -> list[str]:
+    """Every folder above a target, the deepest first: what mkdir -p may have made."""
+    folders = {plan.destination}
+    for move in plan.moves:
+        parent = posixpath.dirname(move.target)
+        while parent and parent not in folders:
+            folders.add(parent)
+            parent = posixpath.dirname(parent)
+    return sorted(folders, key=lambda f: (-f.count("/"), f))
+
+
 def tidy_script(plan: Plan, folder: str, *, title: str, scan_id: int, date: str) -> str:
     _check_moves(plan)
     lines = [
@@ -106,12 +128,13 @@ def undo_script(plan: Plan, folder: str, *, title: str, scan_id: int, date: str)
     ]
     for move in reversed(plan.moves):
         lines.append(f"back {_q(move.target)} {_q(move.source)}")
+    lines.append(
+        "# Only the folders the tidying may have created, children first, if empty"
+        " (rmdir refuses the others)."
+    )
     lines += [
-        "# Only the folders of the tidying left empty are removed (rmdir refuses the others).",
-        f"if [[ -d {_q(plan.destination)} ]]; then",
-        # One rmdir per folder, children first: a parent left empty goes next.
-        f"    find {_q(plan.destination)} -depth -type d -empty -exec rmdir -- {{}} \\;",
-        "fi",
-        'echo "$done_count élément(s) remis en place, $skipped ignoré(s)."',
+        f"[[ -d {_q(folder)} && ! -L {_q(folder)} ]] && rmdir -- {_q(folder)} 2>/dev/null"
+        for folder in _created_folders(plan)
     ]
+    lines.append('echo "$done_count élément(s) remis en place, $skipped ignoré(s)."')
     return "\n".join(lines) + "\n"
