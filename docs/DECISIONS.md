@@ -770,3 +770,9 @@ Précise la mise en œuvre de D-024.
 - **Ce que Rust coûterait** : réécrire 15 000 lignes, 1 000 tests, l'interface et la revue de sécurité ; et le mainteneur doit pouvoir relire le code qu'il valide.
 - **Décision** : Python. Les bibliothèques Rust nécessaires existent (`landlock`, `seccompiler`, axum), la question peut revenir en V2 si une mesure montre le processeur comme limite.
 - **Piste plus simple, non faite** : lire les empreintes en parallèle **sur SSD seulement** (le noyau dit si le disque est rotatif). À mesurer d'abord sur un SSD.
+
+## D-061 — V1 candidate (2026-11-10)
+- **État** : phases 1 à 8 faites sauf les essais qui demandent le mainteneur ; phase 9 (IA) abandonnée (D-052). 1 018 tests réussis, aucun ignoré ; revue de sécurité V1 faite ; sonde du bac à sable réussie sur l'hôte (Nobara 44, noyau 7.3) ; dépendances sans vulnérabilité connue (`pip-audit`, PyPI et OSV).
+- **Aucune anomalie critique connue.** La seule anomalie mineure relevée (avertissement de droits du dossier de données affiché deux fois en natif) est corrigée : il est dit une fois par dossier et par processus, toutes les vérifications restant faites à chaque appel.
+- **Décision** : la V1 est **candidate**. Elle sera déclarée **terminée** par le mainteneur après ses essais : vérification visuelle et au clavier dans le navigateur, Linux Mint (prérequis et démarrage), vrais disques NTFS, exFAT et btrfs avec noms particuliers, disque branché après le démarrage puis arraché (protocole dans `TEST_PLAN.md`, avec un disque de copies seulement).
+- **Risques résiduels acceptés** : ceux de `SECURITY.md`, tous liés à un programme malveillant du même utilisateur (hors du modèle de menace) ou à un ralentissement local.

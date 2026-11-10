@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR_MODE = 0o700
 
+# Data folders already reported as readable by others, in this process.
+_warned_open: set[str] = set()
+
 
 def prepare_data_dir(data_dir: str) -> Path:
     """Create the data directory (mode 0700) if needed and check it is usable."""
@@ -34,7 +37,10 @@ def prepare_data_dir(data_dir: str) -> Path:
         raise ConfigError(f"data_dir must be a real directory, not a link or file: {data_dir!r}")
     if not os.access(path, os.W_OK | os.X_OK):
         raise ConfigError(f"data_dir is not writable: {data_dir!r}")
-    if stat.S_IMODE(info.st_mode) & 0o077:
+    # Every check above runs on each call; only the warning is said once per
+    # folder and process (the command line and the scan both prepare it).
+    if stat.S_IMODE(info.st_mode) & 0o077 and data_dir not in _warned_open:
+        _warned_open.add(data_dir)
         logger.warning(
             "data_dir %s is accessible to other users (mode %o); "
             "it will contain the full paths of audited files, consider chmod 700",

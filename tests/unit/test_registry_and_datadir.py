@@ -85,6 +85,25 @@ def test_prepare_data_dir_warns_when_shared(
     assert "accessible to other users" in caplog.text
 
 
+def test_shared_data_dir_is_reported_once_but_checked_every_time(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The command line and the scan both prepare the folder: one warning,
+    while every check still runs on each call."""
+    target = tmp_path / "data"
+    target.mkdir()
+    target.chmod(0o755)
+    with caplog.at_level(logging.WARNING):
+        prepare_data_dir(str(target))
+        prepare_data_dir(str(target))
+    assert caplog.text.count("accessible to other users") == 1
+    target.rmdir()
+    (tmp_path / "elsewhere").mkdir()
+    target.symlink_to(tmp_path / "elsewhere")
+    with pytest.raises(ConfigError, match="real directory"):
+        prepare_data_dir(str(target))
+
+
 def test_prepare_data_dir_refuses_symlink(tmp_path: Path) -> None:
     real = tmp_path / "real"
     real.mkdir()

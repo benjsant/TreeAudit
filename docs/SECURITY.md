@@ -208,7 +208,7 @@ Relecture de tout ce qui a changé depuis la revue du 2026-10-21 (le bac à sabl
 **Risques résiduels acceptés** :
 - **Entre l'analyse et le lancement d'un script** : un dossier *parent d'une source* remplacé par un lien. Le script vérifie l'élément lui-même (taille, date) et le chemin de la cible, pas tous les parents de la source. Un tel changement suppose un programme malveillant du même utilisateur, hors du modèle de menace ; rien n'est jamais écrasé (`mv -n`).
 - **Une page énorme** (« Tout afficher » sur 300 000 éléments) peut ralentir le serveur : un déni de service local, pour soi seulement.
-- **Dépendances** : pas d'audit en ligne (`pip-audit`), qui demanderait un accès réseau. Les versions sont figées dans `uv.lock` et justifiées dans `DEPENDENCIES.md`.
+- **Dépendances** : versions figées dans `uv.lock` et justifiées dans `DEPENDENCIES.md`. Audit `pip-audit` 2.10.1 fait le 2026-11-10 sur les 33 paquets de `uv.lock` (exécution et développement), bases PyPI et OSV : **aucune vulnérabilité connue**. Il n'est pas automatique (il demande le réseau) : à refaire avant chaque version publiée et après chaque `./treeaudit lock`. Méthode : `uv export --frozen --all-groups --no-emit-project` dans l'image `dev`, sans réseau ; puis `pip-audit -r … --disable-pip --no-deps` dans un conteneur jetable qui ne voit que cette liste de noms et de versions.
 
 ## Toute future fonction destructive est interdite
 Elle exigera une spécification et une revue de sécurité séparées, un aperçu avant action, une confirmation explicite, une journalisation, une stratégie de restauration ou de quarantaine et des tests d'interruption et d'échec.

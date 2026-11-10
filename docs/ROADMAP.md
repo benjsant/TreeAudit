@@ -211,7 +211,7 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Revue de sécurité complète (2026-11-09, `SECURITY.md` « Revue V1 ») : 5 défauts corrigés et testés, risques résiduels documentés.
 - [x] Documentation installation, désinstallation, emplacement et suppression de la base locale (guide 01, « Où sont tes données » et « Désinstaller »).
 - [x] Prérequis vérifiés et expliqués, jamais installés : `./treeaudit requirements` (D-059).
-- [ ] Aucune anomalie critique connue avant de déclarer la V1 terminée.
+- [ ] Aucune anomalie critique connue avant de déclarer la V1 terminée. **V1 candidate le 2026-11-10** (D-061) : aucune anomalie critique connue ; terminée après les essais du mainteneur (navigateur au clavier, Linux Mint, disques NTFS/exFAT/btrfs, disque branché puis arraché).
 
 ## Phase 9 — IA locale (optionnelle)
 **Abandonnée** (D-052, 2026-11-02) : mesurée, l'IA locale n'apportait rien que les règles ne fassent mieux, et une IA en ligne enverrait les noms de fichiers à l'extérieur. Lignes gardées pour l'historique ; le code est sur la branche `legacy-expert-mode`.
