@@ -1,5 +1,5 @@
 #!/bin/bash
-# TreeAudit AppImage entry point (docs/DECISIONS.md D-038).
+# TreeAudit AppImage entry point (docs/DECISIONS.md D-038, D-062).
 #
 # Runs the bundled Python in isolated mode (-I: no PYTHON* variable, no user
 # site, no current folder on the import path); TreeAudit then puts itself in
@@ -30,23 +30,50 @@ open_browser() {
     xdg-open "$URL" >/dev/null 2>&1 &
 }
 
-if [[ $# -eq 0 ]]; then
-    if treeaudit_running; then
-        echo "TreeAudit tourne déjà : $URL"
-        open_browser
-        exit 0
+# Started from the desktop (double click), nobody reads the terminal: an
+# error must still be seen. Python decides; this only explains. A stop by a
+# signal (logging out, shutting down) is not an error: nothing is said.
+tell_desktop() {
+    local status="$1" kernel title message
+    (( status > 0 && status < 128 )) || return 0
+    [[ -t 0 || -t 1 || -t 2 ]] && return 0
+    command -v notify-send >/dev/null 2>&1 || return 0
+    kernel="$(uname -r)"
+    if [[ $kernel =~ ^([0-9]+)\.([0-9]+) ]] &&
+        (( BASH_REMATCH[1] < 6 || (BASH_REMATCH[1] == 6 && BASH_REMATCH[2] < 7) )); then
+        title="TreeAudit n'a pas pu démarrer"
+        message="Ton noyau Linux ($kernel) est trop ancien : il faut la version 6.7 ou plus récente pour que TreeAudit s'enferme dans le bac à sable. Utilise la version Docker (guide, chapitre 1)."
+    else
+        title="TreeAudit s'est arrêté sur une erreur"
+        message="Code $status. Lance le fichier dans un terminal pour lire le message."
     fi
-    echo "TreeAudit : $URL (bouton « Quitter » dans la page pour l'arrêter)"
-    # Opens the page as soon as the server answers (at most 20 s).
-    (
-        for _ in $(seq 100); do
-            if treeaudit_running; then
-                open_browser
-                exit 0
-            fi
-            sleep 0.2
-        done
-    ) &
-    set -- serve
+    notify-send --app-name=TreeAudit "$title" "$message" >/dev/null 2>&1 || true
+}
+
+if [[ $# -gt 0 ]]; then
+    exec "$PYTHON" -I -m treeaudit "$@"
 fi
-exec "$PYTHON" -I -m treeaudit "$@"
+
+if treeaudit_running; then
+    echo "TreeAudit tourne déjà : $URL"
+    open_browser
+    exit 0
+fi
+echo "TreeAudit : $URL (bouton « Quitter » dans la page pour l'arrêter)"
+# Opens the page as soon as the server answers (at most 20 s).
+(
+    for _ in $(seq 100); do
+        if treeaudit_running; then
+            open_browser
+            exit 0
+        fi
+        sleep 0.2
+    done
+) &
+opener=$!
+status=0
+"$PYTHON" -I -m treeaudit serve || status=$?
+# The server is gone: nothing to open any more.
+kill "$opener" 2>/dev/null || true
+tell_desktop "$status"
+exit "$status"

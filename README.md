@@ -40,6 +40,20 @@ Des outils comme [Czkawka](https://github.com/qarmin/czkawka) trouvent très bie
 
 ## Démarrage rapide
 
+### Le plus simple : un fichier à télécharger, rien à installer
+
+1. Télécharge **`TreeAudit-x86_64.AppImage`** sur la page [Releases](https://github.com/benjsant/TreeAudit/releases). Pour une machine sans Internet, copie ce fichier sur une clé USB.
+2. Rends-le exécutable, une fois : clic droit → Propriétés → « Autoriser l'exécution » (ou `chmod +x TreeAudit-x86_64.AppImage`).
+3. Double-clique dessus : ton navigateur s'ouvre. Le bouton **« ⏻ Quitter »**, en haut de la page, arrête TreeAudit.
+
+Ni Docker, ni Python, ni droits administrateur ; le fichier peut rester n'importe où (décisions D-038, D-062).
+
+- **Le noyau le garde en lecture seule** (Landlock et seccomp) : il ne peut écrire que dans son propre dossier (`~/.local/share/treeaudit/`), ne peut lancer aucun programme ni se connecter à quoi que ce soit. Il faut **Linux 6.7 ou plus** (Ubuntu 24.04, Mint 22, Fedora 40 et plus récents) ; sinon il refuse de démarrer, avec une notification, et il faut la version Docker.
+- **Un disque branché pendant que TreeAudit tourne apparaît** dès que tu actualises la page de choix (bouton « 🔄 Actualiser »).
+- Vérifier le fichier téléchargé : `sha256sum -c SHA256SUMS`, avec le fichier `SHA256SUMS` de la même page.
+
+### Avec Docker (noyaux plus anciens, développement)
+
 **Prérequis :** Linux, [Docker](https://docs.docker.com/engine/install/) avec le plugin Compose. `./treeaudit requirements` vérifie ce qui manque et affiche la commande pour Ubuntu, Mint, Fedora ou Nobara, sans rien installer ([guide](docs/guide/01-installer.md#prérequis)). Rien d'autre n'est installé sur ta machine : tout tourne dans des conteneurs. **Aucun fichier de configuration à remplir.**
 
 ```bash
@@ -49,21 +63,9 @@ cd TreeAudit
 ./treeaudit
 ```
 
-Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C` ou `./treeaudit stop` arrête tout. SELinux en mode enforcing (Fedora par défaut) est détecté tout seul.
+Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C` ou `./treeaudit stop` arrête tout. SELinux en mode enforcing (Fedora par défaut) est détecté tout seul. Les disques doivent être branchés avant le démarrage. Les deux versions ont chacune leur index.
 
-### Sans Docker : l'AppImage (recommandée si ton Linux est récent)
-
-TreeAudit existe aussi en un seul fichier, sans Docker (décision D-038) :
-
-```bash
-./treeaudit appimage    # construit dist/TreeAudit-x86_64.AppImage, dans Docker
-```
-
-Double-clique sur le fichier, ou lance-le dans un terminal. Le navigateur s'ouvre ; le bouton **« ⏻ Quitter »** arrête TreeAudit.
-
-- **Le noyau le garde en lecture seule** (Landlock et seccomp) : il ne peut écrire que dans son propre dossier (`~/.local/share/treeaudit/`), ne peut lancer aucun programme ni se connecter à quoi que ce soit. Il faut **Linux 6.7 ou plus**, sinon il refuse de démarrer : utilise alors Docker.
-- Son index est séparé de celui de la version Docker.
-- **Un disque branché pendant que TreeAudit tourne apparaît** dès que tu actualises la page de choix (bouton « 🔄 Actualiser ») : plus besoin de relancer, contrairement à la version Docker.
+`./treeaudit appimage` construit aussi l'AppImage soi-même, dans Docker (`dist/TreeAudit-x86_64.AppImage`).
 
 ## Utilisation
 

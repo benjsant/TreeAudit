@@ -49,14 +49,20 @@ Rien n'est installé sur ta machine en dehors de Docker : TreeAudit tourne dans 
 
 ## Avec l'AppImage
 
+**Sans rien installer** : télécharge `TreeAudit-x86_64.AppImage` sur la page [Releases](https://github.com/benjsant/TreeAudit/releases) du projet (ou copie-le depuis une clé USB, pour une machine sans Internet), puis rends-le exécutable une fois : clic droit → Propriétés → « Autoriser l'exécution », ou `chmod +x TreeAudit-x86_64.AppImage`. Le fichier peut rester n'importe où. Pour vérifier qu'il n'a pas été abîmé ou modifié : `sha256sum -c SHA256SUMS`, avec le fichier `SHA256SUMS` de la même page, doit répondre `OK`.
+
+**Ou la construire toi-même**, dans Docker :
+
 ```bash
-./treeaudit appimage        # construit dist/TreeAudit-x86_64.AppImage, dans Docker
+./treeaudit appimage        # construit dist/TreeAudit-x86_64.AppImage
 ```
 
 Double-clique ensuite sur le fichier, ou lance-le dans un terminal. Ton navigateur s'ouvre tout seul. Le bouton **« ⏻ Quitter »**, en haut de la page, arrête TreeAudit.
 
 - Le noyau lui-même enferme TreeAudit (Landlock et seccomp) : il ne peut écrire que dans son dossier, ne peut lancer aucun programme ni se connecter à Internet.
-- Si ton noyau est trop ancien (avant 6.7), l'AppImage refuse de démarrer plutôt que de tourner sans protection. Utilise alors Docker.
+- Si ton noyau est trop ancien (avant 6.7), l'AppImage refuse de démarrer plutôt que de tourner sans protection ; lancée par un double-clic, elle le dit par une notification. Utilise alors Docker.
+- Si FUSE manque (rare : il est présent d'office sur Ubuntu, Mint et Fedora), lance-la dans un terminal avec `./TreeAudit-x86_64.AppImage --appimage-extract-and-run`.
+- Une autre erreur au démarrage, lancée par un double-clic : une notification te dit de la lancer dans un terminal pour lire le message.
 - Relancer l'AppImage alors qu'elle tourne déjà rouvre simplement la page.
 
 ## Mettre à jour
@@ -67,7 +73,7 @@ git pull
 ./treeaudit
 ```
 
-Pour l'AppImage, reconstruis-la avec `./treeaudit appimage` après le `git pull`.
+Pour l'AppImage, télécharge la nouvelle version et remplace l'ancien fichier (ou reconstruis-la avec `./treeaudit appimage` après le `git pull`).
 
 Tes analyses sont gardées d'une version à l'autre : l'index se met à jour tout seul au démarrage.
 

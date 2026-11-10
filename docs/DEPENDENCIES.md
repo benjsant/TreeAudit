@@ -11,6 +11,12 @@ Commencer par le minimum, verrouiller les versions avec empreintes (`uv.lock`, D
 | `squashfs-tools` (Debian) | Image compressée de l'AppImage | Paquet signé de l'image de construction, absent de l'AppImage |
 | AppImage type2-runtime | Programme de démarrage de l'AppImage (statique, sans `libfuse2`) | Épinglé par empreinte SHA-256 : un changement arrête la construction |
 
+## Publication (GitHub uniquement, D-062)
+| Outil | Usage | Remarque |
+|---|---|---|
+| GitHub Actions, machine `ubuntu-24.04` | Construire l'AppImage à partir d'une étiquette de version, avec la même recette que `./treeaudit appimage` | Docker, Compose, Buildx et `gh` sont ceux de la machine de GitHub ; rien de tout cela n'entre dans l'AppImage |
+| `actions/checkout` | Récupérer le code dans la tâche | Seule action tierce ; épinglée par commit (v7.0.1), sans garder le jeton (`persist-credentials: false`) |
+
 ## Bibliothèque standard — priorité
 - `os` (`scandir`, `open` avec `dir_fd`, `O_NOFOLLOW`, `O_DIRECTORY`, `O_NOATIME`), `stat` : parcours et métadonnées.
 - `pathlib` : manipulation de chemins hors parcours (configuration, affichage).

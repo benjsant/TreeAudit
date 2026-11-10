@@ -1,0 +1,75 @@
+# TreeAudit release (docs/DECISIONS.md D-062).
+#
+# A version tag (v1.0.0, v1.0.0-rc.1) runs every check, builds the AppImage
+# with the same recipe as "./treeaudit appimage", and prepares a DRAFT
+# release with the file and its SHA-256. Nothing becomes public until the
+# maintainer reviews the draft and publishes it by hand.
+#
+# Started by hand (workflow_dispatch), it is a trial: checks and build only.
+#
+# Hardening: one third-party action, pinned by commit; no permission by
+# default, "contents: write" only for the draft; no secret but the job's own
+# token; the tag is checked against a strict pattern before any use and only
+# ever reaches the shell through an environment variable.
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]*"]
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  appimage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: The tag names the version written in the code
+        if: github.ref_type == 'tag'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python3 -I tools/check_release_tag.py "$TAG"
+
+      - name: Prerequisites
+        run: ./treeaudit requirements
+
+      - name: Lint, types and tests (in Docker)
+        run: |
+          ./treeaudit build
+          ./treeaudit check
+
+      - name: Build the AppImage (in Docker)
+        run: ./treeaudit appimage
+
+      - name: Checksum
+        working-directory: dist
+        run: |
+          sha256sum TreeAudit-x86_64.AppImage > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Draft release (published by hand)
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=()
+          if [[ $TAG == *-rc.* ]]; then
+            prerelease=(--prerelease)
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+            "${prerelease[@]}" --title "TreeAudit $TAG" \
+            --notes-file packaging/release-notes.md \
+            dist/TreeAudit-x86_64.AppImage dist/SHA256SUMS

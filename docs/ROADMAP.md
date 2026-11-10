@@ -124,7 +124,7 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Étape 2 : première AppImage, construite dans Docker ; zéro configuration ; bouton « Quitter » ; essai réel sur l'hôte.
 - [x] Étape 3 : disques détectés à chaud (natif) ; le choix libre d'un dossier quelconque n'est pas fait (voir D-038).
 - [x] Étape 4 : relecture de sécurité (deux contournements trouvés et fermés : SCTP/MPTCP, `chattr`), décision : AppImage recommandée, Docker pour les noyaux anciens et le développement.
-- [ ] Publier l'AppImage (fichier à télécharger) pour qu'elle devienne le démarrage par défaut.
+- [ ] Publier l'AppImage (fichier à télécharger) pour qu'elle devienne le démarrage par défaut. Prêt (D-062, 2026-11-10) : construction et brouillon de Release par GitHub à chaque étiquette de version, README et guide qui commencent par « Télécharger », erreurs de démarrage notifiées sur le bureau ; reste la première publication (`v1.0.0-rc.1`), par le mainteneur.
 
 ## Phase 6 octies — Cet ordinateur (D-037)
 - [x] Partitions de données du disque système proposées, jamais celles du système (vérifiées sur l'hôte et dans le conteneur).
