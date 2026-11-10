@@ -5,7 +5,7 @@ Une version, c'est un fichier `TreeAudit-x86_64.AppImage` et son empreinte (`SHA
 ## Avant l'étiquette, sur sa propre machine
 
 1. `./treeaudit check` : lint, types et tests passent.
-2. **La sonde du bac à sable sur l'hôte** (règle 17 de `CLAUDE.md`). Sur les machines de GitHub, elle est sautée : leur noyau n'a pas l'ABI Landlock 6. Construire l'AppImage (`./treeaudit appimage`), l'extraire dans un dossier temporaire (`--appimage-extract`), puis lancer `tests/security/sandbox_scripts/probe.py` et `workload.py` avec son Python, comme le fait `tests/security/test_sandbox.py`. Toutes les actions doivent se passer comme prévu.
+2. **La sonde du bac à sable sur l'hôte** (règle 17 de `CLAUDE.md`). GitHub la lance aussi, sur son propre noyau (c'est elle qui a trouvé le défaut de D-063) ; la passer sur sa machine reste obligatoire, puisque chaque noyau se comporte à sa façon. Construire l'AppImage (`./treeaudit appimage`), l'extraire dans un dossier temporaire (`--appimage-extract`), puis lancer `tests/security/sandbox_scripts/probe.py` et `workload.py` avec son Python, comme le fait `tests/security/test_sandbox.py`. Toutes les actions doivent se passer comme prévu.
 3. Essai réel de l'AppImage sur l'hôte : démarrage par double-clic, analyse d'un dossier inventé, « Quitter ».
 4. Audit des dépendances (`SECURITY.md`, « Dépendances ») si `uv.lock` a changé depuis le dernier.
 5. Le numéro de version est le même dans `pyproject.toml`, `src/treeaudit/__init__.py` et `uv.lock` (`./treeaudit lock` après avoir changé `pyproject.toml`). Le test `tests/unit/test_release_tag.py` le vérifie.

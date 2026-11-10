@@ -81,6 +81,9 @@ def test_a_sandboxed_process_can_neither_write_elsewhere_nor_talk_to_anyone(
     # The security review's findings (step 4): refused with these errors.
     assert results["chattr_outside"] == "ENOTTY"
     assert results["sctp_stream_socket"] == results["mptcp_stream_socket"] == "EACCES"
+    # TCP Fast Open (D-063): refused by seccomp, whatever the kernel's Landlock does.
+    for name in ("tcp_fast_open", "tcp_fast_open_sendmsg", "tcp_fast_open_ipv6"):
+        assert results[name] == "EACCES", (name, results[name])
 
 
 @needs_landlock
@@ -120,8 +123,9 @@ def test_seccomp_filter_decisions(name: str) -> None:
     program = sandbox._seccomp_filter(machine)
     allow, deny, notty = 0x7FFF0000, 0x00050000 | 13, 0x00050000 | 25
 
-    def decide(nr: int, a0: int = 0, a1: int = 0, a2: int = 0) -> int:
-        return run_filter(program, {0: nr, 4: machine.audit_arch, 16: a0, 24: a1, 32: a2})
+    def decide(nr: int, a0: int = 0, a1: int = 0, a2: int = 0, a3: int = 0) -> int:
+        data = {0: nr, 4: machine.audit_arch, 16: a0, 24: a1, 32: a2, 40: a3}
+        return run_filter(program, data)
 
     sock, ioctl = machine.socket, machine.ioctl
     assert decide(sock, 2, 1) == allow  # TCP over IPv4
@@ -136,6 +140,16 @@ def test_seccomp_filter_decisions(name: str) -> None:
     assert decide(ioctl, 3, 0x5421) == allow  # non-blocking socket
     assert decide(ioctl, 3, 0x40086602) == notty  # chattr (FS_IOC_SETFLAGS)
     assert decide(ioctl, 3, 0x40806685) == notty  # fs-verity
+    fast_open, no_signal = 0x20000000, 0x4000
+    for send in (machine.sendto, machine.sendmmsg):  # flags: 4th argument
+        assert decide(send, 3, a3=0) == allow
+        assert decide(send, 3, a3=no_signal) == allow
+        assert decide(send, 3, a3=fast_open) == deny
+        assert decide(send, 3, a3=fast_open | no_signal) == deny
+        assert decide(send, 3, a2=fast_open) == allow  # a length, not the flags
+    assert decide(machine.sendmsg, 3, a2=no_signal) == allow  # flags: 3rd argument
+    assert decide(machine.sendmsg, 3, a2=fast_open | no_signal) == deny
+    assert decide(machine.sendmsg, 3, a3=fast_open) == allow  # no 4th argument
     for number in machine.denied:
         assert decide(number) == deny, number
     assert decide(0x40000000 + 41) == deny  # x32 ABI

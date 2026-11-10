@@ -7,7 +7,9 @@ Without Docker, the kernel itself must keep TreeAudit read-only. Once
   (TreeAudit's data and archive folders): Landlock, filesystem rights;
 - execute a program: Landlock, ``EXECUTE`` is never granted;
 - open an outgoing TCP connection, nor listen on another port than its own:
-  Landlock, network rights (ABI 4);
+  Landlock, network rights (ABI 4); TCP Fast Open, which connects without
+  connect() and slips past Landlock on kernels before mid-2026, is refused
+  by the seccomp filter (D-063);
 - signal other processes or use their abstract Unix sockets: Landlock scopes
   (ABI 6);
 - create any socket other than TCP (no UDP, no Unix socket such as Docker's,
@@ -78,6 +80,9 @@ class _Machine:
     audit_arch: int
     socket: int
     ioctl: int
+    sendto: int
+    sendmsg: int
+    sendmmsg: int
     denied: tuple[int, ...]
     """Always refused: metadata changes (Landlock does not cover them), program
     execution, other processes' memory and descriptors (Landlock already
@@ -89,6 +94,9 @@ _MACHINES: dict[str, _Machine] = {
         audit_arch=0xC000003E,
         socket=41,
         ioctl=16,
+        sendto=44,
+        sendmsg=46,
+        sendmmsg=307,
         denied=(
             # chmod fchmod chown fchown lchown utime utimes futimesat fchownat fchmodat
             # utimensat setxattr lsetxattr fsetxattr removexattr lremovexattr
@@ -104,6 +112,9 @@ _MACHINES: dict[str, _Machine] = {
         audit_arch=0xC00000B7,
         socket=198,
         ioctl=29,
+        sendto=206,
+        sendmsg=211,
+        sendmmsg=269,
         denied=(
             # fchmod fchmodat fchownat fchown utimensat setxattr lsetxattr fsetxattr
             # removexattr lremovexattr fremovexattr fchmodat2 setxattrat removexattrat
@@ -131,6 +142,10 @@ _ALLOWED_IOCTLS = (
 _X32_SYSCALL_BIT = 0x40000000
 _AF_INET, _AF_INET6, _SOCK_STREAM, _SOCK_TYPE_MASK = 2, 10, 1, 0xF
 _IPPROTO_TCP = 6
+# TCP Fast Open connects inside sendto/sendmsg/sendmmsg, without connect():
+# kernels before the June 2026 fix (Landlock commit 33cb713db016) let it past
+# LANDLOCK_ACCESS_NET_CONNECT_TCP. TreeAudit never sends with it (D-063).
+_MSG_FASTOPEN = 0x20000000
 _RET_ALLOW = 0x7FFF0000
 _RET_KILL_PROCESS = 0x80000000
 _RET_ERRNO = 0x00050000
@@ -183,7 +198,7 @@ class Report:
     scoped: bool
     """Signals and abstract Unix sockets scoped (ABI 6 or later)."""
     sockets: bool
-    """Non-TCP sockets, io_uring and metadata changes blocked by seccomp."""
+    """Non-TCP sockets, TCP Fast Open, io_uring and metadata changes blocked by seccomp."""
 
     @property
     def complete(self) -> bool:
@@ -260,7 +275,8 @@ def _add_port_rule(libc: ctypes.CDLL, ruleset: int, port: int) -> None:
 
 def _seccomp_filter(machine: _Machine) -> list[tuple[int, int, int, int]]:
     """BPF program: only TCP sockets; only a few harmless ioctl() requests; no
-    metadata change, execution, access to other processes, nor io_uring.
+    TCP Fast Open; no metadata change, execution, access to other processes,
+    nor io_uring.
 
     Refused calls fail with an error (EACCES, ENOTTY for ioctl): the process goes
     on, nothing is changed. seccomp_data: nr at 0, arch at 4, args[i] at
@@ -276,6 +292,9 @@ def _seccomp_filter(machine: _Machine) -> list[tuple[int, int, int, int]]:
             (_JGE_K, "deny", None, _X32_SYSCALL_BIT),  # x32: other numbers, same calls
             (_JEQ_K, "socket", None, machine.socket),
             (_JEQ_K, "ioctl", None, machine.ioctl),
+            (_JEQ_K, "flags_arg3", None, machine.sendto),
+            (_JEQ_K, "flags_arg3", None, machine.sendmmsg),
+            (_JEQ_K, "flags_arg2", None, machine.sendmsg),
             *[(_JEQ_K, "deny", None, number) for number in machine.denied],
             (_RET_K, None, None, _RET_ALLOW),
             "socket",  # family, type and protocol: TCP over IPv4 or IPv6 only
@@ -294,6 +313,16 @@ def _seccomp_filter(machine: _Machine) -> list[tuple[int, int, int, int]]:
             (_LD_W_ABS, None, None, 24),
             *[(_JEQ_K, "allow", None, request) for request in _ALLOWED_IOCTLS],
             (_RET_K, None, None, _RET_ERRNO | errno.ENOTTY),
+            # The send flags (an int for the kernel: 32 bits suffice): sendto and
+            # sendmmsg take them as 4th argument, sendmsg as 3rd.
+            "flags_arg3",
+            (_LD_W_ABS, None, None, 40),
+            (_AND_K, None, None, _MSG_FASTOPEN),
+            (_JEQ_K, "allow", "deny", 0),
+            "flags_arg2",
+            (_LD_W_ABS, None, None, 32),
+            (_AND_K, None, None, _MSG_FASTOPEN),
+            (_JEQ_K, "allow", "deny", 0),
             "allow",
             (_RET_K, None, None, _RET_ALLOW),
             "deny",

@@ -104,6 +104,17 @@ def fast_open(port: int) -> None:
         sock.sendto(b"x", socket.MSG_FASTOPEN, ("127.0.0.1", port))
 
 
+def fast_open_sendmsg(port: int) -> None:
+    """The same through sendmsg() (D-063: Landlock missed both before mid-2026)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.sendmsg([b"x"], [], socket.MSG_FASTOPEN, ("127.0.0.1", port))
+
+
+def fast_open_v6(port: int) -> None:
+    with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as sock:
+        sock.sendto(b"x", socket.MSG_FASTOPEN, ("::1", port))
+
+
 def connect_v6(port: int) -> None:
     with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as sock:
         sock.settimeout(2)
@@ -137,6 +148,8 @@ def chattr_read_only_fd() -> None:
 
 
 attempt("tcp_fast_open", lambda: fast_open(int(server_port)))
+attempt("tcp_fast_open_sendmsg", lambda: fast_open_sendmsg(int(server_port)))
+attempt("tcp_fast_open_ipv6", lambda: fast_open_v6(int(server_port)))
 attempt("connect_tcp_ipv6", lambda: connect_v6(int(server_port)))
 attempt("sctp_stream_socket", lambda: stream_protocol(132))
 attempt("mptcp_stream_socket", lambda: stream_protocol(262))
