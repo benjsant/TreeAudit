@@ -224,7 +224,8 @@ class JobManager:
         return job
 
     def start_scan(self, root_id: str, subpath: str) -> Job:
-        root = self.config.get_root(root_id)
+        config = self.config  # kept by the job, even if the roots are refreshed meanwhile
+        root = config.get_root(root_id)
         if root is None:
             raise JobError("racine inconnue")
         normalized = "/".join(parse_subpath(subpath))  # SubpathError if unsafe
@@ -236,21 +237,22 @@ class JobManager:
 
         def work(j: Job) -> ScanOutcome:
             outcome = execute_scan(
-                self.config,
+                config,
                 request,
                 mounts=self._mounts(),
                 home=self._home(),
                 cancel=j.cancel,
                 progress=progress,
             )
-            self._warm_summary(outcome.scan_id)
+            self._warm_summary(config, outcome.scan_id)
             return outcome
 
         return self._start(job, work)
 
-    def _warm_summary(self, scan_id: int) -> None:
+    @staticmethod
+    def _warm_summary(config: AppConfig, scan_id: int) -> None:
         """Compute the summary page data now, so the summary opens instantly."""
-        conn = connect(self.config.data_dir)
+        conn = connect(config.data_dir)
         try:
             summaries.parasites_summary(conn, scan_id)
         finally:
@@ -261,10 +263,11 @@ class JobManager:
         label = "Recherche des petits fichiers en double" if micro else "Recherche des doublons"
         progress = DupProgress()
         job = Job(id=next(self._ids), kind=JobKind.DUPES, label=label, progress=progress)
+        config = self.config
 
         def work(j: Job) -> DupOutcome:
             outcome = execute_duplicates(
-                self.config,
+                config,
                 scan_id,
                 options,
                 mounts=self._mounts(),
@@ -272,7 +275,7 @@ class JobManager:
                 cancel=j.cancel,
                 progress=progress,
             )
-            conn = connect(self.config.data_dir)
+            conn = connect(config.data_dir)
             try:
                 summaries.dupes_summary(conn, outcome.run_id)
             finally:
@@ -291,15 +294,17 @@ class JobManager:
             progress=progress,
         )
 
+        data_dir = self.config.data_dir
+
         def work(j: Job) -> CompactOutcome:
-            before = index_size(self.config.data_dir)
-            conn = connect(self.config.data_dir)
+            before = index_size(data_dir)
+            conn = connect(data_dir)
             try:
-                with ScanLock(self.config.data_dir):  # never during a scan, even from the CLI
+                with ScanLock(data_dir):  # never during a scan, even from the CLI
                     scans_db.compact(conn)
             finally:
                 conn.close()
-            return CompactOutcome(ScanStatus.COMPLETE, before, index_size(self.config.data_dir))
+            return CompactOutcome(ScanStatus.COMPLETE, before, index_size(data_dir))
 
         return self._start(job, work)
 
@@ -309,7 +314,8 @@ class JobManager:
         """Archive a folder of a root; ``subpath`` may hold undecodable bytes
         (surrogate escapes) when it comes from the index, together with the
         folder identity recorded there (``expected_folder``)."""
-        root = self.config.get_root(root_id)
+        config = self.config
+        root = config.get_root(root_id)
         if root is None:
             raise JobError("racine inconnue")
         parts = parse_subpath(subpath)  # SubpathError if unsafe
@@ -324,7 +330,7 @@ class JobManager:
 
         def work(j: Job) -> ArchiveOutcome:
             return execute_archive(
-                self.config,
+                config,
                 request,
                 mounts=self._mounts(),
                 home=self._home(),

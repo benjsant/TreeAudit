@@ -536,8 +536,6 @@ function setupTheme() {
   show();
 }
 
-// --- tidying adjustments: only what changed goes in the address (D-041) -------------
-
 // --- forgetting analyses: TreeAudit's own records only (D-043) ----------------------
 
 function setupForget() {

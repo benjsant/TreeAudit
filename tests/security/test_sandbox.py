@@ -275,6 +275,7 @@ def test_the_sandbox_refuses_to_start_with_other_threads(
         ("/etc", False),
         ("/usr/local", False),
         ("/etc/treeaudit", False),
+        ("/root/.local/share/treeaudit/index", False),  # root's own folder (D-064)
         ("/var/home/me/.local/share/treeaudit/index", True),  # Fedora Silverblue
         ("/run/user/1000/treeaudit/tmp", True),  # SQLite's temporary folder
         ("relative/data", False),
@@ -288,6 +289,34 @@ def test_write_folders_must_be_treeaudits_own(path: str, accepted: bool) -> None
     else:
         with pytest.raises(sandbox.SandboxError, match="refusé"):
             cli._check_write_dir(path, "/home/me")
+
+
+def test_root_is_refused_natively_before_anything_is_created(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """D-064: as root the sandbox would still let every file be read."""
+    from treeaudit import entry
+    from treeaudit.core import datadir
+
+    def must_not_run() -> str:
+        raise AssertionError("a folder was prepared before the root check")
+
+    monkeypatch.delenv("TREEAUDIT_CONTAINER", raising=False)
+    monkeypatch.setattr(entry, "_running_as_root", lambda: True)
+    monkeypatch.setattr(datadir, "prepare_temp_dir", must_not_run)
+    assert entry.run() == entry.EXIT_ERROR
+    assert "root" in capsys.readouterr().err
+
+
+def test_root_check_leaves_docker_mode_to_the_container(monkeypatch: pytest.MonkeyPatch) -> None:
+    """In Docker the container runs with the user's ids (compose.yaml)."""
+    from treeaudit import cli, entry
+
+    monkeypatch.setenv("TREEAUDIT_CONTAINER", "1")
+    monkeypatch.delenv("SQLITE_TMPDIR", raising=False)
+    monkeypatch.setattr(entry, "_running_as_root", lambda: True)
+    monkeypatch.setattr(cli, "main", lambda **_: 0)
+    assert entry.run() == 0
 
 
 def test_the_gateway_is_refused_natively(capsys: pytest.CaptureFixture[str]) -> None:

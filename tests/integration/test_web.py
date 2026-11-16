@@ -253,6 +253,30 @@ def test_one_job_at_a_time(client: TestClient, monkeypatch: pytest.MonkeyPatch) 
     assert client.get("/api/jobs/current").json()["job"]["error"] == "stopped by the test"
 
 
+def test_a_job_keeps_the_roots_it_was_started_with(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The roots refreshed while a job waits to run (a disk plugged in) do not
+    change the configuration that job validates against."""
+    seen: list[AppConfig] = []
+    pending: list[Callable[[jobs_module.Job], object]] = []
+
+    def recording_scan(config: AppConfig, *args: object, **kwargs: object) -> None:
+        seen.append(config)
+        raise jobs_module.JobError("stopped by the test")
+
+    manager = client.app.state.jobs  # type: ignore[attr-defined]
+    monkeypatch.setattr(jobs_module, "execute_scan", recording_scan)
+    # The work is kept instead of run in a thread: it runs after the refresh, for sure.
+    monkeypatch.setattr(manager, "_start", lambda job, work: pending.append(work) or job)
+    before = manager.config
+    job = manager.start_scan("main", "")
+    manager.config = AppConfig(data_dir=before.data_dir, roots=())  # refreshed meanwhile
+    with pytest.raises(jobs_module.JobError):
+        pending[0](job)
+    assert seen == [before]
+
+
 def test_scan_page_and_explorer(client: TestClient, scanned: int) -> None:
     page = client.get(f"/scans/{scanned}")
     assert page.status_code == 200
@@ -978,11 +1002,14 @@ def test_disks_plugged_in_while_running_are_offered(
         plugged.append(True)  # the disk is plugged in and opened
         after = live.get("/scan/new").text
         assert "🔌 USB" in after
+        listed = [root["id"] for root in live.get("/api/roots").json()["roots"]]
+        assert listed == [usb_id]  # the JSON list sees the disk too, not only the page
         snapshot = run_job(live, "/api/scans", {"root_id": usb_id, "subpath": ""})
         assert snapshot["status"] == "complete"
 
         plugged.clear()  # removed: no longer offered
         assert "🔌 USB" not in live.get("/scan/new").text
+        assert live.get("/api/roots").json()["roots"] == []
         assert live.get("/").status_code == 200  # earlier analyses stay readable
         app.state.jobs.wait()
 

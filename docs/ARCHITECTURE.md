@@ -6,7 +6,7 @@ Ce document s'adresse à qui veut lire ou modifier le code. Pour l'usage, voir l
 
 TreeAudit est une application locale, Linux seulement, en trois couches :
 
-- un **moteur** Python, indépendant de toute interface : analyse, doublons, règles de nettoyage, archives, rangement, projets, IA ;
+- un **moteur** Python, indépendant de toute interface : analyse, doublons, règles de nettoyage, archives, rangement, projets ;
 - deux **interfaces** qui s'appuient sur lui : une **interface web** (FastAPI, pages HTML rendues par Jinja2, un seul fichier JavaScript) et une **ligne de commande** (`argparse`) ;
 - un **index** SQLite (bibliothèque standard), qui garde les métadonnées de chaque analyse. Presque tout le reste travaille sur l'index, pas sur le disque.
 
@@ -79,7 +79,7 @@ Tous les conteneurs tournent avec l'UID et le GID de l'utilisateur, sans capacit
 - **Landlock** : écriture seulement dans les dossiers de données et d'archives ; jamais d'exécution ; réseau limité à l'écoute sur le port de TreeAudit (ABI 4) ; signaux et sockets abstraits limités (ABI 6) ;
 - **seccomp** : refuse ce que Landlock ne couvre pas, comme `chmod`, `chown` et les attributs étendus. Il refuse aussi `execve`, `ptrace`, `io_uring`, les sockets autres que TCP, et n'autorise qu'une courte liste d'`ioctl`.
 
-`restrict()` refuse de démarrer si une protection ne peut pas être posée. Toute modification de `core/sandbox.py` ou de ce qui l'appelle doit repasser la sonde `tests/security/test_sandbox.py`, aussi sur l'hôte (règle 17 de CLAUDE.md).
+`entry.run` refuse de démarrer en `root` (D-064). `restrict()` refuse de démarrer si une protection ne peut pas être posée. Toute modification de `core/sandbox.py` ou de ce qui l'appelle doit repasser la sonde `tests/security/test_sandbox.py`, aussi sur l'hôte (règle 17 de CLAUDE.md).
 
 En natif, les disques branchés en cours de route sont détectés à nouveau par `web/live.py` (`refresh_roots`), avec la même validation qu'au démarrage.
 
@@ -107,18 +107,16 @@ Seules trois fonctions lisent du contenu, toutes avec le même lecteur sûr (`du
 
 ### Les tâches de fond (`web/jobs.py`)
 
-`JobManager` ne fait tourner **qu'une tâche à la fois**. Une deuxième demande est refusée avec un message, jamais mise en attente. Il existe six sortes de tâches :
+`JobManager` ne fait tourner **qu'une tâche à la fois**. Une deuxième demande est refusée avec un message, jamais mise en attente. Il existe quatre sortes de tâches :
 
 | `JobKind` | Lancée par | Résultat |
 |---|---|---|
 | `SCAN` | `start_scan` | une analyse |
 | `DUPES` | `start_dupes` | une recherche de doublons |
 | `ARCHIVE` | `start_archive` | une archive vérifiée (verrou `archive.lock`) |
-| `SUGGEST` | `start_suggestions` | sous-dossiers proposés par l'IA pour Ranger |
-| `OPINIONS` | `start_opinions` | avis de l'IA sur les dossiers à vérifier (50 au plus) |
 | `COMPACT` | `start_compact` | `VACUUM` de l'index, sous le verrou des analyses |
 
-Chaque tâche tourne dans un thread, publie sa progression, et se termine avec un résultat (`Outcome`) qui porte l'adresse de la page à afficher. Le JavaScript interroge `/api/jobs/current` à intervalles réguliers et suit chaque sorte de tâche. Les verrous `flock` empêchent une tâche web de tourner en même temps que la même tâche lancée en ligne de commande.
+Chaque tâche tourne dans un thread, garde la configuration du moment où elle a été demandée (même si les disques sont actualisés entre-temps), publie sa progression, et se termine avec un résultat (`Outcome`) qui porte l'adresse de la page à afficher. Le JavaScript interroge `/api/jobs/current` à intervalles réguliers et suit chaque sorte de tâche. Les verrous `flock` empêchent une tâche web de tourner en même temps que la même tâche lancée en ligne de commande.
 
 ### Une commande proposée
 
@@ -162,7 +160,7 @@ La base est en mode WAL, avec les clés étrangères actives. Elle est créée a
 
 Sur des millions d'entrées, le planificateur de SQLite a plusieurs fois choisi le mauvais index, et une requête d'une seconde en a pris plus de dix minutes. Deux parades sont en place, chacune couverte par un test qui vérifie `EXPLAIN QUERY PLAN` :
 
-- les **CTE récursives** qui descendent une arborescence forcent `CROSS JOIN entry e INDEXED BY entry_by_parent` (`organize/plan.LOAD_SQL`, `parasites/detect`, `projects/detect`, `llm/facts`) ;
+- les **CTE récursives** qui descendent une arborescence forcent `CROSS JOIN entry e INDEXED BY entry_by_parent` (`organize/plan.LOAD_SQL`, `parasites/detect`, `projects/detect`) ;
 - la réutilisation des empreintes force l'ordre de jointure et `INDEXED BY entry_by_identity` (`db/dupes.KNOWN_DIGESTS_SQL`).
 
 Toute nouvelle requête qui parcourt un sous-arbre doit suivre le même modèle.
@@ -171,7 +169,7 @@ Toute nouvelle requête qui parcourt un sous-arbre doit suivre le même modèle.
 
 | Fichier | Rôle |
 |---|---|
-| `app.py` | `create_app` : assemble les routes et les middlewares ; état partagé dans `app.state` (config, racines, tâches, client IA, détection en direct) |
+| `app.py` | `create_app` : assemble les routes et les middlewares ; état partagé dans `app.state` (config, racines, tâches, détection en direct) |
 | `pages.py`, `templates/` | pages HTML ; `render()` ajoute le contexte commun (tâche en cours, archives, bouton Quitter…) |
 | `api.py` | API JSON sous `/api/` : tâches, commandes, panier, aperçu d'images ; connexion SQLite par requête (`get_db`) |
 | `exports.py` | exports JSON et CSV sous `/export/`, protégés contre l'injection de formules ; scripts de Ranger |
@@ -215,9 +213,9 @@ Ne construis **jamais** de commande à la main : passe par `shellcmd.cleanup_com
 
 | Dossier | Contenu |
 |---|---|
-| `tests/unit/` | fonctions pures : règles, commandes et double vérification, filtres, tailles, validation des racines, montages, IA (sans modèle) |
+| `tests/unit/` | fonctions pures : règles, commandes et double vérification, filtres, tailles, validation des racines, montages |
 | `tests/integration/` | arborescences synthétiques analysées pour de vrai : analyse, doublons, archives (relues par GNU tar), Ranger (scripts exécutés), projets, aperçu, pages web |
-| `tests/security/` | absence d'appels au shell (`test_static_code.py`), conteneurs (`test_compose.py`), lanceur, AppImage, et la **sonde du bac à sable** (`test_sandbox.py`) qui tente 34 actions interdites |
+| `tests/security/` | absence d'appels au shell (`test_static_code.py`), conteneurs (`test_compose.py`), lanceur, AppImage, et la **sonde du bac à sable** (`test_sandbox.py`) qui tente 36 actions interdites |
 
 On ne teste jamais sur les vrais dossiers de l'utilisateur : uniquement des arborescences synthétiques, `dummy_folder` et `big_dummy_folder` (un million d'entrées).
 

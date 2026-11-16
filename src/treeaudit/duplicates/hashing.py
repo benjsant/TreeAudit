@@ -16,7 +16,6 @@ from collections.abc import Callable
 EDGE_SIZE = 4096
 """Bytes read at the start (head) and at the end (tail) of a file."""
 BLOCK_SIZE = 1024 * 1024
-ALGORITHM = "sha256"
 
 
 class CancelledError(Exception):

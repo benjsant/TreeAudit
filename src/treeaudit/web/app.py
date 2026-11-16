@@ -117,9 +117,12 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
 
+    # Both routes read the roots as found at the last look (web.live.refresh_roots),
+    # not those of the startup: a disk plugged in since is listed.
     @app.get("/api/roots")
     def list_roots() -> dict[str, list[dict[str, Any]]]:
-        return {"roots": [_root_to_json(status) for status in statuses]}
+        current: dict[str, RootStatus] = app.state.statuses
+        return {"roots": [_root_to_json(status) for status in current.values()]}
 
     @app.get("/api/roots/{root_id}")
     def get_root(root_id: RootId) -> dict[str, Any]:

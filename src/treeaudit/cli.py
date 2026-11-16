@@ -1,6 +1,7 @@
 """Command-line entry point.
 
-Exit codes: 0 success, 1 root rejected, 2 usage or configuration error.
+Exit codes: 0 success, 1 root rejected, 2 usage or configuration error,
+3 incomplete result (scan, duplicates, search, archive), 4 cancelled.
 """
 
 from __future__ import annotations
@@ -329,6 +330,7 @@ _NEVER_WRITE_INSIDE = (
     "/lib32",
     "/lib64",
     "/proc",
+    "/root",
     "/sbin",
     "/sys",
     "/usr",
