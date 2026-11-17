@@ -308,15 +308,22 @@ def test_root_is_refused_natively_before_anything_is_created(
     assert "root" in capsys.readouterr().err
 
 
-def test_root_check_leaves_docker_mode_to_the_container(monkeypatch: pytest.MonkeyPatch) -> None:
-    """In Docker the container runs with the user's ids (compose.yaml)."""
+def test_root_is_refused_in_docker_too(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Rule 7: the container runs with the user's ids. ./treeaudit refuses root;
+    this is the second check, should a container be started another way."""
     from treeaudit import cli, entry
 
+    def must_not_run(**_: object) -> int:
+        raise AssertionError("TreeAudit started as root")
+
     monkeypatch.setenv("TREEAUDIT_CONTAINER", "1")
-    monkeypatch.delenv("SQLITE_TMPDIR", raising=False)
+    monkeypatch.setenv("SQLITE_TMPDIR", "/data/tmp")  # as in compose.yaml: never prepared
     monkeypatch.setattr(entry, "_running_as_root", lambda: True)
-    monkeypatch.setattr(cli, "main", lambda **_: 0)
-    assert entry.run() == 0
+    monkeypatch.setattr(cli, "main", must_not_run)
+    assert entry.run() == entry.EXIT_ERROR
+    assert "root" in capsys.readouterr().err
 
 
 def test_the_gateway_is_refused_natively(capsys: pytest.CaptureFixture[str]) -> None:

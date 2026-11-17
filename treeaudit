@@ -466,6 +466,25 @@ EOF
 
 command="${1:-start}"
 [[ $# -eq 0 ]] || shift
+# Never as root (rule 7, D-064): every container would run with uid or gid 0,
+# whatever compose.yaml says. The real ids and the settings (environment,
+# .env) must both be an ordinary account: digits only, never 0. Matched as
+# text, never evaluated: a setting is data.
+refuse_root() {
+    local uid gid
+    uid="$(id -u)"
+    gid="$(id -g)"
+    if [[ $uid == 0 || ! $TREEAUDIT_UID =~ ^[1-9][0-9]*$ || ! $TREEAUDIT_GID =~ ^[1-9][0-9]*$ ]]
+    then
+        die "TreeAudit ne se lance pas en root (sudo) : lance ./treeaudit avec ton propre compte." \
+            "  (TREEAUDIT_UID=$TREEAUDIT_UID, TREEAUDIT_GID=$TREEAUDIT_GID, compte réel $uid:$gid)" \
+            "  Pour utiliser Docker sans sudo : docs/guide/01-installer.md (groupe docker)."
+    fi
+}
+case "$command" in
+    help | -h | --help | settings | requirements | prerequis) ;; # start nothing, write nothing
+    *) refuse_root ;;
+esac
 # Say what is missing before Docker fails with its own, less helpful, message.
 case "$command" in
     start | up | stop | down | disks | cli | build | lock | appimage | test | lint | format | \

@@ -30,6 +30,7 @@ Installer Docker avec les paquets de ta distribution :
 - **Autres distributions** (Debian, Arch, Rocky...) : suis la [documentation de Docker](https://docs.docker.com/engine/install/). Le lanceur ne devine pas de commande pour elles.
 - **Le groupe `docker`** donne des droits équivalents à `root` sur ta machine : tout membre peut lancer un conteneur qui lit n'importe quel fichier. C'est le fonctionnement normal de Docker, pas de TreeAudit. L'AppImage n'en a pas besoin pour tourner (seulement pour être construite, une fois).
 - **Podman** à la place de Docker (paquet `podman-docker`) n'est pas pris en charge : le lanceur le signale.
+- **Jamais avec `sudo`** : ni `./treeaudit` ni l'AppImage ne démarrent en `root`. TreeAudit lit ce que ton compte peut lire, et rien d'autre. Si Docker te demande `sudo`, ajoute-toi au groupe `docker` (ligne ci-dessus).
 
 ## Avec Docker
 

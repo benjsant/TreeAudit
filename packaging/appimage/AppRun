@@ -10,6 +10,9 @@ set -euo pipefail
 
 HERE="$(dirname -- "$(readlink -f -- "$0")")"
 PYTHON="$HERE/usr/python/bin/python3"
+# This variable belongs to the Docker image, where the container is the
+# sandbox. Inherited here, it would turn the kernel sandbox off (D-064).
+unset TREEAUDIT_CONTAINER
 PORT=8765
 URL="http://127.0.0.1:$PORT/"
 

@@ -5,8 +5,10 @@ Kept apart from cli.py on purpose: SQLite reads its temporary folder when it
 is first loaded, so ``SQLITE_TMPDIR`` must be set before anything imports
 sqlite3. In the Docker image the container is the sandbox: nothing changes.
 
-The native mode refuses to start as root (D-064): the sandbox only limits
-writes, and as root every file of the machine becomes readable.
+TreeAudit refuses to start as root (D-064). Natively, the sandbox only
+limits writes, and as root every file of the machine becomes readable. In
+Docker the container must run with the user's ids (rule 7): ./treeaudit
+refuses root too, this is the second check.
 """
 
 from __future__ import annotations
@@ -30,11 +32,11 @@ def run() -> int:
     """Prepare the process, then hand over to ``treeaudit.cli.main``."""
     from treeaudit.core.config import is_container_mode
 
-    sandboxed = not is_container_mode()
-    if sandboxed and _running_as_root():
+    if _running_as_root():
         # Checked before anything is created: no folder of root's is touched.
         print(ROOT_REFUSED, file=sys.stderr)
         return EXIT_ERROR
+    sandboxed = not is_container_mode()
     if sandboxed:
         from treeaudit.core.datadir import prepare_temp_dir
 

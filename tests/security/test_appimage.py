@@ -64,7 +64,9 @@ def fake_appdir(tmp_path: Path, python: str) -> Path:
     return tmp_path / "AppDir" / "AppRun"
 
 
-def start(apprun: Path, *args: str, kernel: str = "6.8.0-45-generic") -> tuple[int, str]:
+def start(
+    apprun: Path, *args: str, kernel: str = "6.8.0-45-generic", **environ: str
+) -> tuple[int, str]:
     """Run AppRun with no terminal, as a double click does; return its exit
     status and what notify-send was given."""
     log = apprun.parent / "notified"
@@ -72,6 +74,7 @@ def start(apprun: Path, *args: str, kernel: str = "6.8.0-45-generic") -> tuple[i
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "BASH_FUNC_notify-send%%": '() { printf "%s|" "$@" >> "' + str(log) + '"; }',
         "BASH_FUNC_uname%%": f"() {{ echo {kernel}; }}",
+        **environ,
     }
     bash = shutil.which("bash")
     assert bash is not None
@@ -144,3 +147,18 @@ def test_a_stop_by_a_signal_is_not_an_error(tmp_path: Path) -> None:
     """Logging out or shutting down stops TreeAudit by a signal: no notification."""
     main = f"import os\nos.kill(os.getpid(), {int(signal.SIGTERM)})\n"
     assert start(python_appdir(tmp_path, main)) == (128 + signal.SIGTERM, "")
+
+
+@pytest.mark.parametrize("args", [(), ("scan", "list")])
+def test_the_docker_switch_never_reaches_the_bundled_python(
+    tmp_path: Path, args: tuple[str, ...]
+) -> None:
+    """TREEAUDIT_CONTAINER=1 marks the Docker image; natively it would turn the
+    kernel sandbox off (D-064). AppRun removes it, for the server and the CLI."""
+    seen = tmp_path / "seen"
+    main = (
+        f"import os\nopen({str(seen)!r}, 'w').write(repr(os.environ.get('TREEAUDIT_CONTAINER')))\n"
+    )
+    status, _ = start(python_appdir(tmp_path, main), *args, TREEAUDIT_CONTAINER="1")
+    assert status == 0
+    assert seen.read_text(encoding="utf-8") == "None"

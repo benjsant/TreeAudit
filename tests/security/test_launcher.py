@@ -368,3 +368,57 @@ def test_settings_and_help_need_no_docker(launcher: Path, host: Path) -> None:
         done = launch(launcher, host, command, UBUNTU)
         assert done.returncode == 0, done.stderr
         assert "Docker n'est pas installé" not in done.stderr
+
+
+# --- Never as root (rule 7, D-064) ---------------------------------------------------------
+
+AS_ROOT = fake("id", '() { case "$1" in -u|-g) echo 0 ;; *) command id "$@" ;; esac; }')
+
+
+@pytest.mark.parametrize("command", ["start", "stop", "disks", "cli", "check", "env", "appimage"])
+def test_root_is_refused_before_docker_is_even_asked(
+    launcher: Path, host: Path, command: str
+) -> None:
+    done = launch(launcher, host, command, UBUNTU, DOCKER | AS_ROOT)
+    assert done.returncode == 1
+    assert "ne se lance pas en root" in done.stderr
+    assert "compte réel 0:0" in done.stderr
+    assert docker_calls(launcher) == []
+    assert not (launcher.parent / ".env").exists()
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [
+        {"TREEAUDIT_UID": "0"},
+        {"TREEAUDIT_GID": "0"},
+        {"TREEAUDIT_UID": "0000"},
+        {"TREEAUDIT_UID": "-0"},
+        {"TREEAUDIT_UID": "root"},
+        {"TREEAUDIT_UID": "1000 -v /:/host"},
+        {"TREEAUDIT_GID": "$(id -u)"},
+    ],
+)
+def test_a_root_or_malformed_id_setting_is_refused(
+    launcher: Path, host: Path, setting: dict[str, str]
+) -> None:
+    done = launch(launcher, host, "start", UBUNTU, DOCKER, **setting)
+    assert done.returncode == 1
+    assert "ne se lance pas en root" in done.stderr
+    assert docker_calls(launcher) == []
+
+
+def test_a_root_id_in_the_env_file_is_refused(launcher: Path, host: Path) -> None:
+    (launcher.parent / ".env").write_text("TREEAUDIT_UID=0\n", encoding="utf-8")
+    done = launch(launcher, host, "stop", UBUNTU, DOCKER)
+    assert done.returncode == 1
+    assert "ne se lance pas en root" in done.stderr
+
+
+@pytest.mark.parametrize("command", ["help", "settings", "requirements"])
+def test_commands_that_start_nothing_still_answer_as_root(
+    launcher: Path, host: Path, command: str
+) -> None:
+    done = launch(launcher, host, command, UBUNTU, DOCKER | AS_ROOT | kernel("6.8.0"))
+    assert "ne se lance pas en root" not in done.stderr
+    assert docker_calls(launcher) == []

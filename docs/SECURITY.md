@@ -21,7 +21,7 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - En Docker, chaque cible est montée en lecture seule (`:ro`) sous `/audit/roots/<id>`.
 - Ne jamais monter `/`, `/home` entier, `/dev`, `/proc`, `/sys` ou `/var/run/docker.sock`.
 - Pas de mode Docker `privileged`. `cap_drop: [ALL]`, `no-new-privileges`, système de fichiers racine du conteneur en lecture seule, `/tmp` en `tmpfs`.
-- Le conteneur s'exécute avec l'UID/GID de l'utilisateur hôte (non-root), pour lire exactement ce que l'utilisateur peut lire, ni plus ni moins.
+- Le conteneur s'exécute avec l'UID/GID de l'utilisateur hôte (non-root), pour lire exactement ce que l'utilisateur peut lire, ni plus ni moins. `./treeaudit` refuse de démarrer en `root` (`sudo`) ou avec un `TREEAUDIT_UID`/`TREEAUDIT_GID` à 0 ou mal formé, venu de l'environnement ou de `.env` ; TreeAudit lui-même refuse aussi de tourner en `root` dans le conteneur (D-064).
 - L'application ne demande jamais `sudo` et ne tente pas de contourner une erreur de permission : elle la signale.
 - Aucun scan automatique de tous les volumes.
 - Le volume système est refusé par défaut (D-009). Un disque externe contenant une ancienne installation système peut être audité en lecture seule.
@@ -180,6 +180,7 @@ Relecture critique de tout le code d'archivage, centrée sur le seul module qui 
   - **seccomp**, pour ce que Landlock ne couvre pas : seules les sockets TCP peuvent être créées (ni UDP, ni Unix, ni netlink), aucun envoi « TCP Fast Open » (D-063), pas d'`io_uring` ni d'appel x32, et aucun changement de droits, de propriétaire, de dates ou d'attributs étendus.
 - **Refus de démarrer** si le réseau ne peut pas être coupé (noyau trop ancien, architecture non prise en charge) ou si d'autres fils d'exécution existent déjà.
 - **Refus de démarrer en `root`** (`sudo`, D-064) : le bac à sable limite les écritures, pas les lectures, et `root` lit tous les fichiers de la machine. Le refus a lieu avant toute création de dossier.
+- **L'interrupteur du mode Docker** : la variable `TREEAUDIT_CONTAINER=1` marque l'image Docker, où le conteneur sert de bac à sable. Héritée en natif, elle couperait le bac à sable du noyau : `AppRun` l'efface avant de lancer Python (D-064).
 - **Ce qui reste possible** : lire ce que l'utilisateur peut lire, y compris des secrets. Rien ne peut sortir pour autant : ni réseau, ni exécution, ni écriture ailleurs.
 - `ctypes` n'est autorisé que dans `core/sandbox.py`, pour deux fonctions C (`syscall`, `prctl`) ; un test le vérifie.
 - Preuves : `tests/security/test_sandbox.py`. Une sonde tente 36 actions, dont les contournements de la relecture ; l'analyse, les doublons, l'archive, le serveur web et la ligne de commande fonctionnent sous bac à sable ; un interpréteur BPF vérifie le filtre seccomp. Essais réels sur l'hôte.
