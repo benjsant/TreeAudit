@@ -11,7 +11,6 @@ only uses ``textContent`` (see static/app.js) and the CSP forbids inline code.
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 from datetime import UTC, datetime
@@ -29,7 +28,7 @@ from treeaudit import __version__
 from treeaudit.archive.listing import list_archives
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig, RootConfig
 from treeaudit.core.datadir import index_size
-from treeaudit.core.sizes import is_sparse
+from treeaudit.core.sizes import human_size, is_sparse
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
@@ -41,7 +40,6 @@ from treeaudit.organize.subfolders import NO_SUBFOLDERS
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.commands import recreate_command
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE, Band
-from treeaudit.parasites.report import human_size
 from treeaudit.preview.images import looks_like_image
 from treeaudit.projects.detect import PROJECT, SOFTWARE, find_projects
 from treeaudit.roots.registry import RootStatus
@@ -195,13 +193,6 @@ def analysis_title(config: AppConfig, scan: sqlite3.Row) -> str:
     return os.path.basename(shown) or shown or str(scan["root_id"])
 
 
-def _latest_run(conn: sqlite3.Connection, scan_id: int, *, micro: bool) -> sqlite3.Row | None:
-    for run in dupes_db.list_runs(conn, limit=500):
-        if run["scan_id"] == scan_id and bool(json.loads(run["options"]).get("micro")) == micro:
-            return run
-    return None
-
-
 def _free_pages(conn: sqlite3.Connection) -> int:
     row = conn.execute("PRAGMA freelist_count").fetchone()
     return int(row[0]) if row is not None else 0
@@ -351,7 +342,8 @@ def summary_page(request: Request, scan_id: int, conn: Db, config: Config) -> Re
     parasites = summaries.parasites_summary(conn, scan_id)
 
     def dupes_summary(micro: bool) -> dict[str, Any] | None:
-        run = _latest_run(conn, scan_id, micro=micro)
+        # Whatever its state: the summary tells a running or failed search too.
+        run = dupes_db.latest_run(conn, scan_id, micro=micro, finished_only=False)
         if run is None:
             return None
         return {"run": run, **summaries.dupes_summary(conn, run["id"])}
@@ -448,7 +440,7 @@ def entry_page(request: Request, scan_id: int, entry_id: int, conn: Db, config: 
         prefix=path_prefix(config, scan),
         parent=parent,
         crumbs=queries.breadcrumb(conn, scan_id, parent) if parent is not None else [],
-        dupes_run=explorer.latest_dupes_run(conn, scan_id),
+        dupes_run=dupes_db.latest_run(conn, scan_id, micro=False),
         image=looks_like_image(details.kind, details.rel_path, details.size),
         sparse=details.kind == "file" and is_sparse(details.size, details.allocated_size),
     )
@@ -522,7 +514,7 @@ def _copies_of(
     conn: sqlite3.Connection, scan_id: int, moves: list[organize_plan.Move]
 ) -> dict[int, int]:
     """Entry -> identical files, for the files shown, once duplicates were searched."""
-    run = explorer.latest_dupes_run(conn, scan_id)
+    run = dupes_db.latest_run(conn, scan_id, micro=False)
     files = [move.entry_id for move in moves if move.kind == "file"]
     if run is None or not files:
         return {}
@@ -653,7 +645,7 @@ def parasites_page(
 def _similar_note(conn: sqlite3.Connection, scan_id: int) -> dict[str, Any]:
     """What the page says before any comparison: searches done or to do."""
     return {
-        "run": explorer.latest_dupes_run(conn, scan_id),
+        "run": dupes_db.latest_run(conn, scan_id, micro=False),
         "micro": similar_trees.latest_run(conn, scan_id, micro=True),
     }
 

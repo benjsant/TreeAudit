@@ -26,6 +26,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
+from treeaudit.db import dupes as dupes_db
 from treeaudit.db.connection import from_sqlite_int
 
 MAX_PAIRS = 50
@@ -163,13 +164,7 @@ class _Knowledge:
 
 def latest_run(conn: sqlite3.Connection, scan_id: int, *, micro: bool = False) -> _Run | None:
     """The latest finished search for duplicates (or for small duplicates)."""
-    row = conn.execute(
-        "SELECT id, status, options FROM dup_run WHERE scan_id = ? "
-        "AND status IN ('complete', 'incomplete') "
-        "AND IFNULL(json_extract(options, '$.micro'), 0) = ? "
-        "ORDER BY id DESC LIMIT 1",
-        (scan_id, 1 if micro else 0),
-    ).fetchone()
+    row = dupes_db.latest_run(conn, scan_id, micro=micro)
     if row is None:
         return None
     options = json.loads(row["options"])

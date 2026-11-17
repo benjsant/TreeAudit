@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from treeaudit.core.sizes import human_size
 from treeaudit.filters.search import SearchResult, Sort
 from treeaudit.filters.spec import FilterSpec, describe
-from treeaudit.parasites.report import human_size
 
 _SORT_LABELS = {
     Sort.SIZE: "les plus gros",

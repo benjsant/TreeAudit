@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
+from treeaudit.core.sizes import human_size
 from treeaudit.parasites.commands import Action, cleanup_command, recreate_command
 from treeaudit.parasites.detect import Band, Finding
 
@@ -27,17 +28,6 @@ ACTION_LABELS = {
 
 class SelectionError(ValueError):
     """The --select value is invalid."""
-
-
-def human_size(size: int | None) -> str:
-    if size is None:
-        return "taille inconnue"
-    value = float(size)
-    for unit in ("o", "Kio", "Mio", "Gio", "Tio"):
-        if value < 1024 or unit == "Tio":
-            return f"{value:.0f} {unit}" if unit == "o" else f"{value:.1f} {unit}"
-        value /= 1024
-    raise AssertionError("unreachable")
 
 
 def parse_selection(text: str, findings: Sequence[Finding]) -> list[Finding]:

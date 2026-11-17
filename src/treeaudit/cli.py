@@ -41,13 +41,13 @@ from treeaudit.core.config import (
 from treeaudit.core.datadir import prepare_data_dir
 from treeaudit.core.errors import TreeAuditError
 from treeaudit.core.sandbox import Policy, SandboxError, restrict
+from treeaudit.core.sizes import human_size
 from treeaudit.filters.spec import FilterSpec
 from treeaudit.organize.subfolder_bench import BenchResult, case_moves, run_rules_bench
 from treeaudit.organize.subfolder_cases import HELDOUT_CASES as SUBFOLDER_CASES
 from treeaudit.organize.subfolder_cases_earlier import EARLIER_CASES
 from treeaudit.parasites.commands import Action
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE
-from treeaudit.parasites.report import human_size
 from treeaudit.roots.external import (
     DISKS_ENV_VAR,
     ExternalDisk,

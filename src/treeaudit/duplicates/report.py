@@ -6,8 +6,8 @@ import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
+from treeaudit.core.sizes import human_size
 from treeaudit.duplicates.groups import Copy, DuplicateGroup, GroupReport
-from treeaudit.parasites.report import human_size
 from treeaudit.shellcmd import Action, cleanup_command
 
 ACTION_LABELS = {

@@ -40,7 +40,8 @@ Deux principes structurent tout le code :
 
 ### Règles de dépendance
 
-- `web/` et `cli.py` dépendent du moteur ; **le moteur ne dépend jamais de `web/`**.
+- `web/` et `cli.py` dépendent du moteur ; **le moteur ne dépend jamais de `web/`** ni de `cli.py`, et `core/` ne dépend de rien d'autre. `tests/unit/test_architecture.py` fixe la liste des dépendances permises entre paquets : une nouvelle dépendance s'y ajoute exprès, avec sa raison. Seul cycle accepté : `db` ↔ `scanner` (`db` enregistre les objets définis par `scanner/models.py`).
+- Les fonctions partagées vont au plus bas : l'écriture d'une taille dans `core/sizes.py`, la dernière recherche de doublons d'une analyse dans `db/dupes.py` (`latest_run`).
 - Écritures sur disque : `db/` et `core/datadir.py` dans le dossier de données ; `archive/output.py` dans le dossier d'archives, et nulle part ailleurs. Aucun autre module n'ouvre un fichier en écriture.
 - Aucun module n'exécute de programme : pas de `subprocess`, pas de `os.system` (un test statique le vérifie).
 - Une regex ou un nom de dossier ne décide jamais de ce qui peut être lu ou écrit. Les noms disent seulement où regarder ; l'accès est décidé par l'identité (périphérique, inode) et par la validation des racines.

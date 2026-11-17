@@ -232,6 +232,29 @@ def get_run(conn: sqlite3.Connection, run_id: int) -> sqlite3.Row | None:
     return row
 
 
+# "micro" is the search for small files (D-026): stored in the options, absent
+# (NULL) for the searches made before it existed.
+_LATEST_RUN_SQL = (
+    "SELECT * FROM dup_run WHERE scan_id = ? AND IFNULL(json_extract(options, '$.micro'), 0) = ? "
+)
+_FINISHED = "AND status IN ('complete', 'incomplete') "
+_NEWEST = "ORDER BY id DESC LIMIT 1"
+
+
+def latest_run(
+    conn: sqlite3.Connection, scan_id: int, *, micro: bool, finished_only: bool = True
+) -> sqlite3.Row | None:
+    """The most recent search for duplicates of this scan, of one kind: small
+    files (``micro``) or the others.
+
+    ``finished_only``: only a search whose results can be used (complete or
+    incomplete). Otherwise the newest one whatever its state, running or
+    failed included, to show that state."""
+    sql = _LATEST_RUN_SQL + (_FINISHED if finished_only else "") + _NEWEST
+    row: sqlite3.Row | None = conn.execute(sql, (scan_id, 1 if micro else 0)).fetchone()
+    return row
+
+
 def list_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
     return list(conn.execute("SELECT * FROM dup_run ORDER BY id DESC LIMIT ?", (limit,)))
 

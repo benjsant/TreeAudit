@@ -16,6 +16,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
+from treeaudit.db import dupes as dupes_db
 from treeaudit.duplicates.groups import protection_reason, repo_dirs_of
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.detect import Finding
@@ -57,16 +58,6 @@ class Marks:
     @property
     def any(self) -> bool:
         return self.parasite is not None or self.copies > 1 or self.protection is not None
-
-
-def latest_dupes_run(conn: sqlite3.Connection, scan_id: int) -> sqlite3.Row | None:
-    """The most recent finished search for duplicates (>= 1 KiB) of this scan."""
-    row = conn.execute(
-        "SELECT * FROM dup_run WHERE scan_id = ? AND status IN ('complete', 'incomplete') "
-        "AND json_extract(options, '$.micro') IS NOT 1 ORDER BY id DESC LIMIT 1",
-        (scan_id,),
-    ).fetchone()
-    return row if isinstance(row, sqlite3.Row) else None
 
 
 def _chunks(values: Sequence[int]) -> Iterable[Sequence[int]]:
@@ -128,7 +119,7 @@ class MarkSource:
         self._scan_id = scan_id
         self.findings = {f.entry_id: f for f in parasite_findings(conn, scan_id)}
         self.repo_dirs = repo_dirs_of(conn, scan_id)
-        self.dupes_run = latest_dupes_run(conn, scan_id)
+        self.dupes_run = dupes_db.latest_run(conn, scan_id, micro=False)
         self.holders = _holders(conn, scan_id)
 
     def protection(self, rel_path: bytes, kind: str) -> str | None:
@@ -282,6 +273,8 @@ class Basket:
 
 
 def _ancestors(rel_path: bytes) -> Iterable[bytes]:
+    """Every folder above, nearest first, **without** the root (b""): callers
+    add it where it counts. projects.detect has its own, which includes it."""
     while b"/" in rel_path:
         rel_path = rel_path.rpartition(b"/")[0]
         yield rel_path

@@ -30,10 +30,10 @@ from treeaudit.archive.runner import (
 from treeaudit.core.config import AppConfig
 from treeaudit.core.datadir import ArchiveLockedError, ScanLock, ScanLockedError, index_size
 from treeaudit.core.errors import TreeAuditError
+from treeaudit.core.sizes import human_size
 from treeaudit.db import scans as scans_db
 from treeaudit.db.connection import connect
 from treeaudit.duplicates.runner import DupOptions, DupOutcome, DupProgress, execute_duplicates
-from treeaudit.parasites.report import human_size
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.validation import REASON_MESSAGES, RootRejectedError
 from treeaudit.scanner.models import ScanStatus
