@@ -33,14 +33,14 @@ Deux principes structurent tout le code :
 | `preview/` | aperçu des images : lecture sûre, type reconnu au contenu | `images.py` (D-046) |
 | `web/` | interface web : assemblage, pages, API JSON, exports, tâches de fond, sécurité HTTP | voir [Interface web](#interface-web) |
 | `shellcmd.py` | **toutes** les commandes de nettoyage proposées, et leur double vérification | D-025, D-045 |
-| `cli.py` | ligne de commande ; aussi le serveur web et le relais en Docker | |
+| `cli/` | ligne de commande : `parser.py` (syntaxe et aide), un module par groupe de commandes (`roots`, `archive`, `scan`, `dupes`, `serve`, `tools`), `common.py` (codes de sortie, configuration, tâche longue avec Ctrl+C), `confinement.py` (entrée dans le bac à sable du noyau, D-038 : code de sécurité, règle 17) ; `__init__.py` associe chaque commande à sa fonction (`COMMANDS`) | |
 | `entry.py` | point d'entrée `treeaudit` : prépare le dossier temporaire de SQLite, puis appelle `cli.main` sous bac à sable en natif | D-038 |
 | `gateway.py` | relais TCP entre le port publié et le conteneur `app` | D-020 |
 | `bench.py` | mesures de performance, qui n'affichent que des chiffres | |
 
 ### Règles de dépendance
 
-- `web/` et `cli.py` dépendent du moteur ; **le moteur ne dépend jamais de `web/`** ni de `cli.py`, et `core/` ne dépend de rien d'autre. `tests/unit/test_architecture.py` fixe la liste des dépendances permises entre paquets : une nouvelle dépendance s'y ajoute exprès, avec sa raison. Seul cycle accepté : `db` ↔ `scanner` (`db` enregistre les objets définis par `scanner/models.py`).
+- `web/` et `cli/` dépendent du moteur ; **le moteur ne dépend jamais de `web/`** ni de `cli/`, et `core/` ne dépend de rien d'autre. `tests/unit/test_architecture.py` fixe la liste des dépendances permises entre paquets : une nouvelle dépendance s'y ajoute exprès, avec sa raison. Seul cycle accepté : `db` ↔ `scanner` (`db` enregistre les objets définis par `scanner/models.py`).
 - Les fonctions partagées vont au plus bas : l'écriture d'une taille dans `core/sizes.py`, la dernière recherche de doublons d'une analyse dans `db/dupes.py` (`latest_run`).
 - Écritures sur disque : `db/` et `core/datadir.py` dans le dossier de données ; `archive/output.py` dans le dossier d'archives, et nulle part ailleurs. Aucun autre module n'ouvre un fichier en écriture.
 - Aucun module n'exécute de programme : pas de `subprocess`, pas de `os.system` (un test statique le vérifie).
@@ -75,7 +75,7 @@ Tous les conteneurs tournent avec l'UID et le GID de l'utilisateur, sans capacit
 
 ### Natif (AppImage)
 
-`entry.run` fixe `SQLITE_TMPDIR` **avant** que `sqlite3` soit importé, puis `cli.main(sandboxed=True)` appelle `sandbox.restrict()` avant tout travail :
+`entry.run` fixe `SQLITE_TMPDIR` **avant** que `sqlite3` soit importé, puis `cli.main(sandboxed=True)` fait appeler `sandbox.restrict()` (par `cli/confinement.py`) avant tout travail :
 
 - **Landlock** : écriture seulement dans les dossiers de données et d'archives ; jamais d'exécution ; réseau limité à l'écoute sur le port de TreeAudit (ABI 4) ; signaux et sockets abstraits limités (ABI 6) ;
 - **seccomp** : refuse ce que Landlock ne couvre pas, comme `chmod`, `chown` et les attributs étendus. Il refuse aussi `execve`, `ptrace`, `io_uring`, les sockets autres que TCP, et n'autorise qu'une courte liste d'`ioctl`.

@@ -1,7 +1,7 @@
 """Console entry point (``treeaudit``): the native mode always runs in the
 kernel sandbox (docs/DECISIONS.md D-038).
 
-Kept apart from cli.py on purpose: SQLite reads its temporary folder when it
+Kept apart from the cli package on purpose: SQLite reads its temporary folder when it
 is first loaded, so ``SQLITE_TMPDIR`` must be set before anything imports
 sqlite3. In the Docker image the container is the sandbox: nothing changes.
 

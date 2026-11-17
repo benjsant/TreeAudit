@@ -282,13 +282,13 @@ def test_the_sandbox_refuses_to_start_with_other_threads(
     ],
 )
 def test_write_folders_must_be_treeaudits_own(path: str, accepted: bool) -> None:
-    from treeaudit import cli
+    from treeaudit.cli.confinement import check_write_dir
 
     if accepted:
-        cli._check_write_dir(path, "/home/me")
+        check_write_dir(path, "/home/me")
     else:
         with pytest.raises(sandbox.SandboxError, match="refusé"):
-            cli._check_write_dir(path, "/home/me")
+            check_write_dir(path, "/home/me")
 
 
 def test_root_is_refused_natively_before_anything_is_created(
@@ -324,6 +324,53 @@ def test_root_is_refused_in_docker_too(
     monkeypatch.setattr(cli, "main", must_not_run)
     assert entry.run() == entry.EXIT_ERROR
     assert "root" in capsys.readouterr().err
+
+
+def _sandbox_entries(monkeypatch: pytest.MonkeyPatch, module: object) -> list[tuple[str, ...]]:
+    """Record each entry into the sandbox, then stop: a command that runs past
+    this point would have run unconfined."""
+    calls: list[tuple[str, ...]] = []
+
+    def record(args: object, write_dirs: tuple[str, ...]) -> None:
+        calls.append(tuple(write_dirs))
+        raise sandbox.SandboxError("stopped by the test, as if confined")
+
+    monkeypatch.setattr(module, "enter_sandbox", record)
+    return calls
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["roots", "check", "--no-fs-checks", "/srv/x"],
+        ["archive", "check", "--no-fs-checks", "/srv/x"],
+        ["disks", "detect"],
+        ["subfolders"],
+    ],
+)
+def test_commands_without_configuration_are_confined_before_they_run(
+    monkeypatch: pytest.MonkeyPatch, argv: list[str]
+) -> None:
+    import treeaudit.cli as cli
+
+    calls = _sandbox_entries(monkeypatch, cli)
+    assert cli.main(argv, sandboxed=True) == cli.EXIT_ERROR
+    assert calls == [()]  # nothing to write in
+
+
+def test_commands_with_a_configuration_are_confined_to_its_data_folder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import treeaudit.cli as cli
+    from treeaudit.cli import common
+
+    data = tmp_path / "data"
+    config = tmp_path / "config.toml"
+    config.write_text(f'data_dir = "{data}"\n', encoding="utf-8")
+    monkeypatch.delenv("TREEAUDIT_CONTAINER", raising=False)
+    calls = _sandbox_entries(monkeypatch, common)
+    assert cli.main(["--config", str(config), "scan", "list"], sandboxed=True) == cli.EXIT_ERROR
+    assert calls == [(str(data),)]
 
 
 def test_the_gateway_is_refused_natively(capsys: pytest.CaptureFixture[str]) -> None:
