@@ -54,6 +54,8 @@ Key = tuple[object, ...]
 
 @dataclass(frozen=True, slots=True)
 class Item:
+    """A file of a comparison, at one place."""
+
     path: str
     """Path below the compared folder."""
     size: int
@@ -61,6 +63,8 @@ class Item:
 
 @dataclass(frozen=True, slots=True)
 class Moved:
+    """The same content at another place (moved or renamed) in B."""
+
     path_a: str
     path_b: str
     size: int
@@ -75,6 +79,7 @@ class Listing:
     size: int = 0
 
     def add(self, item: Item | Moved) -> None:
+        """Count the element; keep it only while fewer than SHOWN are kept."""
         self.count += 1
         self.size += item.size
         if len(self.items) < SHOWN:
@@ -83,6 +88,9 @@ class Listing:
 
 @dataclass
 class Comparison:
+    """Two folders compared file by file, by path below each of them. Every
+    file of A and B lands in exactly one list."""
+
     a_id: int
     b_id: int
     a_path: str
@@ -144,6 +152,9 @@ class _Knowledge:
     errors: set[tuple[int, int]]
 
     def key(self, size: int, dev: int, ino: int) -> Key:
+        """What is known of one file's content (see Key). A file not read by a
+        search that covered its size has a size no other file has: its content
+        is unique, as long as that search went to the end."""
         inode = (dev, ino)
         if size == 0:
             return ("e",)
@@ -328,6 +339,11 @@ def _is_fact(key: Key) -> bool:
 def compare(
     conn: sqlite3.Connection, scan_id: int, a_id: int, b_id: int, knowledge: _Knowledge
 ) -> Comparison:
+    """Compare folders ``a_id`` and ``b_id`` (entry ids). A file at the same
+    place is the same, modified or, when its content was never read and the
+    sizes agree, unverified. The others are matched by content (moved) or
+    left only in A or only in B. TooLargeError if a side holds more than
+    MAX_FILES files."""
     a_path, files_a = _files(conn, scan_id, a_id, knowledge)
     b_path, files_b = _files(conn, scan_id, b_id, knowledge)
     result = Comparison(a_id, b_id, a_path, b_path)
@@ -410,25 +426,35 @@ class Family:
 
     @property
     def reference(self) -> str:
+        """The biggest folder of the family, which the others are compared with."""
         return self.comparisons[0].a_path
 
     @property
     def members(self) -> int:
+        """Folders in the family, the reference included."""
         return len(self.comparisons) + 1
 
     @property
     def score(self) -> float:
+        """The weakest likeness in the family: every member is at least this close."""
         return min(c.score for c in self.comparisons)
 
 
 @dataclass
 class Report:
+    """Folders found (almost) the same, from one search for duplicates."""
+
     run_id: int
     complete: bool
+    """That search went to the end: otherwise unique contents are only supposed."""
     pairs: list[Comparison]
+    """At most MAX_PAIRS, the closest first, none inside another kept pair."""
     families: list[Family] = field(default_factory=list)
     skipped_large: int = 0
+    """Pairs not compared: one side held more than MAX_FILES files."""
     small_files_read: bool = False
+    """A search for small files was used too: their contents are facts, not
+    suppositions."""
 
     @property
     def unverified(self) -> int:

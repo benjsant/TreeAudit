@@ -34,6 +34,8 @@ class PreviewError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class Image:
+    """The original bytes of an image and its type, guessed from its first bytes."""
+
     content: bytes
     media_type: str
 

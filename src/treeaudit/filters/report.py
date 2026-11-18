@@ -32,6 +32,9 @@ def render_search(
     scan_status: str,
     sort: Sort,
 ) -> str:
+    """A search result as text: the scan and its status (an incomplete scan
+    may miss matches), the counts, why the search stopped early if it did,
+    then the examples."""
     lines = [
         f"Recherche dans le scan {scan_id} ({STATUS_LABELS.get(scan_status, scan_status)}) : "
         f"{describe(spec)}",

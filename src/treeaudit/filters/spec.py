@@ -28,6 +28,8 @@ class FilterError(TreeAuditError):
 
 
 class EntryKindFilter(StrEnum):
+    """Kinds of entries a search may ask for (the same values as EntryKind)."""
+
     FILE = "file"
     DIR = "dir"
     SYMLINK = "symlink"
@@ -69,6 +71,9 @@ class Matcher:
 
 @dataclass(frozen=True, slots=True)
 class CompiledFilter:
+    """A FilterSpec checked and compiled once per search: regexes compiled,
+    globs turned into regexes, text folded for case-insensitive criteria."""
+
     spec: FilterSpec
     extensions: tuple[str, ...]
     name_matchers: tuple[Matcher, ...] = ()
@@ -90,6 +95,7 @@ class CompiledFilter:
 
     @property
     def needs_text(self) -> bool:
+        """Some criterion looks at names or paths: rows must be checked one by one."""
         return bool(
             self.name_matchers
             or self.path_matchers
@@ -198,6 +204,9 @@ def _risky(nodes: object, inside_repeat: bool) -> str | None:
 
 
 def compile_regex(pattern: str, *, ignore_case: bool, what: str) -> re.Pattern[str]:
+    """Compile a regex typed by the user, or refuse it with a message for them
+    (FilterError): too long, invalid, or with nested repetitions that could
+    take forever on some names. ``what`` names the criterion in the message."""
     _check_length(pattern, what)
     flags = re.IGNORECASE if ignore_case else 0
     try:

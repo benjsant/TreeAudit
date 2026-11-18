@@ -95,6 +95,9 @@ _CHUNK = 500
 
 @dataclass(frozen=True, slots=True)
 class Found:
+    """A project or a program, why it was recognised (``kinds``) and what in
+    it could be rebuilt."""
+
     entry_id: int
     rel_path: bytes
     rel_path_display: str
@@ -114,6 +117,7 @@ class Found:
 
     @property
     def recreatable_size(self) -> int:
+        """Space of its rebuildable folders (dependencies, builds), when known."""
         return sum(f.allocated_size or 0 for f in self.recreatable)
 
 
@@ -130,6 +134,10 @@ def _rows(conn: sqlite3.Connection, sql: str, params: Sequence[object]) -> Itera
 
 
 def _candidates(conn: sqlite3.Connection, scan_id: int) -> dict[int, _Candidate]:
+    """Every folder (or AppImage file) that looks like a project or software,
+    by entry id, with what made it so: marker files, children typical of
+    software, extensions (.exe with .dll, .sln...), GOG games, macOS apps.
+    A few queries over the whole scan; the outermost ones are chosen later."""
     found: dict[int, _Candidate] = defaultdict(_Candidate)
     names = [*MARKERS, *SOFTWARE_CHILDREN, *UNITY]
     marks = ",".join("?" * len(names))

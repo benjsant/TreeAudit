@@ -24,6 +24,8 @@ _SELECT = (
 
 
 class Sort(StrEnum):
+    """Which examples to keep: only ``limit`` of them are, among all matches."""
+
     SIZE = "size"  # largest first
     PATH = "path"  # alphabetical (byte order)
     MTIME = "mtime"  # most recent first
@@ -31,6 +33,8 @@ class Sort(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Match:
+    """One matching entry, kept as an example."""
+
     entry_id: int
     rel_path: bytes
     rel_path_display: str
@@ -42,6 +46,10 @@ class Match:
 
 @dataclass(slots=True)
 class SearchResult:
+    """Counts of every match and the best examples. ``partial_reason`` says
+    why the search stopped before the end (cancelled, time budget): the
+    counts are then those of the rows examined so far."""
+
     total: int = 0
     files: int = 0
     dirs: int = 0
@@ -55,6 +63,9 @@ class SearchResult:
 
 
 def _sql(compiled: CompiledFilter) -> tuple[str, list[object]]:
+    """The criteria SQLite can apply itself: kind, extension, size. Text
+    criteria (names, globs, regexes) are checked in Python on each row.
+    Asking for an extension or a size without a kind means files only."""
     spec = compiled.spec
     conditions = ["e.scan_id = ?", "e.depth > 0"]
     params: list[object] = []
