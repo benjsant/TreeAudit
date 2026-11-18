@@ -42,6 +42,7 @@ Commencer par le minimum, verrouiller les versions avec empreintes (`uv.lock`, D
 | Paquet | Usage |
 |---|---|
 | `pytest` | Tests |
+| `pytest-cov` (et `coverage`) | Mesure de la couverture des tests, à la demande : `./treeaudit test --cov=treeaudit`. Pas lancée par `check`. Version de `coverage` publiée depuis au moins deux semaines au moment de l'ajout (option `exclude-newer-package` gardée dans `uv.lock`) |
 | `httpx` | Requis par le `TestClient` de FastAPI |
 | `ruff` | Lint et formatage |
 | `mypy` | Vérification des annotations de type |

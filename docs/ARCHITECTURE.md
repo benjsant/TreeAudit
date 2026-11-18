@@ -210,7 +210,7 @@ Ne construis **jamais** de commande à la main : passe par `shellcmd.cleanup_com
 
 ## Tests et qualité
 
-`./treeaudit check` lance, dans Docker, `ruff` (lint et format), `mypy` (strict) et `pytest`.
+`./treeaudit check` lance, dans Docker, `ruff` (lint et format), `mypy` (strict) et `pytest`. La couverture se mesure à la demande : `./treeaudit test --cov=treeaudit --cov-report=term-missing` (92 % en novembre 2026). Le code qui ne tourne que dans un processus enfant (le bac à sable, `entry.py`) y paraît peu couvert : la sonde l'exerce, mais `coverage` ne suit pas les processus enfants.
 
 Toute fonction, classe, méthode et tout module public de `src/` et `tools/` a une docstring (règle ruff `D1`) : elle dit pourquoi le code existe et ce qu'il garantit, sans répéter le code. Les tests en sont dispensés, leur nom dit ce qu'ils vérifient ; les cas figés du banc des sous-dossiers aussi (D-066).
 
