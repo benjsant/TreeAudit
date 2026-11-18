@@ -160,6 +160,7 @@ hint_install() {
             ;;
         *) say "  voir $DOCKER_DOCS"; return 0 ;;
     esac
+    # shellcheck disable=SC2016  # $USER is shown as is, for the user to type
     say '  sudo usermod -aG docker "$USER"   (puis déconnecte-toi et reconnecte-toi)'
     say "  Le groupe docker donne des droits équivalents à root : docs/guide/01-installer.md"
 }
@@ -210,6 +211,7 @@ check_docker() {
             say "  sudo systemctl enable --now docker"
         elif [[ ! -w $DOCKER_SOCKET ]]; then
             say "✘ Ton utilisateur n'a pas accès à Docker :"
+            # shellcheck disable=SC2016  # $USER is shown as is, for the user to type
             say '  sudo usermod -aG docker "$USER"   (puis déconnecte-toi et reconnecte-toi)'
             say "  Le groupe docker donne des droits équivalents à root : docs/guide/01-installer.md"
         else

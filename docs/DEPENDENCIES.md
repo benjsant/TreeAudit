@@ -10,6 +10,7 @@ Commencer par le minimum, verrouiller les versions avec empreintes (`uv.lock`, D
 | Python autonome (python-build-standalone) | Interpréteur embarqué dans l'AppImage (D-038) | Téléchargé et vérifié par `uv python install` (version de uv épinglée) |
 | `squashfs-tools` (Debian) | Image compressée de l'AppImage | Paquet signé de l'image de construction, absent de l'AppImage |
 | AppImage type2-runtime | Programme de démarrage de l'AppImage (statique, sans `libfuse2`) | Épinglé par empreinte SHA-256 : un changement arrête la construction |
+| `koalaman/shellcheck` v0.10.0 | Relecture du lanceur `treeaudit` et de `AppRun`, à la demande (commande dans ARCHITECTURE) | Image de l'auteur de l'outil, épinglée par digest ; lancée sans réseau, dépôt monté en lecture seule ; n'entre dans aucune image |
 
 ## Publication (GitHub uniquement, D-062)
 | Outil | Usage | Remarque |
