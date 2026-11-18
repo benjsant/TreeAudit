@@ -34,6 +34,7 @@ def from_sqlite_int(value: int) -> int:
 
 
 def database_path(data_dir: str) -> Path:
+    """The index file inside TreeAudit's data folder."""
     return Path(data_dir) / DB_FILENAME
 
 

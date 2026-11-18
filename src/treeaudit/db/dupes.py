@@ -27,12 +27,17 @@ class Candidate:
 
 @dataclass(frozen=True, slots=True)
 class HashRow:
+    """The digests computed for one file in a run. A digest stays None when
+    an earlier stage already told the file apart from all the others."""
+
     entry_id: int
     size: int
     partial: bytes | None
     """Head digest (first EDGE_SIZE bytes)."""
     full: bytes | None
+    """Digest of the whole content: only files equal so far are read in full."""
     tail: bytes | None = None
+    """Digest of the last EDGE_SIZE bytes."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +51,8 @@ class KnownDigests:
 
 @dataclass(frozen=True, slots=True)
 class DupError:
+    """A file that could not be read during a run: the run is then incomplete."""
+
     entry_id: int
     rel_path_display: str
     operation: str
@@ -54,6 +61,8 @@ class DupError:
 
 
 def create_run(conn: sqlite3.Connection, scan_id: int, options: dict[str, Any]) -> int:
+    """Record a new run as running and return its id. ``options`` are kept as
+    JSON: the edge size and the kind of search (``micro``) are read back later."""
     cursor = conn.execute(
         "INSERT INTO dup_run (scan_id, status, started_at, options) VALUES (?, ?, ?, ?)",
         (scan_id, ScanStatus.RUNNING.value, now_iso(), json.dumps(options)),
@@ -75,6 +84,7 @@ def finish_run(
     reused: int = 0,
     failure: str | None = None,
 ) -> None:
+    """Record how a run ended; only a final status is accepted (D-012)."""
     if not status.is_final:
         raise ValueError(f"not a final status: {status}")
     conn.execute(
@@ -142,6 +152,7 @@ def known_digests(
 def save_results(
     conn: sqlite3.Connection, run_id: int, hashes: list[HashRow], errors: list[DupError]
 ) -> None:
+    """Store a run's digests and errors in one transaction: all or nothing."""
     conn.execute("BEGIN")
     try:
         conn.executemany(
@@ -226,6 +237,7 @@ def load_candidates(
 
 
 def get_run(conn: sqlite3.Connection, run_id: int) -> sqlite3.Row | None:
+    """One run by id, whatever its state; None if unknown."""
     row: sqlite3.Row | None = conn.execute(
         "SELECT * FROM dup_run WHERE id = ?", (run_id,)
     ).fetchone()
@@ -256,10 +268,12 @@ def latest_run(
 
 
 def list_runs(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
+    """The most recent runs first, all scans together."""
     return list(conn.execute("SELECT * FROM dup_run ORDER BY id DESC LIMIT ?", (limit,)))
 
 
 def list_errors(conn: sqlite3.Connection, run_id: int, limit: int = 50) -> list[sqlite3.Row]:
+    """The first ``limit`` read errors of a run, in the order they happened."""
     return list(
         conn.execute(
             "SELECT rel_path_display, operation, errno, message FROM dup_error "

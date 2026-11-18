@@ -26,6 +26,7 @@ MAX_EXTENSION_LENGTH = 32
 
 
 def now_iso() -> str:
+    """The current time in UTC, to the second, as stored in the index."""
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
@@ -49,6 +50,7 @@ def extension_of(name: bytes) -> str | None:
 def create_scan(
     conn: sqlite3.Connection, *, root_id: str, root_path: str, subpath: str, options: dict[str, Any]
 ) -> int:
+    """Record a new scan as running and return its id."""
     cursor = conn.execute(
         "INSERT INTO scan (root_id, root_path, subpath, status, started_at, options) "
         "VALUES (?, ?, ?, ?, ?, ?)",
@@ -71,6 +73,8 @@ def finish_scan(
     exclusions: int,
     failure: str | None = None,
 ) -> None:
+    """Record how a scan ended, with its totals; only a final status is
+    accepted (D-012)."""
     if not status.is_final:
         raise ValueError(f"not a final status: {status}")
     conn.execute(
@@ -135,6 +139,8 @@ class ScanWriter:
             self.flush()
 
     def add_entry(self, record: EntryRecord) -> None:
+        """Queue one entry. The raw name is stored as bytes (D-014), next to a
+        printable form and whether that form is exact (valid UTF-8)."""
         name_display, name_valid = display(record.name)
         rel_display, _ = display(record.rel_path)
         extension = extension_of(record.name) if record.kind is EntryKind.FILE else None
@@ -166,6 +172,7 @@ class ScanWriter:
         self._maybe_flush()
 
     def add_dir_summary(self, entry_id: int, totals: Totals) -> None:
+        """Queue the totals of a folder's whole subtree (sent when the walk leaves it)."""
         self._summaries.append(
             (
                 self.scan_id,
@@ -182,6 +189,7 @@ class ScanWriter:
         self._maybe_flush()
 
     def add_error(self, record: ErrorRecord) -> None:
+        """Queue a read error."""
         rel_display, _ = display(record.rel_path)
         self._errors.append(
             (
@@ -196,11 +204,15 @@ class ScanWriter:
         self._maybe_flush()
 
     def add_exclusion(self, record: ExclusionRecord) -> None:
+        """Queue a path left out on purpose."""
         rel_display, _ = display(record.rel_path)
         self._exclusions.append((self.scan_id, record.rel_path, rel_display, record.reason.value))
         self._maybe_flush()
 
     def flush(self) -> None:
+        """Write everything queued in one transaction. The runner calls it
+        once more when the walk ends or is cancelled; a scan that fails keeps
+        only the batches written before the failure."""
         if not self._pending():
             return
         conn = self.conn
@@ -239,6 +251,8 @@ class ScanWriter:
 
 @dataclass(frozen=True, slots=True)
 class ExtensionStat:
+    """Files of one extension (None: no extension) and their apparent size."""
+
     extension: str | None
     files: int
     logical_size: int
@@ -246,6 +260,8 @@ class ExtensionStat:
 
 @dataclass(frozen=True, slots=True)
 class DirStat:
+    """A folder and the totals of its whole subtree."""
+
     rel_path_display: str
     depth: int
     files: int
@@ -255,15 +271,19 @@ class DirStat:
 
 
 def get_scan(conn: sqlite3.Connection, scan_id: int) -> sqlite3.Row | None:
+    """One scan by id, whatever its state; None if unknown."""
     row: sqlite3.Row | None = conn.execute("SELECT * FROM scan WHERE id = ?", (scan_id,)).fetchone()
     return row
 
 
 def list_scans(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
+    """The most recent scans first."""
     return list(conn.execute("SELECT * FROM scan ORDER BY id DESC LIMIT ?", (limit,)))
 
 
 def top_extensions(conn: sqlite3.Connection, scan_id: int, limit: int = 15) -> list[ExtensionStat]:
+    """The extensions that weigh the most, by apparent size. Counted per name:
+    a file with several hard links counts once for each of its names."""
     rows = conn.execute(
         "SELECT extension, COUNT(*) AS files, SUM(size) AS logical_size FROM entry "
         "WHERE scan_id = ? AND kind = 'file' GROUP BY extension "
@@ -274,6 +294,8 @@ def top_extensions(conn: sqlite3.Connection, scan_id: int, limit: int = 15) -> l
 
 
 def largest_dirs(conn: sqlite3.Connection, scan_id: int, limit: int = 15) -> list[DirStat]:
+    """The folders whose subtree takes the most disk space, the start folder
+    excluded. Nested folders all appear: a parent always outweighs its child."""
     rows = conn.execute(
         "SELECT e.rel_path_display, e.depth, d.files, d.dirs, d.allocated_size, d.errors "
         "FROM dir_summary d JOIN entry e USING (scan_id, entry_id) "
@@ -295,6 +317,7 @@ def largest_dirs(conn: sqlite3.Connection, scan_id: int, limit: int = 15) -> lis
 
 
 def list_errors(conn: sqlite3.Connection, scan_id: int, limit: int = 50) -> list[sqlite3.Row]:
+    """The first ``limit`` read errors of a scan, in the order they happened."""
     return list(
         conn.execute(
             "SELECT rel_path_display, operation, errno, message FROM scan_error "
@@ -305,6 +328,7 @@ def list_errors(conn: sqlite3.Connection, scan_id: int, limit: int = 50) -> list
 
 
 def list_exclusions(conn: sqlite3.Connection, scan_id: int, limit: int = 50) -> list[sqlite3.Row]:
+    """The first ``limit`` paths left out on purpose, in the order they were met."""
     return list(
         conn.execute(
             "SELECT rel_path_display, reason FROM scan_exclusion "

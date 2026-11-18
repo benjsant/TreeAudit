@@ -15,6 +15,7 @@ from treeaudit.db.scans import now_iso
 
 
 def get(conn: sqlite3.Connection, key: str) -> dict[str, Any] | None:
+    """The cached summary for this key, or None if it was never computed."""
     row = conn.execute("SELECT payload FROM summary_cache WHERE key = ?", (key,)).fetchone()
     if row is None:
         return None
@@ -23,6 +24,8 @@ def get(conn: sqlite3.Connection, key: str) -> dict[str, Any] | None:
 
 
 def put(conn: sqlite3.Connection, key: str, payload: dict[str, Any]) -> None:
+    """Store a summary (JSON). Only for finished work: the key must never
+    come back with a different answer."""
     conn.execute(
         "INSERT OR REPLACE INTO summary_cache (key, payload, created_at) VALUES (?, ?, ?)",
         (key, json.dumps(payload), now_iso()),
