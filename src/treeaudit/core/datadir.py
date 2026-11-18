@@ -79,6 +79,8 @@ class ScanLock:
         return ScanLockedError("another scan is already running")
 
     def acquire(self) -> None:
+        """Take the lock or fail at once (never waits): ScanLockedError, or
+        ArchiveLockedError for the archive lock, when another process holds it."""
         fd = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -88,6 +90,7 @@ class ScanLock:
         self._fd = fd
 
     def release(self) -> None:
+        """Let go of the lock; harmless if it is not held."""
         if self._fd is not None:
             os.close(self._fd)  # closing the descriptor releases the flock
             self._fd = None

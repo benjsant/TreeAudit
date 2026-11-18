@@ -64,6 +64,8 @@ class RootConfig:
 
     @property
     def shown_path(self) -> str:
+        """The path to show and to write in proposed commands: the host path
+        in Docker (``display_path``), the real path otherwise."""
         return self.display_path or self.path
 
     @property
@@ -97,6 +99,8 @@ class AppConfig:
 
     @property
     def shown_archive_dir(self) -> str | None:
+        """The archives folder as the user knows it (host path in Docker);
+        None when archiving is disabled."""
         return self.archive_display_path or self.archive_dir
 
     def protected_paths(self) -> tuple[str, ...]:
@@ -157,6 +161,8 @@ def default_config_path(environ: Mapping[str, str] | None = None) -> Path:
 
 
 def display_path_env_var(root_id: str) -> str:
+    """Environment variable giving a root's host path in Docker:
+    ``main`` -> ``TREEAUDIT_DISPLAY_PATH_MAIN`` (compose.root.yaml)."""
     return DISPLAY_PATH_ENV_PREFIX + root_id.upper().replace("-", "_")
 
 
@@ -257,6 +263,12 @@ def check_bind_host(bind_host: str, *, container_mode: bool) -> None:
 
 
 def _parse_root(item: Any, index: int) -> RootConfig:
+    """One ``[[roots]]`` table, checked field by field (D-008).
+
+    Only the syntax is checked here: whether the path may be audited is decided
+    later, on the real filesystem (roots.validation). The ids ``ext-*`` and
+    ``home`` are reserved for the detected disks and the personal folder.
+    """
     where = f"roots[{index}]"
     if not isinstance(item, dict):
         raise ConfigError(f"{where} must be a table")

@@ -183,6 +183,9 @@ class SandboxError(TreeAuditError):
 
 @dataclass(frozen=True, slots=True)
 class Policy:
+    """What the sandboxed process may still do: everything else is refused.
+    Reading is allowed everywhere; the kernel permissions still apply."""
+
     write_dirs: tuple[str, ...]
     """The only folders where anything may be written (data, archives)."""
     listen_ports: tuple[int, ...] = ()
@@ -191,7 +194,10 @@ class Policy:
 
 @dataclass(frozen=True, slots=True)
 class Report:
+    """What the kernel actually enforced: older kernels enforce less (D-038)."""
+
     abi: int
+    """Landlock ABI version of the running kernel."""
     network: bool
     """Outgoing TCP blocked by Landlock (ABI 4 or later)."""
     scoped: bool
@@ -201,6 +207,7 @@ class Report:
 
     @property
     def complete(self) -> bool:
+        """Every protection is in force, none was left out by an old kernel."""
         return self.network and self.scoped and self.sockets
 
 
@@ -239,6 +246,11 @@ def _check(result: int, what: str) -> int:
 
 
 def _add_path_rule(libc: ctypes.CDLL, ruleset: int, path: str, rights: int) -> None:
+    """Grant ``rights`` on ``path`` and everything beneath it.
+
+    The folder is opened with O_PATH: the kernel ties the rule to that inode,
+    so renaming or replacing the path afterwards changes nothing.
+    """
     fd = os.open(path, os.O_PATH | os.O_CLOEXEC | os.O_DIRECTORY)
     try:
         # struct landlock_path_beneath_attr { __u64 allowed_access; __s32 parent_fd; } (packed)
@@ -258,6 +270,7 @@ def _add_path_rule(libc: ctypes.CDLL, ruleset: int, path: str, rights: int) -> N
 
 
 def _add_port_rule(libc: ctypes.CDLL, ruleset: int, port: int) -> None:
+    """Allow listening (bind) on one TCP port; connecting stays refused."""
     # struct landlock_net_port_attr { __u64 allowed_access; __u64 port; }
     attr = ctypes.create_string_buffer(struct.pack("=QQ", _NET_BIND_TCP, port))
     _check(
@@ -331,6 +344,9 @@ def _seccomp_filter(machine: _Machine) -> list[tuple[int, int, int, int]]:
 
 
 def _install_seccomp_filter(libc: ctypes.CDLL) -> bool:
+    """Load the filter of _seccomp_filter for this machine. False, and nothing
+    loaded, on an architecture it does not know (refused earlier by
+    ``restrict`` when the network must be cut). Needs no_new_privs first."""
     machine = _MACHINES.get(platform.machine())
     if machine is None:
         return False
