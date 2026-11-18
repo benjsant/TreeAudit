@@ -51,12 +51,16 @@ class SubpathError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class WalkOptions:
+    """Everything the walk needs to know, decided before it starts."""
+
     root_path: str
     """Absolute path of the root as seen by this process (validated beforehand)."""
     mount_points: frozenset[str] = frozenset()
     """Absolute mount points strictly below the root, read from mountinfo."""
     cross_mounts: bool = False
+    """Enter the mount points below the root instead of excluding them."""
     max_depth: int = DEFAULT_MAX_DEPTH
+    """Deeper folders are reported as errors, not entered."""
     expected_root: tuple[int, int] | None = None
     """(st_dev, st_ino) of the root at validation time, to detect a swap."""
     own_dirs: frozenset[tuple[int, int]] = frozenset()
@@ -140,12 +144,18 @@ class _Frame:
 
 
 class _Walk:
+    """One walk: hands out entry ids in order and remembers the inodes with
+    several hard links, so that each is counted once (D-022)."""
+
     def __init__(self, options: WalkOptions) -> None:
         self.options = options
         self.ids = itertools.count(1)
         self.seen_inodes: set[tuple[int, int]] = set()
 
     def _count(self, totals: Totals, kind: EntryKind, st: os.stat_result) -> None:
+        """Add one entry to its folder's totals. Every name counts in the
+        numbers of files, folders..., but the sizes of a hard-linked inode
+        count only the first time it is met (D-022)."""
         if kind is EntryKind.FILE:
             totals.files += 1
         elif kind is EntryKind.DIR:
@@ -174,6 +184,7 @@ class _Walk:
         st: os.stat_result,
         link_target: bytes | None = None,
     ) -> EntryRecord:
+        """The stored record of an entry, from its lstat result."""
         return EntryRecord(
             entry_id=entry_id,
             parent_id=parent_id,
@@ -214,6 +225,9 @@ class _Walk:
             yield from self._entry(frame, entry_name)
 
     def _entry(self, frame: _Frame, entry_name: str) -> Iterator[WalkEvent]:
+        """Examine one listed name: a secret is excluded before even an lstat,
+        TreeAudit's own folders by identity; a symbolic link has its target
+        read, never followed. A folder is kept for the descent."""
         name = os.fsencode(entry_name)
         rel_path = _join(frame.rel_path, name)
         if rel_path in self.options.private_paths:
@@ -295,6 +309,8 @@ class _Walk:
         yield fd
 
     def run(self, subpath: tuple[str, ...]) -> Generator[WalkEvent, None, None]:
+        """The whole walk; see ``walk``. Every descriptor is closed when it
+        ends, also when the consumer stops early."""
         start_fd: int | None = None
         for item in self._open_start(subpath):
             if isinstance(item, int):
@@ -330,6 +346,13 @@ class _Walk:
                 os.close(frame.fd)
 
     def _descend(self, stack: list[_Frame]) -> Iterator[WalkEvent]:
+        """Depth first, without recursion: one open descriptor per level.
+
+        Each folder is opened relative to its parent's descriptor, then its
+        (device, inode) is compared with what the listing reported: a folder
+        swapped meanwhile (for a link to elsewhere, say) is an error, never
+        entered. Leaving a folder emits its totals and adds them to its parent.
+        """
         options = self.options
         while stack:
             frame = stack[-1]

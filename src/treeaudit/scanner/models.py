@@ -7,6 +7,12 @@ from enum import StrEnum
 
 
 class ScanStatus(StrEnum):
+    """Where a scan stands (D-012). It ends in one of the four final statuses:
+    ``complete`` only when no error was met; ``incomplete`` when some folder or
+    entry could not be read (excluded entries do not count); ``cancelled`` when
+    stopped by the user; ``failed`` when the scan itself broke. The values are
+    stored in the index: never rename one."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETE = "complete"
@@ -16,10 +22,13 @@ class ScanStatus(StrEnum):
 
     @property
     def is_final(self) -> bool:
+        """The scan has ended and will not change any more."""
         return self not in (ScanStatus.PENDING, ScanStatus.RUNNING)
 
 
 class EntryKind(StrEnum):
+    """What an entry is, from lstat: a symbolic link is never followed (D-013)."""
+
     FILE = "file"
     DIR = "dir"
     SYMLINK = "symlink"
@@ -27,12 +36,18 @@ class EntryKind(StrEnum):
 
 
 class ExclusionReason(StrEnum):
+    """Why an entry was deliberately left out. An exclusion is a choice, not a
+    failure: it never makes a scan incomplete."""
+
     MOUNT_POINT = "mount_point"
     TREEAUDIT = "treeaudit"  # TreeAudit's own data or archive directory (D-037)
     PRIVATE = "private"  # secrets of the personal folder, never read (D-037)
 
 
 class ErrorOperation(StrEnum):
+    """The step that failed, stored with each error. Any error makes the scan
+    incomplete (D-012)."""
+
     OPEN_ROOT = "open_root"
     OPEN_SUBPATH = "open_subpath"
     OPEN_DIR = "open_dir"
@@ -45,6 +60,9 @@ class ErrorOperation(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class EntryRecord:
+    """One entry as lstat saw it, ready to be stored. Names and paths are bytes,
+    exactly as on disk (D-014); ``rel_path`` is relative to the root."""
+
     entry_id: int
     parent_id: int | None
     depth: int
@@ -65,6 +83,9 @@ class EntryRecord:
 
 @dataclass(frozen=True, slots=True)
 class ErrorRecord:
+    """A path that could not be read, and why. ``message`` comes from the
+    system (strerror), never from the content of a file."""
+
     rel_path: bytes
     operation: ErrorOperation
     errno: int | None
@@ -73,6 +94,8 @@ class ErrorRecord:
 
 @dataclass(frozen=True, slots=True)
 class ExclusionRecord:
+    """A path left out on purpose (mount point, TreeAudit's own folder, secret)."""
+
     rel_path: bytes
     reason: ExclusionReason
 
@@ -90,6 +113,7 @@ class Totals:
     errors: int = 0
 
     def add(self, other: Totals) -> None:
+        """Add a child's totals to its parent's, when the walk leaves the child."""
         self.files += other.files
         self.dirs += other.dirs
         self.symlinks += other.symlinks

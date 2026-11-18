@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class ScanRequest:
+    """What to scan: a validated root, optionally one of its sub-folders
+    (relative, checked by parse_subpath)."""
+
     root: RootConfig
     subpath: str = ""
     max_depth: int = DEFAULT_MAX_DEPTH
@@ -48,6 +51,8 @@ class ScanProgress:
 
 @dataclass(frozen=True, slots=True)
 class ScanOutcome:
+    """How a scan ended, with its counts; ``failure`` says why a failed one broke."""
+
     scan_id: int
     status: ScanStatus
     entries: int
@@ -58,6 +63,8 @@ class ScanOutcome:
 
 
 def mount_points_below(mounts: MountTable, root_path: str) -> frozenset[str]:
+    """Mount points strictly inside the root: the walk does not enter them
+    unless the root allows it (``cross_mounts``)."""
     prefix = root_path.rstrip("/") + "/"
     return frozenset(e.mount_point for e in mounts.entries if e.mount_point.startswith(prefix))
 

@@ -21,6 +21,8 @@ DEFAULT_LIMIT = 1000
 
 @dataclass(frozen=True, slots=True)
 class Listing:
+    """The sub-folders of one folder, for the folder picker: names only."""
+
     path: str
     """The listed folder, relative to the root ('' for the root itself)."""
     folders: tuple[str, ...]
