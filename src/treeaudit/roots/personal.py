@@ -100,6 +100,8 @@ PRIVATE_PATHS: frozenset[bytes] = frozenset(
 
 
 def personal_root(path: str, display_path: str | None = None) -> RootConfig:
+    """The personal folder as a root (D-037), with the reserved id ``home``.
+    It carries PRIVATE_PATHS: the walker never opens those secrets."""
     return RootConfig(
         id=HOME_ROOT_ID,
         path=path,

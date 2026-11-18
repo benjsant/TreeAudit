@@ -44,6 +44,7 @@ class RootStatus:
 
     @property
     def accepted(self) -> bool:
+        """The root passed every check and may be scanned."""
         return self.reason is None
 
 
@@ -56,6 +57,9 @@ def current_home() -> str | None:
 
 
 def current_user() -> str | None:
+    """Login name of this process, for the media folders (/run/media/<user>).
+    Falls back on $USER when the account is not in the password database
+    (a container started with an arbitrary uid); None if both are unknown."""
     try:
         return pwd.getpwuid(os.getuid()).pw_name
     except KeyError:

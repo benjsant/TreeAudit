@@ -57,6 +57,10 @@ _ID_CHARS = re.compile(r"[^a-z0-9]+")
 
 
 class DiskReason(StrEnum):
+    """Why a detected disk is refused; DISK_MESSAGES explains each one to the
+    user. The values travel in the disk list handed to the container: never
+    rename one."""
+
     SYSTEM_DISK = "system_disk"
     UNKNOWN_DISK = "unknown_disk"
     DISK_IMAGE = "disk_image"
@@ -114,10 +118,12 @@ class ExternalDisk:
 
     @property
     def accepted(self) -> bool:
+        """Offered as a root: no reason to refuse it."""
         return self.reason is None
 
     @property
     def message(self) -> str | None:
+        """Why it is refused, in words for the user; None when accepted."""
         return None if self.reason is None else DISK_MESSAGES[self.reason]
 
 
@@ -236,6 +242,8 @@ def system_device_specs(mounts: MountTable) -> list[tuple[str, str]]:
 
 
 def format_device_specs(specs: Iterable[tuple[str, str]]) -> str:
+    """The system devices as ``major:minor|/dev/x,...``: measured on the host,
+    passed to the container, read back by parse_device_specs."""
     return ",".join(f"{major_minor}|{source}" for major_minor, source in specs)
 
 
@@ -443,6 +451,8 @@ def disks_from_json(text: str) -> list[ExternalDisk]:
 
 
 def disks_from_environment(environ: Mapping[str, str]) -> list[ExternalDisk]:
+    """In Docker, the disks detected on the host, as compose_override wrote them.
+    They are checked again inside the container before use (registry)."""
     return disks_from_json(environ.get(DISKS_ENV_VAR, "[]"))
 
 

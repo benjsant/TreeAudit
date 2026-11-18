@@ -73,6 +73,8 @@ class MountEntry:
 
     @property
     def is_virtual(self) -> bool:
+        """A kernel or memory filesystem (proc, sysfs, tmpfs...), never a disk:
+        never audited, never an archive destination."""
         return self.fs_type in VIRTUAL_FS_TYPES
 
 

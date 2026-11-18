@@ -54,6 +54,9 @@ PSEUDO_TREE_EXCEPTIONS = ("/run/media",)
 
 
 class RejectReason(StrEnum):
+    """Why a root is refused (D-009), explained in words by REASON_MESSAGES.
+    The value is also what /api/roots returns: never rename one."""
+
     NOT_ABSOLUTE = "not_absolute"
     NOT_NORMALIZED = "not_normalized"
     FORBIDDEN_PATH = "forbidden_path"
@@ -189,6 +192,8 @@ def _check_path_string(path: str) -> None:
 
 
 def _check_filesystem(path: str) -> None:
+    """The root must exist as a real directory, reached without any symbolic
+    link, neither its last component nor an ancestor (D-013)."""
     try:
         info = os.lstat(path)
     except FileNotFoundError as exc:
@@ -207,6 +212,8 @@ def _check_filesystem(path: str) -> None:
 
 
 def _check_mount(path: str, ctx: ValidationContext, *, allow_system_volume: bool) -> None:
+    """The root's mount must be known and real; in Docker, read-only; and it
+    must not be the system volume unless the configuration says so (D-009)."""
     target = ctx.mounts.mount_for(path)
     if target is None:
         raise RootRejectedError(RejectReason.UNKNOWN_MOUNT, path)
