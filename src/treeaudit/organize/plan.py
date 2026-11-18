@@ -230,6 +230,7 @@ NEUTRAL_FILES = frozenset({b"Thumbs.db", b".DS_Store", b"desktop.ini", b".direct
 
 
 def category_of(extension: str | None) -> str:
+    """Category of a file from its extension; "Autres" when unknown."""
     return _CATEGORY_OF.get(extension or "", OTHER)
 
 
@@ -271,10 +272,12 @@ class Adjustments:
     destination: str = DESTINATION
 
     def folder(self, category: str) -> str:
+        """The folder name of a category: the user's if they renamed it."""
         return self.names.get(category, category)
 
     @property
     def any(self) -> bool:
+        """The user changed something in the proposed plan."""
         return bool(
             self.excluded
             or self.categories
@@ -335,6 +338,9 @@ class PlanTooLargeError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Move:
+    """One element and where it would go. Sizes are for display; the script
+    checks a file's size and date again before moving it."""
+
     entry_id: int
     source: str
     """Path relative to the chosen folder."""
@@ -347,6 +353,7 @@ class Move:
     mtime_s: int
     reason: str
     renamed: bool = False
+    """The target name got a "(2)": another element of the plan takes the first."""
     subfolder: str | None = None
     space: int = 0
     """What the explorer shows: a file's size, or the place a folder uses."""
@@ -354,6 +361,8 @@ class Move:
 
 @dataclass(frozen=True, slots=True)
 class Kept:
+    """An element left where it is, and why."""
+
     path: str
     reason: str
     entry_id: int | None = None
@@ -362,6 +371,8 @@ class Kept:
 
 @dataclass
 class Plan:
+    """Where each element of the chosen folder would go, and what stays."""
+
     start: str
     """The chosen folder, relative to the analysed root ("" for the root)."""
     adjustments: Adjustments = field(default_factory=Adjustments)
@@ -380,19 +391,25 @@ class Plan:
 
     @property
     def destination(self) -> str:
+        """The folder everything is gathered in, inside the chosen folder."""
         return self.adjustments.destination
 
     @property
     def excluded(self) -> list[Kept]:
+        """Elements the user chose to leave in place."""
         return [kept for kept in self.kept if kept.entry_id is not None]
 
     @property
     def renamed(self) -> list[Move]:
+        """Elements whose name gets a number to avoid a clash."""
         return [move for move in self.moves if move.renamed]
 
 
 @dataclass
 class _Node:
+    """An entry of the chosen folder, with its children, loaded from the index;
+    the fields after ``children`` summarise a folder's whole subtree."""
+
     entry_id: int
     parent_id: int | None
     name: bytes
@@ -465,6 +482,9 @@ def _photo_year(name: str, mtime_ns: int) -> tuple[int, bool]:
 
 
 def _load(conn: sqlite3.Connection, scan_id: int, start_id: int) -> _Node:
+    """The chosen folder's subtree as a tree of nodes, children sorted by path.
+    PlanTooLargeError beyond MAX_ENTRIES (it is held in memory); KeyError if
+    the folder is not in the analysis."""
     rows = conn.execute(LOAD_SQL, (start_id, scan_id, scan_id, MAX_ENTRIES + 1)).fetchall()
     if len(rows) > MAX_ENTRIES:
         raise PlanTooLargeError(len(rows))
@@ -594,6 +614,9 @@ def _is_block(node: _Node) -> bool:
 
 
 class _Planner:
+    """Builds one plan: decides, from the top of the chosen folder down, what
+    moves whole, what is opened, and what stays (see the module docstring)."""
+
     def __init__(self, start: _Node, adjustments: Adjustments) -> None:
         self.start = start
         self.adjust = adjustments
@@ -609,6 +632,10 @@ class _Planner:
     def _target(
         self, category: str, year: int | None, sub: str | None, name: str
     ) -> tuple[str, bool]:
+        """Target path below the destination, and whether it was renamed:
+        a name already given in this plan gets " (2)", " (3)"... before its
+        extension. Clashes with files already on the disk are left to the
+        script, which never overwrites (mv -n)."""
         folder = f"{self.adjust.destination}/{self.adjust.folder(category)}"
         folder += f"/{year}" if year else ""
         folder += f"/{sub}" if sub else ""
@@ -624,6 +651,9 @@ class _Planner:
         return target, number > 1
 
     def _move(self, node: _Node, category: str, reason: str) -> None:
+        """Add a move to the plan, in the user's category if they chose one.
+        Photos and videos go into a year: a file's own (from its name, else
+        its date), a folder's most frequent one."""
         chosen = self.adjust.categories.get(node.entry_id)
         if chosen is not None and chosen != category:
             category, reason = chosen, "catégorie choisie par toi"
@@ -658,6 +688,8 @@ class _Planner:
         )
 
     def run(self) -> Plan:
+        """The plan for every child of the chosen folder; a folder already
+        named like the destination stays where it is."""
         for child in self.start.children:
             if child.kind == "dir" and child.name_display == self.adjust.destination:
                 self._keep(child, "dossier de destination")
@@ -666,6 +698,9 @@ class _Planner:
         return self.plan
 
     def _visit(self, node: _Node) -> None:
+        """Decide for one element, the most careful case first: kept, moved
+        whole (file, project or program, homogeneous folder), or opened and
+        its children decided one by one."""
         if node.entry_id in self.adjust.excluded:
             self.plan.kept.append(Kept(self._relative(node), EXCLUDED, node.entry_id))
             return

@@ -94,8 +94,12 @@ def is_generic_name(name: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class Suggestions:
+    """Sub-folders proposed for one category of a plan (D-050). Shown only:
+    nothing reaches the plan until the user accepts it (Adjustments)."""
+
     category: str
     subfolders: tuple[str, ...]
+    """Proposed names, at most MAX_SUBFOLDERS."""
     by_entry: dict[int, str]
     """Entry id -> suggested sub-folder (elements without one are absent)."""
     reasons: Mapping[int, str] = field(default_factory=dict)
@@ -235,6 +239,9 @@ class _ThemeIndex:
 
 @functools.cache
 def _index(themes: tuple[_Theme, ...]) -> _ThemeIndex:
+    """Keyword -> themes, built once per set of themes: exact words, phrases,
+    and words of 5 letters or more also matched as the start of a longer
+    word ("factur" in "facturation")."""
     exact: dict[str, list[int]] = defaultdict(list)
     prefixes: dict[str, list[int]] = defaultdict(list)
     phrases: dict[str, list[int]] = defaultdict(list)

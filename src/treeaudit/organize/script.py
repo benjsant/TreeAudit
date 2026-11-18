@@ -101,6 +101,10 @@ def _created_folders(plan: Plan) -> list[str]:
 
 
 def tidy_script(plan: Plan, folder: str, *, title: str, scan_id: int, date: str) -> str:
+    """The bash script that carries out the plan in ``folder`` (D-041). The
+    user reads and runs it; TreeAudit never does (D-025). A file moves only
+    if its size and date are still those of the analysis, a folder only if
+    it is still a folder; nothing is moved through a link nor overwritten."""
     _check_moves(plan)
     lines = [
         _HEADER.format(title=title, scan_id=scan_id, date=date, folder=_q(folder)),
@@ -119,6 +123,8 @@ def tidy_script(plan: Plan, folder: str, *, title: str, scan_id: int, date: str)
 
 
 def undo_script(plan: Plan, folder: str, *, title: str, scan_id: int, date: str) -> str:
+    """The script that puts everything back, in reverse order, then removes
+    the folders the tidying may have created, only if they are empty."""
     _check_moves(plan)
     lines = [
         _HEADER.format(
