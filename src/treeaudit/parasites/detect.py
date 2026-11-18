@@ -30,12 +30,15 @@ _ENTRY_COLUMNS = (
 
 
 class Band(StrEnum):
+    """Confidence band of a finding, from its percentage (band_of)."""
+
     GREEN = "green"  # rebuildable, deletion very likely safe
     ORANGE = "orange"  # probable, check first
     RED = "red"  # doubtful, do not delete without looking
 
 
 def band_of(confidence: int) -> Band:
+    """Green from GREEN_THRESHOLD, orange from ORANGE_THRESHOLD, red below."""
     if confidence >= GREEN_THRESHOLD:
         return Band.GREEN
     if confidence >= ORANGE_THRESHOLD:
@@ -48,12 +51,17 @@ _BAND_ORDER = {Band.GREEN: 0, Band.ORANGE: 1, Band.RED: 2}
 
 @dataclass(frozen=True, slots=True)
 class EvidenceResult:
+    """One clue of a rule and whether it was found: the confidence is
+    explained clue by clue."""
+
     evidence: Evidence
     matched: bool
 
 
 @dataclass(frozen=True, slots=True)
 class Finding:
+    """An entry a rule recognised, its confidence and everything that explains it."""
+
     rule: Rule
     entry_id: int
     depth: int
@@ -67,10 +75,13 @@ class Finding:
     """Space used by the target, or None if its subtree was not fully scanned."""
     files: int | None
     recreate: Recreate | None
+    """How to build it back, when the rule knows; None otherwise."""
     number: int = 0
+    """Number shown to the user, given by select_findings; 0 before."""
 
     @property
     def band(self) -> Band:
+        """The confidence band of this finding."""
         return band_of(self.confidence)
 
     @property
@@ -84,6 +95,8 @@ def _exists(conn: sqlite3.Connection, sql: str, params: Sequence[object]) -> boo
 
 
 class _Evaluator:
+    """Evaluates the rules of the catalogue on one scan, from the index only."""
+
     def __init__(self, conn: sqlite3.Connection, scan_id: int, rules: Sequence[Rule]) -> None:
         self.conn = conn
         self.scan_id = scan_id
@@ -91,6 +104,8 @@ class _Evaluator:
         self._glob_cache: dict[str, list[sqlite3.Row]] = {}
 
     def candidates(self, rule: Rule) -> Iterable[sqlite3.Row]:
+        """Entries of the right kind whose name the rule targets (exact names,
+        then globs), each once. The start folder (depth 0) is never one."""
         kind = "dir" if rule.target is Target.DIR else "file"
         seen: set[int] = set()
         base = f"SELECT {_ENTRY_COLUMNS} FROM entry WHERE scan_id = ? AND kind = ? AND depth > 0"  # noqa: S608
@@ -165,6 +180,9 @@ class _Evaluator:
         return sql, params
 
     def check(self, evidence: Evidence, row: sqlite3.Row) -> bool:
+        """Whether one clue holds for the entry: a child, a sibling, or the
+        files below it (any of them, any not, or all matching a glob). For
+        "all files", an empty folder does not count as a match."""
         kind = evidence.kind
         if kind in (EvidenceKind.CHILD, EvidenceKind.CHILD_GLOB):
             return self._child(row["entry_id"], evidence.value, kind.is_glob)
@@ -185,6 +203,8 @@ class _Evaluator:
         return bool(total) and total == matching
 
     def size(self, rule: Rule, row: sqlite3.Row) -> tuple[int | None, int | None]:
+        """(disk space, files) of the target; for a folder, its whole subtree.
+        (None, None) when the folder was not walked to the end."""
         if rule.target is Target.FILE:
             return row["allocated_size"], None
         summary = self.conn.execute(
@@ -196,6 +216,8 @@ class _Evaluator:
         return summary["allocated_size"] + row["allocated_size"], summary["files"]
 
     def recreate(self, rule: Rule, row: sqlite3.Row) -> Recreate | None:
+        """The first recreate option whose condition holds (a sibling file such
+        as package.json), or one without condition."""
         for option in rule.recreate:
             if option.when_sibling is None or self._child(
                 row["parent_id"], option.when_sibling, glob=False, exclude=row["entry_id"]
@@ -204,6 +226,8 @@ class _Evaluator:
         return None
 
     def evaluate(self, rule: Rule, row: sqlite3.Row) -> Finding:
+        """Base confidence plus the weight of each clue found, kept between 0
+        and the rule's ceiling (max_confidence)."""
         results = tuple(EvidenceResult(e, self.check(e, row)) for e in rule.evidence)
         score = rule.base + sum(r.evidence.weight for r in results if r.matched)
         size, files = self.size(rule, row)

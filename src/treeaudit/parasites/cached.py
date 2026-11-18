@@ -25,6 +25,8 @@ from treeaudit.scanner.models import ScanStatus
 
 
 def _encode(finding: Finding) -> dict[str, Any]:
+    """A finding as JSON for the cache: the rule by id, raw names in hex
+    (bytes, D-014), the evidence as matched or not, the recreate option by index."""
     rule = finding.rule
     return {
         "rule": rule.id,
@@ -43,6 +45,8 @@ def _encode(finding: Finding) -> dict[str, Any]:
 
 
 def _decode(data: dict[str, Any], rules: dict[str, Rule]) -> Finding:
+    """Inverse of _encode, against the current catalogue. The cache key holds
+    the catalogue's fingerprint, so every rule named here still exists."""
     rule = rules[data["rule"]]
     recreate_index = data["recreate"]
     return Finding(

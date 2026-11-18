@@ -75,6 +75,9 @@ def _why(finding: Finding, *, details: bool) -> str:
 def render_findings(
     findings: Sequence[Finding], *, root_display: str, min_confidence: int, details: bool
 ) -> str:
+    """The findings as text: totals per band, then each one with why, and how
+    to build it back when known. A path that cannot be quoted safely gets no
+    command."""
     lines: list[str] = []
     totals: dict[Band, tuple[int, int]] = {}
     for f in findings:
@@ -120,6 +123,8 @@ def render_selection(
     scanned: str,
     protected: Sequence[str] = (),
 ) -> str:
+    """The cleanup command for the chosen findings, built by shellcmd and
+    never run (D-025); an archive action names its file after the scan."""
     date = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     result = cleanup_command(
         action,

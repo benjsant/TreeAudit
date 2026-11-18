@@ -30,11 +30,16 @@ class RuleError(TreeAuditError):
 
 
 class Target(StrEnum):
+    """What a rule recognises: a folder or a file."""
+
     DIR = "dir"
     FILE = "file"
 
 
 class EvidenceKind(StrEnum):
+    """Where a clue is looked for: a child of the target, a sibling, or the
+    files of its subtree (``all``, ``any``, ``any not`` matching a glob)."""
+
     CHILD = "child"
     CHILD_GLOB = "child_glob"
     SIBLING = "sibling"
@@ -45,11 +50,15 @@ class EvidenceKind(StrEnum):
 
     @property
     def is_glob(self) -> bool:
+        """The value is a glob; otherwise an exact name."""
         return self is not EvidenceKind.CHILD and self is not EvidenceKind.SIBLING
 
 
 @dataclass(frozen=True, slots=True)
 class Evidence:
+    """A clue: found, it adds ``weight`` (possibly negative) to the confidence;
+    ``label`` says it to the user."""
+
     kind: EvidenceKind
     value: str
     weight: int
@@ -58,12 +67,19 @@ class Evidence:
 
 @dataclass(frozen=True, slots=True)
 class Recreate:
+    """A command that builds the target back, shown only (TreeAudit never runs
+    it). ``{name}`` is the only placeholder; ``when_sibling`` limits it to
+    folders next to that file."""
+
     command: str
     when_sibling: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class Rule:
+    """One kind of rebuildable entry (cache, dependencies, build output...),
+    recognised by its names or globs, then scored by its clues (D-023)."""
+
     id: str
     label: str
     target: Target
@@ -140,6 +156,8 @@ _DESTRUCTIVE = frozenset({"rm", "rmdir", "shred", "dd", "mkfs", "truncate", "unl
 
 
 def _check_template(command: str, where: str) -> str:
+    """A recreate command may only use ``{name}``, and never names a privileged
+    or destructive program (checked word by word)."""
     for _, field, _, _ in string.Formatter().parse(command):
         if field is not None and field not in _ALLOWED_PLACEHOLDERS:
             raise _fail(where, f"unknown placeholder {{{field}}} in recreate command")
@@ -162,6 +180,8 @@ def _string_list(table: dict[str, Any], key: str, where: str) -> tuple[str, ...]
 
 
 def _parse_rule(raw: Any, index: int) -> Rule:
+    """One ``[[rule]]`` table, checked field by field: unknown keys, bad
+    names or globs and out-of-range numbers are refused with the rule's id."""
     where = f"rule[{index}]"
     if not isinstance(raw, dict):
         raise _fail(where, "must be a table")
@@ -232,6 +252,7 @@ def _parse_rule(raw: Any, index: int) -> Rule:
 
 
 def parse_rules(raw: dict[str, Any]) -> tuple[Rule, ...]:
+    """The whole catalogue: at least one rule, ids unique. RuleError otherwise."""
     _check_keys(raw, frozenset({"rule"}), "rules")
     items = raw.get("rule", [])
     if not isinstance(items, list) or not items:
