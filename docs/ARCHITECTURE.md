@@ -28,7 +28,7 @@ Deux principes structurent tout le code :
 | `duplicates/` | doublons exacts : lecture sûre, empreintes en étapes, ordre physique, groupes et copie à garder | `reader.py`, `hashing.py`, `placement.py`, `runner.py` (D-015, D-030), `groups.py` (D-026) |
 | `archive/` | archive vérifiée : dossier d'archives, écriture, relecture et comparaison | `destination.py`, `output.py`, `runner.py`, `verify.py` (D-024, D-032) |
 | `similar/` | dossiers presque identiques : paires trouvées par les doublons, comparaison en faits et suppositions, familles | `trees.py` (D-058) |
-| `organize/` | « Ranger » : plan par catégories, ajustements, script de rangement et d'annulation, sous-dossiers par règles | `plan.py`, `script.py` (D-041), `subfolders.py`, `subfolder_bench.py`, `subfolder_cases*.py` (D-050) |
+| `organize/` | « Ranger » : plan par catégories, ajustements, script de rangement et d'annulation, sous-dossiers par règles | `plan.py`, `script.py` (D-041), `subfolders.py` (D-050) ; son banc d'essai est hors du paquet, dans `tools/subfolder_bench/` (D-066) |
 | `projects/` | « Projets et logiciels » : inventaire depuis l'index | `detect.py` (D-044) |
 | `preview/` | aperçu des images : lecture sûre, type reconnu au contenu | `images.py` (D-046) |
 | `web/` | interface web : assemblage, pages, API JSON, exports, tâches de fond, sécurité HTTP | voir [Interface web](#interface-web) |
@@ -138,7 +138,7 @@ Les commandes de recréation viennent du catalogue `rules.toml`, refusé au char
 1. **thèmes** : un index de mots-clés, construit une fois, donne le thème de chaque nom. Un sujet (*Voiture*) compte double face à un type de papier (*Factures*). Un thème qui n'a qu'un membre est laissé à l'étape suivante ;
 2. **mots communs** : parmi le reste, le mot partagé par le plus de noms forme un groupe. Un tas, recalculé paresseusement, évite de tout recompter à chaque groupe.
 
-Un groupe a au moins deux membres et jamais tous. Son nom passe par `clean_folder_name` et `is_generic_name`, comme un nom tapé par l'utilisateur. Chaque proposition porte sa raison, affichée au survol. `subfolder_bench.py` note les règles sur deux jeux : `subfolder_cases.py` (mis de côté, figé avant l'algorithme) et `subfolder_cases_earlier.py` (écrit pour l'IA). Les suggestions de l'IA ont été retirées (D-051) ; elles restent sur la branche `legacy-ai-subfolders`.
+Un groupe a au moins deux membres et jamais tous. Son nom passe par `clean_folder_name` et `is_generic_name`, comme un nom tapé par l'utilisateur. Chaque proposition porte sa raison, affichée au survol. Un banc d'essai de développement, hors du paquet livré (`tools/subfolder_bench/`, D-066), note les règles sur deux jeux : `cases.py` (mis de côté, figé avant l'algorithme) et `cases_earlier.py` (écrit pour l'IA). Il se lance depuis le dépôt : `TREEAUDIT_UID=$(id -u) TREEAUDIT_GID=$(id -g) docker compose -f compose.yaml run --rm dev python -m tools.subfolder_bench`. L'application ne l'importe jamais (`test_architecture.py`), et il obéit aux mêmes règles de code que le paquet (`test_static_code.py`). Les suggestions de l'IA ont été retirées (D-051) ; elles restent sur la branche `legacy-ai-subfolders`.
 
 ## Modèle de données (`db/schema.py`)
 

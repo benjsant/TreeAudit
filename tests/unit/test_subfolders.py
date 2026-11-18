@@ -7,9 +7,9 @@ import time
 
 import pytest
 
+from tools.subfolder_bench.cases import HELDOUT_CASES
+from tools.subfolder_bench.scoring import run_rules_bench
 from treeaudit.organize.plan import DOCUMENTS, MUSIC, PHOTOS, Move, clean_folder_name
-from treeaudit.organize.subfolder_bench import run_rules_bench
-from treeaudit.organize.subfolder_cases import HELDOUT_CASES
 from treeaudit.organize.subfolders import (
     MAX_SUBFOLDERS,
     _splitter,

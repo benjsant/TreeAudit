@@ -226,9 +226,6 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--dupes", action="store_true", help="mesurer aussi les doublons")
     bench.add_argument("--micro", action="store_true", help="et le micro-nettoyage")
 
-    commands.add_parser(
-        "subfolders", help="mesurer les sous-dossiers proposés par les règles (D-050)"
-    )
     commands.add_parser("serve", help="démarrer le serveur web local")
 
     gateway = commands.add_parser(

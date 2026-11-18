@@ -142,3 +142,17 @@ def test_the_checker_sees_the_known_dependencies() -> None:
     known edges, so an empty result cannot pass the tests above."""
     graph = _imports()
     assert "web" in graph["cli"] and "core" in graph["roots"] and "entry" in graph["__main__"]
+
+
+def test_the_application_never_imports_the_development_tools() -> None:
+    """tools/ is not shipped (D-066): an import from it would fail in the
+    AppImage and the Docker image, never in the tests, where it is on the path."""
+    for path in SRC.rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                names = [node.module]
+            elif isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            else:
+                continue
+            assert not any(n == "tools" or n.startswith("tools.") for n in names), path

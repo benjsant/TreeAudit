@@ -648,7 +648,7 @@ Précise la mise en œuvre de D-024.
   - lire le contenu des fichiers (règle de vie privée) ;
   - un modèle de plongements (grosse dépendance, AppImage alourdie), à reconsidérer seulement si les règles plafonnent ;
   - un autre langage : quelques millisecondes pour un dossier courant.
-- **Mesure** : de nouveaux cas (`organize/subfolder_cases.py`, 5 catégories, 70 éléments) ont été écrits et validés dans un commit **avant** l'algorithme. Ils n'ont pas été modifiés depuis.
+- **Mesure** : de nouveaux cas (`organize/subfolder_cases.py`, 5 catégories, 70 éléments, dans `tools/subfolder_bench/` depuis D-066) ont été écrits et validés dans un commit **avant** l'algorithme. Ils n'ont pas été modifiés depuis.
 
   | | Cas mis de côté : score / classement | Cas de l'IA : score / classement | Temps |
   |---|---|---|---|
@@ -667,7 +667,7 @@ Précise la mise en œuvre de D-024.
 
 ## D-051 — L'IA ne propose plus de sous-dossiers (2026-10-30)
 - **Constat** (D-050) : les règles fixes font mieux que l'IA sur les deux jeux de cas (100 % contre 94 %, 99 % contre 92 %), en quelques millisecondes au lieu de 40 s. Elles traitent tous les éléments, et pas seulement les 200 premiers, donnent toujours la même réponse avec sa raison, et marchent sans mode expert. Le seul avantage de l'IA, des noms plus jolis (« Mathématiques » plutôt que « Maths »), se corrige d'un clic.
-- **Décision** : le bouton « 💡 Suggestions de l'IA », sa route d'API (`/organize/suggestions`), sa tâche de fond, `llm/organize.py` et son banc d'essai sont retirés. Les cas écrits pour l'IA sont gardés (`organize/subfolder_cases_earlier.py`) : ils mesurent maintenant les règles.
+- **Décision** : le bouton « 💡 Suggestions de l'IA », sa route d'API (`/organize/suggestions`), sa tâche de fond, `llm/organize.py` et son banc d'essai sont retirés. Les cas écrits pour l'IA sont gardés (`organize/subfolder_cases_earlier.py`, dans `tools/subfolder_bench/` depuis D-066) : ils mesurent maintenant les règles.
 - **Ce que ça retire** : un deuxième chemin pour la même fonction, deux boutons qui se faisaient concurrence, et des noms de fichiers envoyés à un modèle depuis Ranger.
 - **Conservé** : tout l'état d'avant, sur la branche `legacy-ai-subfolders`. Un modèle nettement meilleur pourra y être remesuré sur les mêmes cas avant tout retour.
 - **Mode expert** : il ne sert plus qu'à l'avis sur les éléments à vérifier de « À nettoyer ». Son apport (second jeu : 11/14, 2 réponses dangereuses) sera évalué de la même façon dans une étape séparée.
@@ -807,5 +807,12 @@ Précise la mise en œuvre de D-024.
 - **Décision 1** : les dépendances permises entre paquets sont écrites dans `tests/unit/test_architecture.py`. Le moteur n'importe jamais `web/` ni `cli/`, `core/` ne dépend de rien d'autre, et une nouvelle dépendance s'ajoute exprès. Seul cycle accepté : `db` ↔ `scanner` (le casser demanderait de déplacer les modèles dans `core`, sans gain aujourd'hui).
 - **Décision 2** : la ligne de commande devient le paquet `cli/`, un module par groupe de commandes, avec une table `COMMANDS` à la place d'une chaîne de `if`, une seule boucle « tâche longue + Ctrl+C » et un seul affichage « REFUSÉ ». Aucun changement visible : l'aide des 25 commandes est identique mot pour mot, les mêmes modules sont chargés au démarrage (le serveur web reste chargé à la demande).
 - **L'entrée dans le bac à sable** (`check_write_dir`, `enter_sandbox`) va dans `cli/confinement.py`, isolée des commandes. Pas dans `core/`, contrairement à ce qu'annonçait le plan de l'audit : elle s'appuie sur la validation des racines (`roots/`), et `core/` ne dépend de rien d'autre (décision 1).
-- **Trou de tests comblé** : rien ne vérifiait que les commandes sans configuration (`roots check`, `archive check`, `disks detect`, `subfolders`) entrent dans le bac à sable avant de tourner. Des tests l'exigent ; la suppression de chaque entrée est attrapée.
+- **Trou de tests comblé** : rien ne vérifiait que les commandes sans configuration (`roots check`, `archive check`, `disks detect`, et alors `subfolders`, retirée depuis par D-066) entrent dans le bac à sable avant de tourner. Des tests l'exigent ; la suppression de chaque entrée est attrapée.
 - **Corrigé au passage** : la page de bilan ne cherchait la dernière recherche de doublons que parmi les 500 plus récentes, toutes analyses confondues.
+
+## D-066 — Le banc d'essai des sous-dossiers sort du paquet livré (2026-11-17)
+- **Contexte** : audit du code, étape 4. Le banc d'essai des sous-dossiers par règles (D-050) et ses deux jeux de cas inventés étaient dans `organize/`, avec une commande `treeaudit subfolders`. C'est un outil de développement : il était livré dans l'AppImage et l'image Docker sans servir à l'utilisateur, et absent de la doc utilisateur.
+- **Décision** : il va dans `tools/subfolder_bench/` (`cases.py`, `cases_earlier.py`, `scoring.py`) et se lance depuis le dépôt, dans le conteneur de développement : `python -m tools.subfolder_bench`. La commande `treeaudit subfolders` est retirée. `organize/subfolders.py`, ce que voit l'utilisateur dans Ranger, ne change pas.
+- **Les cas mis de côté restent figés** : déplacés avec `git mv`, identiques octet pour octet depuis leur commit d'avant l'algorithme (75cee7a).
+- **Garde-fous** : `test_architecture.py` refuse tout import de `tools` depuis l'application (il réussirait dans les tests, où le dépôt est sur le chemin, mais échouerait dans l'AppImage) ; `test_static_code.py` applique au banc les mêmes interdits qu'au paquet (ni commande, ni écriture) ; mypy strict le vérifie toujours (`pyproject.toml`). Les deux tests attrapent chacun une mutation.
+- **Vérifié** : la sortie du banc est identique, ligne pour ligne, à celle de l'ancienne commande (hors durée) ; `test_subfolders.py` tourne toujours sur les cas mis de côté.

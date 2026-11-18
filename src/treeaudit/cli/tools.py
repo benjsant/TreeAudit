@@ -1,19 +1,16 @@
-"""Measurements: ``bench`` (numbers only, never a file name) and ``subfolders``
-(the rules for proposed sub-folders, on made-up cases, D-050)."""
+"""Measurement: ``bench``, numbers only, never a file name.
+
+The bench of the proposed sub-folders is a development tool, outside the
+package (tools/subfolder_bench, D-066)."""
 
 from __future__ import annotations
 
 import argparse
 import sys
 import threading
-import time
-from collections.abc import Sequence
 
 from treeaudit.cli.common import EXIT_ERROR, EXIT_OK, load
 from treeaudit.core.sizes import human_size
-from treeaudit.organize.subfolder_bench import BenchResult, case_moves, run_rules_bench
-from treeaudit.organize.subfolder_cases import HELDOUT_CASES as SUBFOLDER_CASES
-from treeaudit.organize.subfolder_cases_earlier import EARLIER_CASES
 from treeaudit.roots.mountinfo import read_mountinfo
 from treeaudit.roots.registry import current_home
 
@@ -90,45 +87,3 @@ def bench(args: argparse.Namespace) -> int:
         "  sync; echo 3 | sudo tee /proc/sys/vm/drop_caches"
     )
     return EXIT_OK
-
-
-def subfolders(args: argparse.Namespace) -> int:
-    """Score the proposed sub-folders on the two sets of made-up cases."""
-    for label, cases in (
-        ("règles, cas mis de côté", SUBFOLDER_CASES),
-        ("règles, cas plus anciens", EARLIER_CASES),
-    ):
-        started = time.monotonic()
-        results = run_rules_bench(cases)
-        _print_subfolder_bench(results, label, time.monotonic() - started)
-    return EXIT_OK
-
-
-def _print_subfolder_bench(results: Sequence[BenchResult], label: str, seconds: float) -> None:
-    """Made-up names only: the cases are synthetic."""
-    for result in results:
-        if result.suggestions is None:
-            print(f"✘ {result.case.name} : erreur : {result.error}")
-            continue
-        found = result.suggestions
-        print(
-            f"{'✔' if result.names_valid else '✘ NOMS INVALIDES'} {result.case.name} : "
-            f"ensemble {result.together[0]}/{result.together[1]}, "
-            f"séparés {result.apart[0]}/{result.apart[1]}, score {result.score:.0%}, "
-            f"classés {result.covered[0]}/{result.covered[1]} ({result.coverage:.0%})"
-            + (f", noms génériques : {', '.join(result.generic)}" if result.generic else "")
-        )
-        names = {m.entry_id: m.source.rsplit("/", 1)[-1] for m in case_moves(result.case)[0]}
-        for sub in found.subfolders:
-            members = [names[e] for e, chosen in sorted(found.by_entry.items()) if chosen == sub]
-            print(f"    {sub} : {' | '.join(members)}")
-        left = [name for e, name in names.items() if e not in found.by_entry]
-        print(f"    (sans sous-dossier) : {' | '.join(left) or '-'}")
-    scores = [r.score for r in results]
-    coverages = [r.coverage for r in results if r.covered[1]]
-    print(
-        f"BILAN rangement {label} : score moyen {sum(scores) / len(scores):.0%}, "
-        f"classement moyen {sum(coverages) / max(len(coverages), 1):.0%}, "
-        f"noms valides {sum(r.names_valid for r in results)}/{len(results)}, "
-        f"{seconds:.3f} s\n"
-    )

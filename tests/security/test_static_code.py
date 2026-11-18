@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "treeaudit"
+# Development tool held to the same rules: it left the package (D-066), not them.
+BENCH = SRC.parents[1] / "tools" / "subfolder_bench"
 
 # Relative to src/treeaudit; entries ending with "/" allow a whole package.
 # These modules only write inside the data directory, except archive/output.py,
@@ -190,6 +192,15 @@ def _sources() -> list[Path]:
 def test_no_command_execution_or_file_modification(path: Path) -> None:
     rel = path.relative_to(SRC).as_posix()
     assert find_violations(path.read_text(encoding="utf-8"), rel) == []
+
+
+@pytest.mark.parametrize("path", sorted(BENCH.glob("*.py")), ids=lambda p: p.name)
+def test_the_subfolder_bench_executes_and_modifies_nothing(path: Path) -> None:
+    assert find_violations(path.read_text(encoding="utf-8"), f"tools/{path.name}") == []
+
+
+def test_the_subfolder_bench_is_found() -> None:
+    assert len(list(BENCH.glob("*.py"))) == 5
 
 
 def test_the_sandbox_only_calls_syscall_and_prctl_from_libc() -> None:

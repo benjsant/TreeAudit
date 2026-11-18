@@ -40,6 +40,8 @@ packages = ["src/treeaudit"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --import-mode=importlib"
+# The repository, for the development tools (tools/subfolder_bench, D-066).
+pythonpath = ["."]
 filterwarnings = [
   "error",
   # Starlette asks to move its TestClient from httpx to httpx2; tests only, harmless.
@@ -49,7 +51,7 @@ filterwarnings = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests"]
+src = ["src", "tests", "."]  # "." for the development tools (tools/)
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "S", "SIM", "RUF"]
@@ -62,4 +64,5 @@ select = ["E", "F", "I", "UP", "B", "S", "SIM", "RUF"]
 python_version = "3.12"
 strict = true
 mypy_path = "src"
-packages = ["treeaudit"]
+# The development bench too (D-066): it was type-checked inside the package.
+packages = ["treeaudit", "tools.subfolder_bench"]

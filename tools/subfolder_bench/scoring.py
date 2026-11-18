@@ -4,8 +4,8 @@ A pair of elements from the same expected group should share a suggested
 sub-folder; a pair from different groups should not. The score is the share
 of pairs handled right. A timid method that classifies almost nothing keeps
 pairs apart for free: the coverage (elements of a real group that get a
-sub-folder) and the generic names proposed are reported too. Used for the
-fixed rules and for the local AI alike.
+sub-folder) and the generic names proposed are reported too. The local AI was
+scored the same way, on the branch legacy-ai-subfolders (D-051).
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import combinations
 
+from tools.subfolder_bench.cases import SubfolderCase
 from treeaudit.organize.plan import Move, clean_folder_name
-from treeaudit.organize.subfolder_cases import SubfolderCase
 from treeaudit.organize.subfolders import Suggestions, is_generic_name, propose
 
 

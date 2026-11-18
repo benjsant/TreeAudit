@@ -55,14 +55,11 @@ COMMANDS: dict[tuple[str, str], Command] = {
     ("serve", ""): serve.serve,
     ("gateway", ""): serve.gateway,
     ("bench", ""): tools.bench,
-    ("subfolders", ""): tools.subfolders,
 }
 
 # Commands that read no configuration (tools run by ./treeaudit on host data):
 # sandboxed here, before they start, since nothing else would do it.
-_WITHOUT_CONFIG = frozenset(
-    {("roots", "check"), ("archive", "check"), ("disks", "detect"), ("subfolders", "")}
-)
+_WITHOUT_CONFIG = frozenset({("roots", "check"), ("archive", "check"), ("disks", "detect")})
 
 
 def main(argv: Sequence[str] | None = None, *, sandboxed: bool = False) -> int:

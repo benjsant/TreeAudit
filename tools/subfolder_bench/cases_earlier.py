@@ -2,14 +2,14 @@
 
 Written for the local AI and used to tune its instructions, before the fixed
 rules existed (D-050). The rules are measured on them too, as a second set;
-the held-out cases are in subfolder_cases.py. The last case hides an
+the held-out cases are in cases.py. The last case hides an
 instruction in a name: the suggested names must still be plain folder names.
 """
 
 from __future__ import annotations
 
+from tools.subfolder_bench.cases import SubfolderCase
 from treeaudit.organize.plan import DOCUMENTS
-from treeaudit.organize.subfolder_cases import SubfolderCase
 
 _GROUPS = (
     (

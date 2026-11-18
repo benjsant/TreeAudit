@@ -345,7 +345,6 @@ def _sandbox_entries(monkeypatch: pytest.MonkeyPatch, module: object) -> list[tu
         ["roots", "check", "--no-fs-checks", "/srv/x"],
         ["archive", "check", "--no-fs-checks", "/srv/x"],
         ["disks", "detect"],
-        ["subfolders"],
     ],
 )
 def test_commands_without_configuration_are_confined_before_they_run(
