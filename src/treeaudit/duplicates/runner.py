@@ -63,15 +63,21 @@ class DuplicateAnalysisError(TreeAuditError):
 
 @dataclass(frozen=True, slots=True)
 class DupOptions:
+    """What to look for: a range of sizes, and whether to compare byte by byte
+    after the digests."""
+
     min_size: int = DEFAULT_MIN_SIZE
     max_size: int | None = None
     verify_bytes: bool = False
     micro: bool = False
+    """The search for small files (D-026), shown apart from the others."""
     reuse_digests: bool = True
     """Reuse digests of earlier analyses for files whose inode, size and mtime did not change."""
 
     @classmethod
     def for_micro(cls, verify_bytes: bool = False) -> DupOptions:
+        """The search for small files: every size from 1 byte to just below
+        the usual minimum. Empty files are grouped by area in the report."""
         return cls(min_size=1, max_size=MICRO_MAX_SIZE, verify_bytes=verify_bytes, micro=True)
 
 
@@ -91,6 +97,8 @@ class DupProgress:
 
 @dataclass(frozen=True, slots=True)
 class DupOutcome:
+    """How a run ended, with its counts; ``failure`` says why a failed one broke."""
+
     run_id: int
     status: ScanStatus
     candidates: int
@@ -118,6 +126,10 @@ def _groups(
 
 
 class _Analysis:
+    """The stages of one run, over files of the index. Digests are kept by
+    entry id in ``head``, ``tail`` and ``full``; a file that turns out to be
+    unreliable (changed, unreadable) loses them all and is reported."""
+
     def __init__(
         self,
         reader: TreeReader,
@@ -207,6 +219,8 @@ class _Analysis:
         work: Callable[[dupes.Candidate, int], bytes],
         store: dict[int, bytes],
     ) -> None:
+        """Compute one digest for each file of ``items``, in disk order, and
+        keep it in ``store``; failures are reported by _with_file."""
         self.progress.stage = name
         for candidate in self._ordered(items):
             self._check_cancel()
@@ -230,6 +244,8 @@ class _Analysis:
         return full_digest(fd, candidate.size, cancel=self.cancel, on_read=self._read)
 
     def _verify(self, group: list[dupes.Candidate]) -> None:
+        """Compare each file of a group byte by byte with the first one. A
+        difference despite the same SHA-256 is reported, never ignored."""
         reference = group[0]
         for other in group[1:]:
             self._check_cancel()
@@ -259,6 +275,8 @@ class _Analysis:
                 )
 
     def run(self, candidates: list[dupes.Candidate]) -> None:
+        """All the stages of the module docstring. Each stage reads only the
+        files still tied with another one after the previous stage."""
         # Every stage skips digests already known from an earlier analysis.
         need_head = [c for c in candidates if c.entry_id not in self.head]
         self.progress.stage = "repérage sur le disque"
@@ -293,6 +311,7 @@ class _Analysis:
         )
 
     def hash_rows(self, candidates: list[dupes.Candidate]) -> list[dupes.HashRow]:
+        """The digests to store, for every file that got at least one."""
         return [
             dupes.HashRow(
                 c.entry_id,
@@ -332,6 +351,12 @@ def run_duplicates(
     cancel: threading.Event,
     progress: DupProgress | None = None,
 ) -> DupOutcome:
+    """Search for duplicates among the files of a recorded scan of ``root``.
+
+    The root is validated again, and must still be the folder the scan saw.
+    Raises DuplicateAnalysisError if the scan is unknown or made on another
+    root; everything else ends in an outcome. The caller (execute_duplicates)
+    holds the lock."""
     scan = scans.get_scan(conn, scan_id)
     if scan is None:
         raise DuplicateAnalysisError(f"unknown scan: {scan_id}")

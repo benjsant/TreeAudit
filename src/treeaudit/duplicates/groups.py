@@ -77,16 +77,24 @@ _SUSPICIOUS = (
 
 @dataclass(frozen=True, slots=True)
 class Copy:
+    """One name of a duplicated content. Hard links share ``inode``: removing
+    one of them frees nothing while another name remains."""
+
     entry_id: int
     rel_path: bytes
     rel_path_display: str
     mtime_ns: int
     inode: tuple[int, int]
+    """(device, inode)."""
     protection: str | None = None
+    """Why this copy must stay (software, project, marker file); None if free."""
 
 
 @dataclass(frozen=True, slots=True)
 class DuplicateGroup:
+    """Files with the same content (or, for empty files, in the same area),
+    the copies to keep and why."""
+
     size: int
     digest: bytes | None
     """SHA-256 of the content; None for the group of empty files."""
@@ -99,10 +107,12 @@ class DuplicateGroup:
 
     @property
     def is_empty_files(self) -> bool:
+        """A group of empty files, gathered by area rather than by content."""
         return self.digest is None
 
     @property
     def removable(self) -> tuple[Copy, ...]:
+        """The copies a cleanup command may name: every one not kept."""
         kept = {c.entry_id for c in self.keep}
         return tuple(c for c in self.copies if c.entry_id not in kept)
 
@@ -115,19 +125,29 @@ class DuplicateGroup:
 
     @property
     def inodes(self) -> int:
+        """Distinct files in the group, hard links counted once."""
         return len({c.inode for c in self.copies})
 
 
 @dataclass(frozen=True, slots=True)
 class GroupReport:
+    """The groups of one run, numbered from the most space recoverable (or,
+    for small files, the most copies), with what was left aside."""
+
     groups: list[DuplicateGroup]
     hardlinked_inodes: int
+    """Files of the scan with several names (hard links): never duplicates."""
     protected_copies: int
+    """Copies kept because they belong to software or a project."""
     micro: bool
+    """A search for small files (D-026)."""
     options: dict[str, object] = field(default_factory=dict)
 
 
 def suspicious_reasons(path: str) -> list[str]:
+    """Hints in a path that it is a copy (« copie », « (1) », backup,
+    Downloads...): such copies are proposed for removal first. Only a
+    preference between copies, never a decision on what may be read."""
     return [label for pattern, label in _SUSPICIOUS if pattern.search(path)]
 
 
@@ -174,6 +194,9 @@ def repo_dirs_of(conn: sqlite3.Connection, scan_id: int) -> set[bytes]:
 
 
 def protection_reason(rel_path: bytes, repo_dirs: set[bytes]) -> str | None:
+    """Why a copy must never be proposed for removal: a marker file, a file
+    inside a git repository, or installed software and dependencies. A
+    duplicate there is expected; removing it would break the program."""
     parent, _, name = rel_path.rpartition(b"/")
     if name in PROTECTED_NAMES:
         return f"fichier-marqueur {name.decode('utf-8', 'backslashreplace')}"
@@ -221,6 +244,10 @@ def _make_group(size: int, digest: bytes | None, copies: list[Copy]) -> Duplicat
 
 
 def load_groups(conn: sqlite3.Connection, run_id: int) -> GroupReport:
+    """The groups of a run, rebuilt from the index (digests, never contents).
+
+    Every name of a duplicated inode is a copy. Groups where nothing could be
+    removed are dropped. KeyError for an unknown run."""
     run = conn.execute("SELECT scan_id, options FROM dup_run WHERE id = ?", (run_id,)).fetchone()
     if run is None:
         raise KeyError(run_id)

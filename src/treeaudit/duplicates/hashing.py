@@ -52,6 +52,8 @@ def head_digest(fd: int, size: int) -> tuple[bytes, int]:
 
 
 def tail_digest(fd: int, size: int) -> tuple[bytes, int]:
+    """Digest of the last EDGE_SIZE bytes, bytes read. Only for files that are
+    not small: their head digest already covers the whole content."""
     data = _read_exactly(fd, EDGE_SIZE, size - EDGE_SIZE)
     return hashlib.sha256(data).digest(), len(data)
 

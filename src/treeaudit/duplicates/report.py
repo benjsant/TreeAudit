@@ -32,6 +32,8 @@ EMPTY_WARNING = (
 
 
 def render_groups(report: GroupReport, *, limit: int, copies: int = 10) -> str:
+    """The groups as text for the terminal: at most ``limit`` groups and
+    ``copies`` copies per group, the copy kept marked ★, protected ones 🔒."""
     groups = report.groups
     removable = sum(len(g.removable) for g in groups)
     recoverable = sum(g.recoverable for g in groups)
@@ -142,6 +144,9 @@ def render_command(
     scanned: str,
     protected: Sequence[str] = (),
 ) -> str:
+    """The cleanup command for the removable copies of ``groups``, with what
+    it frees and every copy left out, and why. Built by shellcmd: TreeAudit
+    never runs it (D-025)."""
     targets: list[Copy] = [c for g in groups for c in g.removable]
     result = cleanup_command(action, targets, root_display, scanned=scanned, protected=protected)
     freed = sum(g.recoverable for g in groups)

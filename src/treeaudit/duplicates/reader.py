@@ -43,6 +43,8 @@ class Expected:
     mtime_ns: int
 
     def matches(self, st: os.stat_result) -> bool:
+        """Still the same regular file, unchanged: same inode, size and
+        modification time to the nanosecond."""
         return (
             stat.S_ISREG(st.st_mode)
             and st.st_dev == self.dev
@@ -91,6 +93,7 @@ class TreeReader:
 
     @property
     def open_descriptors(self) -> int:
+        """Directories held open right now (for tests: the count stays bounded)."""
         return len(self._stack)
 
     def _truncate(self, keep: int) -> None:
