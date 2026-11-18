@@ -653,14 +653,17 @@ class _Planner:
     def _move(self, node: _Node, category: str, reason: str) -> None:
         """Add a move to the plan, in the user's category if they chose one.
         Photos and videos go into a year: a file's own (from its name, else
-        its date), a folder's most frequent one."""
+        its date), a folder's most frequent one; none for a folder without
+        any photo or video (the user put it there)."""
         chosen = self.adjust.categories.get(node.entry_id)
         if chosen is not None and chosen != category:
             category, reason = chosen, "catégorie choisie par toi"
         year: int | None = None
         if category in BY_YEAR:
             if node.kind == "dir":
-                year = node.years.most_common(1)[0][0] or None
+                # No photo nor video inside (a folder the user put here): no year.
+                common = node.years.most_common(1)
+                year = (common[0][0] or None) if common else None
             else:
                 found, from_name = _photo_year(node.name_display, node.mtime_ns)
                 year = found or None

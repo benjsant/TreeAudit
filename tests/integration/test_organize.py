@@ -301,6 +301,33 @@ def test_adjusted_plan_and_scripts(
     assert not (messy / "Classement").exists()
 
 
+def test_a_folder_without_photos_put_in_photos_gets_no_year(
+    tmp_path: Path, messy: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    """A project or a folder of documents put in Photos or Videos by the user
+    has no year to go by: it goes into the category itself (it crashed)."""
+    from treeaudit.organize.plan import Adjustments
+
+    plan, scan_id = scan_and_plan(tmp_path, messy, data_disk_table)
+    ids = {move.source: move.entry_id for move in plan.moves}
+    adjust = Adjustments(
+        categories={ids["Jeux/Steam"]: "Photos", ids["Bazar/Sous dossier"]: "Vidéos"}
+    )
+    conn = connect(str(tmp_path / "data"))
+    try:
+        start = conn.execute(
+            "SELECT entry_id FROM entry WHERE scan_id = ? AND depth = 0", (scan_id,)
+        ).fetchone()[0]
+        adjusted = make_plan(conn, scan_id, start, adjust)
+    finally:
+        conn.close()
+    moves = {move.source: move for move in adjusted.moves}
+    assert moves["Jeux/Steam"].target == f"{DESTINATION}/Photos/Steam"
+    assert moves["Bazar/Sous dossier"].target == f"{DESTINATION}/Vidéos/Sous dossier"
+    # A real album keeps its year.
+    assert moves["Vacances Bretagne"].target == f"{DESTINATION}/Photos/2019/Vacances Bretagne"
+
+
 def test_a_name_alone_never_makes_a_program(
     tmp_path: Path, data_disk_table: Callable[..., MountTable]
 ) -> None:
