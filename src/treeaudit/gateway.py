@@ -23,6 +23,8 @@ BUFFER_SIZE = 64 * 1024
 
 @dataclass(frozen=True, slots=True)
 class GatewayConfig:
+    """Where the relay listens, its one upstream, and its limits."""
+
     listen_host: str
     listen_port: int
     upstream_host: str
@@ -72,6 +74,7 @@ class Relay:
     async def handle(
         self, client_reader: asyncio.StreamReader, client_writer: asyncio.StreamWriter
     ) -> None:
+        """One client connection: refused beyond ``max_connections``, relayed otherwise."""
         if self._active >= self.config.max_connections:
             logger.warning("connection limit (%d) reached, refusing", self.config.max_connections)
             await _close(client_writer)
@@ -85,6 +88,8 @@ class Relay:
     async def _relay(
         self, client_reader: asyncio.StreamReader, client_writer: asyncio.StreamWriter
     ) -> None:
+        """Connect to the upstream, then copy both directions until each one
+        ends or stays idle; both connections are closed in every case."""
         cfg = self.config
         try:
             upstream_reader, upstream_writer = await asyncio.wait_for(
@@ -123,6 +128,7 @@ async def start_gateway(config: GatewayConfig, *, container_mode: bool) -> async
 
 
 async def serve_gateway(config: GatewayConfig, *, container_mode: bool) -> None:
+    """Start the relay and serve until the process is stopped."""
     server = await start_gateway(config, container_mode=container_mode)
     async with server:
         await server.serve_forever()

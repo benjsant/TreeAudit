@@ -21,6 +21,8 @@ from treeaudit.organize.subfolders import Suggestions, is_generic_name, propose
 
 @dataclass(frozen=True, slots=True)
 class BenchResult:
+    """The score of the rules on one case, and what they proposed."""
+
     case: SubfolderCase
     suggestions: Suggestions | None
     error: str | None
@@ -36,10 +38,12 @@ class BenchResult:
 
     @property
     def coverage(self) -> float:
+        """Share of the elements of a real group that got a sub-folder."""
         return self.covered[0] / self.covered[1] if self.covered[1] else 0.0
 
     @property
     def score(self) -> float:
+        """Share of the pairs handled right: together when they should be, apart otherwise."""
         done = self.together[0] + self.apart[0]
         total = self.together[1] + self.apart[1]
         return done / total if total else 0.0
@@ -70,6 +74,7 @@ def case_moves(case: SubfolderCase) -> tuple[list[Move], dict[int, int]]:
 
 
 def score(case: SubfolderCase, group_of: dict[int, int], found: Suggestions) -> BenchResult:
+    """Score the proposals against the expected groups, pair by pair."""
     together = apart = together_total = apart_total = 0
     for first, second in combinations(group_of, 2):
         a, b = found.by_entry.get(first), found.by_entry.get(second)
@@ -96,6 +101,7 @@ def score(case: SubfolderCase, group_of: dict[int, int], found: Suggestions) -> 
 
 
 def run_rules_bench(cases: Sequence[SubfolderCase]) -> list[BenchResult]:
+    """Run the rules (organize.subfolders.propose) on every case and score them."""
     results = []
     for case in cases:
         moves, group_of = case_moves(case)

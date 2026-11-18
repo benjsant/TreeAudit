@@ -27,6 +27,7 @@ SEED = 20261020
 
 
 def touch(path: Path, content: bytes = b"") -> None:
+    """Write a small file, creating its folders."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
 
@@ -54,6 +55,7 @@ def wide_directory(base: Path, scale: float) -> None:
 
 
 def deep_directory(base: Path) -> None:
+    """120 nested folders: the walk must stay iterative and bounded."""
     path = base / "deep"
     for level in range(120):
         path = path / f"level{level}"
@@ -62,6 +64,8 @@ def deep_directory(base: Path) -> None:
 
 
 def odd_names(base: Path) -> None:
+    """Names that break naive code: control characters, a leading dash, two
+    Unicode forms of one name, HTML and shell syntax, invalid UTF-8 (D-014)."""
     folder = base / "odd names"
     for name in [
         "with space.txt",
@@ -83,6 +87,8 @@ def odd_names(base: Path) -> None:
 
 
 def links_and_specials(base: Path) -> None:
+    """Links (to a file, outside, broken, looping), a hard link, a fifo and a
+    sparse file: none may be followed, opened or counted twice."""
     folder = base / "links"
     folder.mkdir(parents=True)
     (folder / "target.txt").write_bytes(b"target")
@@ -136,6 +142,7 @@ def parasite_directories(base: Path) -> None:
 
 
 def duplicates(base: Path) -> None:
+    """Identical files under copy-like paths, for the duplicate search."""
     content = b"identical content " * 10
     copies = ["docs/report-final.pdf", "backup/2024/report-final.pdf", "old/copy of report.pdf"]
     for where in copies:
@@ -199,6 +206,7 @@ def heavy_files(base: Path, rng: random.Random, megabytes: int) -> None:
 
 
 def main() -> int:
+    """Generate the tree in an empty or new folder; 2 if it is not empty."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("target", type=Path)
     parser.add_argument("--scale", type=float, default=1.0)

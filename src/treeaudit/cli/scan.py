@@ -234,6 +234,8 @@ def scan_parasites(args: argparse.Namespace) -> int:
 
 
 def _filter_spec(args: argparse.Namespace) -> FilterSpec:
+    """The search criteria of ``treeaudit search``, checked like the web
+    form's: FilterError for an unknown kind, extension list or size."""
     from treeaudit.filters.spec import (
         EntryKindFilter,
         FilterError,

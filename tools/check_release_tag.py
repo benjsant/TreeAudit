@@ -43,6 +43,8 @@ def written_versions(repo: Path = REPO) -> tuple[str, str]:
 
 
 def main(argv: list[str]) -> int:
+    """0 if the tag is a plain version tag naming the version of the code,
+    1 otherwise (with the reason), 2 on a wrong usage."""
     if len(argv) != 1:
         print("usage: check_release_tag.py vX.Y.Z[-rc.N]", file=sys.stderr)
         return 2

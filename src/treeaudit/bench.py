@@ -34,8 +34,12 @@ def _io_counters() -> dict[str, int]:
 
 @dataclass(frozen=True, slots=True)
 class Measure:
+    """What one piece of work cost: numbers only, never a file name."""
+
     wall: float
+    """Elapsed seconds."""
     cpu: float
+    """Processor seconds, user and system."""
     peak_rss_mib: int
     """Peak resident memory of the whole process so far (MiB)."""
     storage_read: int | None
@@ -44,6 +48,8 @@ class Measure:
 
 
 def measure[T](work: Callable[[], T]) -> tuple[T, Measure]:
+    """Run ``work`` and measure it. The disk counters come from
+    /proc/self/io; they are None where it cannot be read."""
     before_io = _io_counters()
     before = resource.getrusage(resource.RUSAGE_SELF)
     start = time.monotonic()

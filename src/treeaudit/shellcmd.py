@@ -67,6 +67,8 @@ class UnsafeTarget(ValueError):
 
 
 class Action(StrEnum):
+    """What a proposed cleanup command does. TreeAudit only writes it down."""
+
     TRASH = "trash"  # reversible: moves to the desktop trash
     DELETE = "delete"  # permanent
     ARCHIVE = "archive"  # copy into a .tar.gz, the original is left untouched
@@ -76,10 +78,14 @@ class CommandTarget(Protocol):
     """Anything that designates one entry of a root by its relative path."""
 
     @property
-    def rel_path(self) -> bytes: ...
+    def rel_path(self) -> bytes:
+        """Raw path relative to the root, as on disk (D-014)."""
+        ...
 
     @property
-    def rel_path_display(self) -> str: ...
+    def rel_path_display(self) -> str:
+        """Printable form of the same path."""
+        ...
 
 
 def is_displayable(raw: bytes) -> bool:
@@ -92,10 +98,13 @@ def is_displayable(raw: bytes) -> bool:
 
 
 def safe_root(root_display: str) -> bool:
+    """The root can be written in a command: absolute and displayable."""
     return root_display.startswith("/") and is_displayable(root_display.encode())
 
 
 def host_path(root_display: str, rel_path_display: str) -> str:
+    """Absolute path of an entry as the user knows it: the root's shown path
+    joined with the entry's path relative to it."""
     root = root_display.rstrip("/") or "/"
     if not rel_path_display:
         return root
@@ -173,6 +182,8 @@ def verify_command(
 
 @dataclass(frozen=True, slots=True)
 class CleanupCommand[T: CommandTarget]:
+    """A proposed command and the targets it leaves out, with why."""
+
     text: str | None
     """The command, or None if no selected target can be given one."""
     skipped: tuple[T, ...]
