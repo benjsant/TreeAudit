@@ -48,6 +48,9 @@ VOLATILE_FS_TYPES = frozenset({"tmpfs", "ramfs"})
 
 
 class ArchiveDirReason(StrEnum):
+    """Why the archive folder is refused, explained by ARCHIVE_DIR_MESSAGES.
+    ``not_configured`` only means archiving is off: it is not an error."""
+
     NOT_CONFIGURED = "not_configured"
     NOT_ABSOLUTE = "not_absolute"
     NOT_NORMALIZED = "not_normalized"
@@ -143,10 +146,12 @@ class ArchiveDirStatus:
 
     @property
     def enabled(self) -> bool:
+        """Archives may be written: a folder is configured and passed every check."""
         return self.path is not None and self.reason is None
 
     @property
     def message(self) -> str | None:
+        """Why archiving is off, in words for the user; None when enabled."""
         return None if self.reason is None else ARCHIVE_DIR_MESSAGES[self.reason]
 
 
@@ -213,6 +218,8 @@ def _check_path_string(path: str) -> None:
 
 
 def _check_filesystem(path: str) -> None:
+    """An existing real directory, reached without any symbolic link, that this
+    account may write into. Checked again by the runner just before writing."""
     try:
         info = os.lstat(path)
     except FileNotFoundError as exc:

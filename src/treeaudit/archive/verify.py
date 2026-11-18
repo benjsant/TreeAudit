@@ -65,17 +65,21 @@ class Manifest:
         self._data = bytearray()
 
     def add(self, value: bytes) -> None:
+        """Append the fingerprint of the next member."""
         self._data += value
 
     def __len__(self) -> int:
         return len(self._data) // FINGERPRINT_SIZE
 
     def get(self, index: int) -> bytes:
+        """Fingerprint of the member at ``index``, in writing order."""
         return bytes(self._data[index * FINGERPRINT_SIZE : (index + 1) * FINGERPRINT_SIZE])
 
 
 @dataclass(frozen=True, slots=True)
 class VerifyResult:
+    """Whether the archive read back matches the manifest, member by member."""
+
     ok: bool
     members: int
     problem: str | None = None

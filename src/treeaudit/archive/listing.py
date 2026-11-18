@@ -16,6 +16,8 @@ _SUFFIXES = tuple(compression.suffix for compression in Compression)
 
 @dataclass(frozen=True, slots=True)
 class ArchiveFile:
+    """One archive found in the archive folder."""
+
     name: str
     """Printable name (D-014)."""
     size: int
@@ -23,13 +25,17 @@ class ArchiveFile:
 
     @property
     def incomplete(self) -> bool:
+        """Published with some files missing: the runner marks the name so."""
         return "-INCOMPLET." in self.name
 
 
 @dataclass(frozen=True, slots=True)
 class ArchiveListing:
+    """What the archive folder holds: at most ``limit`` archives, newest first."""
+
     files: tuple[ArchiveFile, ...]
     total: int
+    """Archives found, including those beyond the limit."""
     unfinished: int
     """Hidden temporary files left by an interrupted archive (power cut...)."""
 

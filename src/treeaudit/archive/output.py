@@ -45,11 +45,14 @@ _NO_LINK_ERRNOS = frozenset(
 
 
 class Compression(StrEnum):
+    """Compression of the archive: gzip (fast) or xz (smaller, slower)."""
+
     GZ = "gz"
     XZ = "xz"
 
     @property
     def suffix(self) -> str:
+        """File name ending: ``.tar.gz`` or ``.tar.xz``."""
         return f".tar.{self.value}"
 
 
@@ -104,11 +107,14 @@ class ArchiveOutput:
 
     @property
     def dir_fd(self) -> int:
+        """Descriptor of the archive folder: every name is resolved against it."""
         if self._dir_fd is None:
             raise OutputError("archive directory is not open")
         return self._dir_fd
 
     def directory_identity(self) -> tuple[int, int]:
+        """(device, inode) of the folder actually open, to compare with the
+        validated one and to keep it out of the archived folder."""
         st = os.fstat(self.dir_fd)
         return (st.st_dev, st.st_ino)
 
@@ -161,6 +167,7 @@ class ArchiveOutput:
             compressor.close()  # does not close the underlying file
 
     def close_file(self) -> None:
+        """Close the compressor, then the temporary file. Harmless if already closed."""
         try:
             self._close_compressor()
         finally:
@@ -291,7 +298,11 @@ class ArchiveOutput:
 
 
 class Content(Protocol):
-    def read(self, size: int, /) -> bytes: ...
+    """Where a member's content comes from (a HashingReader)."""
+
+    def read(self, size: int, /) -> bytes:
+        """At most ``size`` bytes; fewer only at the end of the content."""
+        ...
 
 
 class TarStream:

@@ -73,6 +73,11 @@ _WHOLE_DISK = re.compile(r"^(/dev/(?:nvme\d+n\d+|mmcblk\d+|[a-z]+))(?:p?\d+)?$")
 
 
 class ArchiveStatus(StrEnum):
+    """How an archive ended (D-012). ``complete``: every file copied and the
+    archive verified. ``incomplete``: verified and published, but some files
+    could not be copied (the name says INCOMPLET). ``cancelled`` and ``failed``
+    publish nothing: the temporary file is removed."""
+
     COMPLETE = "complete"
     INCOMPLETE = "incomplete"
     CANCELLED = "cancelled"
@@ -80,6 +85,8 @@ class ArchiveStatus(StrEnum):
 
 
 class Stage(StrEnum):
+    """Progress step shown while an archive runs."""
+
     PREPARING = "preparing"
     WRITING = "writing"
     VERIFYING = "verifying"
@@ -88,6 +95,8 @@ class Stage(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ArchiveRequest:
+    """What to archive: a folder of a root (``subpath``, relative) and how."""
+
     root: RootConfig
     subpath: str = ""
     compression: Compression = Compression.GZ
@@ -112,6 +121,8 @@ class ArchiveProgress:
 
 @dataclass(frozen=True, slots=True)
 class ArchiveProblem:
+    """A file or folder that is missing or uncertain in the archive, and why."""
+
     path: str
     """Path relative to the root, printable (D-014)."""
     message: str
@@ -119,6 +130,9 @@ class ArchiveProblem:
 
 @dataclass(slots=True)
 class ArchiveOutcome:
+    """How an archive ended. Only the first MAX_LISTED_PROBLEMS problems are
+    kept; ``problem_count`` counts them all."""
+
     status: ArchiveStatus
     archive_name: str | None = None
     archive_dir_shown: str | None = None
@@ -133,6 +147,8 @@ class ArchiveOutcome:
 
     @property
     def archive_path_shown(self) -> str | None:
+        """Where the published archive is, as the user knows the folder; None
+        when nothing was published."""
         if self.archive_name is None or self.archive_dir_shown is None:
             return None
         return self.archive_dir_shown.rstrip("/") + "/" + self.archive_name
@@ -241,6 +257,10 @@ _REFUSED_INSIDE = {
 
 
 class _ArchiveJob:
+    """One archive, from measuring to publishing (steps 2 to 6 of the module
+    docstring). The archive folder, the root and the lock are checked by
+    ``execute_archive`` before it is built."""
+
     def __init__(
         self,
         *,
@@ -300,6 +320,9 @@ class _ArchiveJob:
     # --- steps --------------------------------------------------------------
 
     def run(self, now: datetime) -> ArchiveOutcome:
+        """Measure, check the space, write, verify, publish. Nothing is
+        published unless the verification passed; otherwise the temporary
+        file is removed. ``now`` dates the archive's name."""
         if not self._measure():
             self.progress.stage = Stage.DONE
             return self.outcome
@@ -386,6 +409,10 @@ class _ArchiveJob:
     def _write(
         self, output: ArchiveOutput, partial: str, archive_dir_id: tuple[int, int]
     ) -> Manifest:
+        """Second walk: write every entry into the temporary archive and
+        return the fingerprints of what was written, for the verification.
+        Files are read through TreeReader, which checks each one is still the
+        file the walk saw. What cannot be read becomes a problem, not a failure."""
         self.progress.stage = Stage.WRITING
         manifest = Manifest()
         top = self._top_name()
@@ -449,6 +476,8 @@ class _ArchiveJob:
         name: bytes,
         archive_dir_id: tuple[int, int],
     ) -> None:
+        """One member: a folder, a link (its target only, never followed) or a
+        file. Special files (fifo, socket, device) are listed as problems."""
         self.progress.entries_done += 1
         if record.kind is EntryKind.DIR:
             if (record.dev, record.ino) == archive_dir_id:
@@ -475,6 +504,9 @@ class _ArchiveJob:
         record: EntryRecord,
         name: bytes,
     ) -> None:
+        """Copy one file. The fingerprint is that of the bytes written, so the
+        verification checks the archive, while the problems say whether
+        those bytes are the file's: changed, replaced or partly unreadable."""
         expected = Expected(record.dev, record.ino, record.size, record.mtime_ns)
         try:
             fd = reader.open_file(record.rel_path, expected)
@@ -504,6 +536,8 @@ class _ArchiveJob:
             os.close(fd)
 
     def _verify(self, output: ArchiveOutput, manifest: Manifest) -> bool:
+        """Read the temporary archive back and compare each member with the
+        manifest. False, with the reason in the outcome, on any difference."""
         self.progress.stage = Stage.VERIFYING
         fd = output.open_partial_for_reading()
         try:

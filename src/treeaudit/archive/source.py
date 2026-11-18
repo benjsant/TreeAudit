@@ -1,6 +1,6 @@
 """Reading a source file into the archive, hashing exactly what is archived.
 
-tarfile writes a member header (with its size) before copying the content, so
+A tar member header (with its size) is written before the content (TarStream), so
 the content must have exactly that size. If the file shrinks or a read fails
 (bad sector on an old disk), the missing bytes are replaced by zeros to keep
 the archive readable, and the failure is recorded: the caller then reports the
@@ -24,7 +24,7 @@ class CancelledError(Exception):
 
 
 class HashingReader:
-    """Minimal file object for ``TarFile.addfile``: reads ``size`` bytes of ``fd``."""
+    """Minimal file object for ``TarStream.add``: reads ``size`` bytes of ``fd``."""
 
     def __init__(
         self,
@@ -51,6 +51,8 @@ class HashingReader:
                 os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_SEQUENTIAL)
 
     def read(self, size: int = -1) -> bytes:
+        """Up to ``size`` bytes (all that remain if negative), hashed as they
+        are handed out. Raises CancelledError when the archive is cancelled."""
         if self._cancel.is_set():
             raise CancelledError
         if size < 0:
@@ -71,6 +73,8 @@ class HashingReader:
         return data
 
     def _next_block(self, length: int) -> bytes:
+        """Read the next block. After the first failure nothing more is read
+        from the file: zeros fill the rest, to the declared size."""
         length = min(length, self._remaining)
         block = b""
         if self.failure is None:
