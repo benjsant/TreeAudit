@@ -133,6 +133,40 @@ def test_whole_home_is_refused() -> None:
 
 
 @pytest.mark.parametrize(
+    "path", ["/var/home/me/.local/share/treeaudit/archives", "/var/home/me/Archives"]
+)
+def test_a_folder_of_a_personal_folder_below_var_is_accepted(
+    silverblue_host: MountTable, path: str
+) -> None:
+    """Fedora Silverblue keeps personal folders in /var/home (D-067): archiving
+    was off there, even in the AppImage's default folder."""
+    assert reason_for(path, string_ctx(silverblue_host, home="/var/home/me")) is None
+
+
+@pytest.mark.parametrize(
+    ("path", "home", "reason"),
+    [
+        # Only inside the user's own personal folder.
+        ("/var/home/other/Archives", "/var/home/me", ArchiveDirReason.SYSTEM_PATH),
+        ("/var/home", "/var/home/me", ArchiveDirReason.SYSTEM_PATH),
+        ("/var/home/me", "/var/home/me", ArchiveDirReason.SYSTEM_PATH),
+        # The rest of /var stays refused, wherever the personal folder is.
+        ("/var/lib/archives", "/var/home/me", ArchiveDirReason.SYSTEM_PATH),
+        ("/var/tmp/archives", "/var/home/me", ArchiveDirReason.SYSTEM_PATH),
+        # A personal folder elsewhere in /var (a service account) opens nothing.
+        ("/var/lib/svc/archives", "/var/lib/svc", ArchiveDirReason.SYSTEM_PATH),
+        ("/var/home/me/Archives", "/var/home", ArchiveDirReason.SYSTEM_PATH),
+        # Without a known personal folder, nothing below /var.
+        ("/var/home/me/Archives", None, ArchiveDirReason.SYSTEM_PATH),
+    ],
+)
+def test_var_stays_refused_outside_the_personal_folder(
+    silverblue_host: MountTable, path: str, home: str | None, reason: ArchiveDirReason
+) -> None:
+    assert reason_for(path, string_ctx(silverblue_host, home=home)) is reason
+
+
+@pytest.mark.parametrize(
     ("fs_type", "options", "reason"),
     [
         ("tmpfs", "rw", ArchiveDirReason.VOLATILE_FILESYSTEM),

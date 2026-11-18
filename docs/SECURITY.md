@@ -28,6 +28,7 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - Le dossier de données (index, rapports) doit être hors de toute racine auditée ; l'application refuse de démarrer sinon.
 - Le dossier d'archives, optionnel, est le seul autre endroit où TreeAudit peut écrire, et seulement des archives vérifiées (D-032).
   - Il ne doit chevaucher ni une racine ni le dossier de données, et ne peut être ni un dossier système, ni le dossier personnel entier, ni un système de fichiers en mémoire ou en lecture seule ; sinon, l'archivage est désactivé.
+  - Seule exception aux arborescences système : un dossier situé **dans** le dossier personnel de l'utilisateur quand celui-ci est sous `/var/home` (Fedora Silverblue, Kinoite…). Jamais `/var/home` lui-même, ni le dossier d'un autre utilisateur, ni le reste de `/var` (D-067).
   - En Docker, il est validé sur l'hôte avant d'être monté, en écriture, sous `/archives`, dans le seul conteneur `app`.
 
 ## Traversée des chemins

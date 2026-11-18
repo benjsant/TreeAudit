@@ -36,6 +36,15 @@ BTRFS_HOST = b"""\
 70 60 8:1 / /mnt/backup rw,relatime shared:50 - btrfs /dev/sda1 rw,subvol=/
 """
 
+# Fedora Silverblue / Kinoite: read-only composefs root, /var and the personal
+# folders (/var/home/<user>, /home being a link to it) on btrfs.
+SILVERBLUE_HOST = b"""\
+70 1 0:33 / / ro,relatime shared:1 - overlay composefs ro,lowerdir=/x
+71 70 0:35 /root/ostree/deploy/fedora/var /var rw,relatime shared:5 - btrfs /dev/nvme0n1p3 rw
+72 71 0:35 /home /var/home rw,relatime shared:6 - btrfs /dev/nvme0n1p3 rw,subvol=/home
+73 70 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc rw
+"""
+
 # Inside the TreeAudit container: overlay root, audited folder bind-mounted.
 CONTAINER = b"""\
 500 400 0:60 / / rw,relatime - overlay overlay rw,lowerdir=/l,upperdir=/u,workdir=/w
@@ -54,6 +63,11 @@ def ext4_host() -> MountTable:
 @pytest.fixture
 def btrfs_host() -> MountTable:
     return parse_mountinfo(BTRFS_HOST)
+
+
+@pytest.fixture
+def silverblue_host() -> MountTable:
+    return parse_mountinfo(SILVERBLUE_HOST)
 
 
 @pytest.fixture

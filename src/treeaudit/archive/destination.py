@@ -43,6 +43,10 @@ SYSTEM_TREES = (
     "/var",
 )
 
+# Fedora Silverblue and the other atomic desktops keep personal folders here
+# (/home links to it). Only the user's own personal folder below it is opened.
+VAR_HOMES = "/var/home"
+
 # Filesystems held in memory: an archive written there is lost at shutdown.
 VOLATILE_FS_TYPES = frozenset({"tmpfs", "ramfs"})
 
@@ -157,7 +161,7 @@ class ArchiveDirStatus:
 
 def validate_archive_dir(path: str, ctx: ArchiveDirContext) -> None:
     """Raise ArchiveDirRejectedError if archives may not be written to ``path``."""
-    _check_path_string(path)
+    _check_path_string(path, ctx.home)
     if ctx.home is not None and is_same_or_parent(path, os.path.normpath(ctx.home)):
         raise ArchiveDirRejectedError(ArchiveDirReason.HOME_DIRECTORY, path)
     mount = ctx.mounts.mount_for(path)
@@ -204,17 +208,32 @@ def evaluate_archive_dir(
     )
 
 
-def _check_path_string(path: str) -> None:
+def _check_path_string(path: str, home: str | None) -> None:
+    """Rules on the text of the path: absolute, normalised, outside the system.
+
+    The only folder of a system tree accepted, besides removable media, is one
+    inside the user's personal folder when that folder is below /var/home
+    (D-067): never /var/home itself, another user's folder, nor the rest of /var.
+    """
     if not path.startswith("/"):
         raise ArchiveDirRejectedError(ArchiveDirReason.NOT_ABSOLUTE, path)
     if path.startswith("//") or os.path.normpath(path) != path:
         raise ArchiveDirRejectedError(ArchiveDirReason.NOT_NORMALIZED, path)
     if any(is_same_or_parent(path, forbidden) for forbidden in FORBIDDEN_ROOTS):
         raise ArchiveDirRejectedError(ArchiveDirReason.SYSTEM_PATH, path)
-    if any(is_within(path, tree) for tree in SYSTEM_TREES) and not any(
-        is_within(path, exception) for exception in PSEUDO_TREE_EXCEPTIONS
+    if any(is_within(path, tree) for tree in SYSTEM_TREES) and not (
+        any(is_within(path, exception) for exception in PSEUDO_TREE_EXCEPTIONS)
+        or _inside_personal_folder_below_var(path, home)
     ):
         raise ArchiveDirRejectedError(ArchiveDirReason.SYSTEM_PATH, path)
+
+
+def _inside_personal_folder_below_var(path: str, home: str | None) -> bool:
+    """``path`` lies strictly inside ``home``, itself a folder of /var/home."""
+    if home is None or not home.startswith("/"):
+        return False
+    home = os.path.normpath(home)
+    return home.startswith(VAR_HOMES + "/") and path != home and is_within(path, home)
 
 
 def _check_filesystem(path: str) -> None:
