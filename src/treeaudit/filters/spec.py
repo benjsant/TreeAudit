@@ -64,6 +64,7 @@ class Matcher:
     whole: bool
 
     def __call__(self, text: str) -> bool:
+        """The pattern matches ``text`` (all of it when ``whole``)."""
         if self.whole:
             return self.pattern.fullmatch(text) is not None
         return self.pattern.search(text) is not None

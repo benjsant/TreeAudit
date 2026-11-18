@@ -212,6 +212,8 @@ Ne construis **jamais** de commande à la main : passe par `shellcmd.cleanup_com
 
 `./treeaudit check` lance, dans Docker, `ruff` (lint et format), `mypy` (strict) et `pytest`.
 
+Toute fonction, classe, méthode et tout module public de `src/` et `tools/` a une docstring (règle ruff `D1`) : elle dit pourquoi le code existe et ce qu'il garantit, sans répéter le code. Les tests en sont dispensés, leur nom dit ce qu'ils vérifient ; les cas figés du banc des sous-dossiers aussi (D-066).
+
 | Dossier | Contenu |
 |---|---|
 | `tests/unit/` | fonctions pures : règles, commandes et double vérification, filtres, tailles, validation des racines, montages |

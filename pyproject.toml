@@ -54,11 +54,18 @@ target-version = "py312"
 src = ["src", "tests", "."]  # "." for the development tools (tools/)
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "S", "SIM", "RUF"]
+# D1: every public module, class, function and method has a docstring (only
+# its presence is checked, not its form). __init__ and magic methods are
+# described by their class.
+select = ["E", "F", "I", "UP", "B", "S", "SIM", "RUF", "D1"]
+ignore = ["D105", "D107"]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests legitimately use assert, fixed temporary paths and refused bind addresses.
-"tests/**" = ["S101", "S104", "S108"]
+# Tests legitimately use assert, fixed temporary paths and refused bind addresses;
+# their names say what they check.
+"tests/**" = ["S101", "S104", "S108", "D1"]
+# Held-out cases frozen before the algorithm (D-050, D-066): never edited.
+"tools/subfolder_bench/cases.py" = ["D101"]
 
 [tool.mypy]
 python_version = "3.12"
