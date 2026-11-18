@@ -87,6 +87,31 @@ def test_invalid_rules(overrides: dict[str, Any], message: str) -> None:
         parse_rules({"rule": [rule_table(**overrides)]})
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "sh -c 'rm -rf x'",
+        "/bin/bash -c x",
+        "env rm -rf x",
+        "xargs rm < list",
+        "eval npm ci",
+        "npm ci; rm -rf x",
+        "npm ci | sh",
+        "npm ci & rm x",
+        "npm ci &&& yarn",
+        "echo $(rm x)",
+        "echo `rm x`",
+        "npm ci > /etc/profile",
+        "npm ci\nrm x",
+    ],
+)
+def test_a_recreate_command_cannot_hide_another_one(command: str) -> None:
+    """Only programs run one after the other with "&&": no shell, no
+    indirection, no other shell syntax that could hide a deletion."""
+    with pytest.raises(RuleError, match="recreate command"):
+        parse_rules({"rule": [rule_table(recreate=[{"command": command}])]})
+
+
 def test_duplicate_rule_ids() -> None:
     with pytest.raises(RuleError, match="duplicate"):
         parse_rules({"rule": [rule_table(), rule_table()]})

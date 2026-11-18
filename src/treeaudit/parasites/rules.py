@@ -153,11 +153,21 @@ def _check_glob(value: str, where: str) -> str:
 
 
 _DESTRUCTIVE = frozenset({"rm", "rmdir", "shred", "dd", "mkfs", "truncate", "unlink", "mv", "find"})
+# Programs that run another command given as text: they would hide what runs.
+_INDIRECT = frozenset(
+    {"sh", "bash", "dash", "zsh", "ksh", "fish", "env", "eval", "exec", "xargs", "busybox"}
+)
+# Shell syntax other than "&&": sequences, pipes, background, substitutions,
+# redirections, line breaks.
+_SHELL_SYNTAX = re.compile(r"[;|`$<>\n\r]|(?<!&)&(?!&)|&&&")
 
 
 def _check_template(command: str, where: str) -> str:
-    """A recreate command may only use ``{name}``, and never names a privileged
-    or destructive program (checked word by word)."""
+    """A recreate command may only use ``{name}``, run programs one after the
+    other with ``&&``, and never name a privileged, destructive or indirect
+    program (a shell, env, xargs...) that could run something else."""
+    if _SHELL_SYNTAX.search(command):
+        raise _fail(where, f"shell syntax other than && in recreate command: {command!r}")
     for _, field, _, _ in string.Formatter().parse(command):
         if field is not None and field not in _ALLOWED_PLACEHOLDERS:
             raise _fail(where, f"unknown placeholder {{{field}}} in recreate command")
@@ -166,7 +176,7 @@ def _check_template(command: str, where: str) -> str:
         words = {word.rpartition("/")[2] for word in shlex.split(command)}
     except ValueError as exc:
         raise _fail(where, f"unreadable recreate command: {exc}") from exc
-    forbidden = words & (PRIVILEGED | _DESTRUCTIVE)
+    forbidden = words & (PRIVILEGED | _DESTRUCTIVE | _INDIRECT)
     if forbidden:
         raise _fail(where, f"forbidden program(s) in recreate command: {sorted(forbidden)}")
     return command
