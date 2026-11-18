@@ -43,16 +43,19 @@ router = APIRouter(prefix="/api")
 
 
 def get_config(request: Request) -> AppConfig:
+    """The configuration the server started with (dependency)."""
     config: AppConfig = request.app.state.config
     return config
 
 
 def get_jobs(request: Request) -> JobManager:
+    """The one manager of background jobs (dependency)."""
     jobs: JobManager = request.app.state.jobs
     return jobs
 
 
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:
+    """A connection to the index for this request only, closed after it (dependency)."""
     # FastAPI may open this in one worker thread and run the route in another:
     # found when a gallery asked for many images at once (D-046). The
     # connection belongs to this request alone, used by one thread at a time.
@@ -69,6 +72,8 @@ Jobs = Annotated[JobManager, Depends(get_jobs)]
 
 
 def accepted_root(request: Request, root_id: str) -> RootStatus:
+    """The root, if it is known and accepted right now (disks come and go:
+    the live statuses are read); 404 or 409 otherwise."""
     statuses: dict[str, RootStatus] = request.app.state.statuses
     status = statuses.get(root_id)
     if status is None:
@@ -89,6 +94,8 @@ def browse_root(config: AppConfig, root: RootConfig, path: str) -> Listing:
 
 
 def root_display(config: AppConfig, scan: sqlite3.Row) -> str:
+    """The root of a scan as the user knows it, to write in commands; the
+    recorded path if the root is no longer configured."""
     root = config.get_root(scan["root_id"])
     return root.shown_path if root is not None else str(scan["root_path"])
 
@@ -99,6 +106,8 @@ def folders(
     root_id: Annotated[str, PathParam(pattern=f"^{ROOT_ID_PATTERN.pattern}$")],
     path: Annotated[str, Query(max_length=4096)] = "",
 ) -> dict[str, Any]:
+    """The sub-folders of a folder of an accepted root, for the folder picker.
+    ``path`` is relative to the root and checked like a scan's sub-folder."""
     status = accepted_root(request, root_id)
     try:
         listing = browse_root(get_config(request), status.root, path)
@@ -115,16 +124,21 @@ def folders(
 
 
 class ScanStart(BaseModel):
+    """Body of a new scan: an accepted root and, optionally, one of its sub-folders."""
+
     root_id: RootId
     subpath: str = Field(default="", max_length=4096)
 
 
 class DupesStart(BaseModel):
+    """Body of a new search for duplicates: ``micro`` for small files (D-026)."""
+
     micro: bool = False
 
 
 @router.post("/scans", status_code=202)
 def start_scan(body: ScanStart, request: Request, jobs: Jobs) -> dict[str, Any]:
+    """Start a scan in the background; 409 if another job runs."""
     accepted_root(request, body.root_id)
     try:
         job = jobs.start_scan(body.root_id, body.subpath)
@@ -137,6 +151,7 @@ def start_scan(body: ScanStart, request: Request, jobs: Jobs) -> dict[str, Any]:
 
 @router.post("/scans/{scan_id}/dupes", status_code=202)
 def start_dupes(scan_id: int, body: DupesStart, jobs: Jobs, conn: Db) -> dict[str, Any]:
+    """Start a search for duplicates on a recorded scan; 409 if another job runs."""
     if scans_db.get_scan(conn, scan_id) is None:
         raise HTTPException(404, "scan inconnu")
     try:
@@ -147,12 +162,15 @@ def start_dupes(scan_id: int, body: DupesStart, jobs: Jobs, conn: Db) -> dict[st
 
 
 def archive_enabled(request: Request) -> None:
+    """409 unless the archive folder was accepted at startup (D-032)."""
     status: ArchiveDirStatus = request.app.state.archive_status
     if not status.enabled:
         raise HTTPException(409, f"archivage indisponible : {status.message}")
 
 
 class ArchiveStart(BaseModel):
+    """Body of a new archive: a folder of an accepted root."""
+
     root_id: RootId
     subpath: str = Field(default="", max_length=4096)
 
@@ -202,16 +220,19 @@ def _start_archive(
 
 @router.get("/jobs/current")
 def current_job(jobs: Jobs) -> dict[str, Any]:
+    """The running or last job and its progress; None if there was none."""
     job = jobs.current
     return {"job": None if job is None else job.snapshot()}
 
 
 @router.post("/jobs/current/cancel")
 def cancel_job(jobs: Jobs) -> dict[str, bool]:
+    """Ask the running job to stop; False when nothing runs."""
     return {"cancelled": jobs.cancel()}
 
 
 def refused_warnings(result: CleanupCommand[Any]) -> list[str]:
+    """One line per target the double check refused, with why (shellcmd)."""
     return [
         f"Refusé par la double vérification : {target.rel_path_display or '(dossier analysé)'}"
         f" — {reason}"
@@ -266,6 +287,9 @@ def entry_image(
 
 
 class ParasiteCommand(BaseModel):
+    """Findings chosen by their number, at the same confidence threshold as
+    the page that showed them (the numbers depend on it)."""
+
     numbers: list[int] = Field(min_length=1, max_length=MAX_SELECTION)
     action: Literal["trash", "delete", "archive"] = "trash"
     min_confidence: int = Field(default=30, ge=0, le=100)
@@ -275,6 +299,8 @@ class ParasiteCommand(BaseModel):
 def parasite_command(
     scan_id: int, body: ParasiteCommand, conn: Db, config: Config
 ) -> dict[str, Any]:
+    """The command for the chosen findings, built from the index again: the
+    page only sends numbers, never paths. TreeAudit never runs it (D-025)."""
     scan = scans_db.get_scan(conn, scan_id)
     if scan is None:
         raise HTTPException(404, "scan inconnu")
@@ -302,6 +328,9 @@ def parasite_command(
 
 
 class DupesCommand(BaseModel):
+    """Groups chosen by their number, and the copy to keep where the user
+    picked another one."""
+
     groups: list[int] = Field(min_length=1, max_length=MAX_SELECTION)
     keep: dict[int, int] = Field(default_factory=dict)
     """Group number -> 1-based index of the copy to keep instead of the suggestion."""
@@ -310,6 +339,8 @@ class DupesCommand(BaseModel):
 
 @router.post("/dupes/{run_id}/command")
 def dupes_command(run_id: int, body: DupesCommand, conn: Db, config: Config) -> dict[str, Any]:
+    """The command removing every copy not kept in the chosen groups, built
+    from the index again. Protected copies are always kept."""
     run = dupes_db.get_run(conn, run_id)
     scan = scans_db.get_scan(conn, run["scan_id"]) if run is not None else None
     if run is None or scan is None:
@@ -346,10 +377,14 @@ def dupes_command(run_id: int, body: DupesCommand, conn: Db, config: Config) -> 
 
 
 class BasketBody(BaseModel):
+    """Entries of the basket, by id in one analysis (D-036)."""
+
     entries: list[int] = Field(min_length=1, max_length=MAX_SELECTION)
 
 
 class BasketCommand(BasketBody):
+    """The basket and what to do with it."""
+
     action: Literal["trash", "delete", "archive"] = "trash"
 
 

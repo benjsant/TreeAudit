@@ -39,6 +39,7 @@ class SearchForm(BaseModel):
 
     @property
     def submitted(self) -> bool:
+        """A search was asked: the button, or a simple search typed in."""
         return bool(self.go) or bool(self.q.strip())
 
     @property

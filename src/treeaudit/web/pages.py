@@ -125,6 +125,8 @@ def _number(value: int) -> str:
 
 
 def _environment() -> jinja2.Environment:
+    """The template engine: every value escaped, every name required (a typo
+    in a template is an error, not an empty string), French filters."""
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(TEMPLATES_DIR),
         autoescape=True,  # every template, whatever its extension
@@ -147,6 +149,8 @@ router = APIRouter(default_response_class=HTMLResponse)
 
 
 def render(request: Request, name: str, status_code: int = 200, **context: Any) -> Response:
+    """Render a page with what every page shows: the running job, whether
+    disks and archives are available, whether TreeAudit can be quit."""
     jobs = request.app.state.jobs
     job = jobs.current
     context.setdefault("running_job", job.snapshot() if job is not None and job.running else None)
@@ -162,6 +166,7 @@ def render(request: Request, name: str, status_code: int = 200, **context: Any) 
 
 
 def error_page(request: Request, status_code: int, message: str) -> Response:
+    """The error page; ``message`` is written for the user, in French."""
     return render(request, "error.html", status_code, code=status_code, message=message)
 
 
@@ -200,6 +205,8 @@ def _free_pages(conn: sqlite3.Connection) -> int:
 
 @router.get("/")
 def index(request: Request, conn: Db) -> Response:
+    """Home page: the analyses, the roots refused and why, the index size.
+    The roots are checked again first: a disk may have been plugged in."""
     refresh_roots(request.app)
     config: AppConfig = request.app.state.config
     statuses: dict[str, RootStatus] = request.app.state.statuses
@@ -241,6 +248,8 @@ def new_scan(
     root: Annotated[str | None, Query(pattern=f"^{ROOT_ID_PATTERN.pattern}$")] = None,
     path: Annotated[str, Query(max_length=4096)] = "",
 ) -> Response:
+    """Choose what to analyse: a root (skipped when there is only one), then
+    a folder in it with the folder picker."""
     if root is None:
         refresh_roots(request.app)  # the disks plugged in now (native mode)
     statuses: dict[str, RootStatus] = request.app.state.statuses
@@ -317,6 +326,8 @@ def _refused_disks(request: Request, statuses: dict[str, RootStatus]) -> list[di
 
 @router.get("/archives")
 def archives_page(request: Request, config: Config) -> Response:
+    """« Mes archives »: what the archive folder holds, read without
+    following any link (D-034)."""
     status = request.app.state.archive_status
     listing = None
     if status.enabled and config.archive_dir is not None:
@@ -329,6 +340,7 @@ def archives_page(request: Request, config: Config) -> Response:
 
 @router.get("/jobs/current")
 def job_page(request: Request, jobs: Jobs) -> Response:
+    """The running or last job; its progress is then polled by the page's script."""
     job = jobs.current
     return render(request, "job.html", job=None if job is None else job.snapshot())
 
@@ -624,6 +636,8 @@ def parasites_page(
     config: Config,
     min_confidence: Annotated[int, Query(ge=0, le=100)] = 30,
 ) -> Response:
+    """« À nettoyer »: the parasite findings above a confidence threshold,
+    each with its explanation and, when known, how to build it back."""
     scan = _scan_or_404(conn, scan_id)
     display = root_display(config, scan)
     findings = parasite_findings(conn, scan_id, min_confidence=min_confidence)
@@ -715,6 +729,8 @@ def dupes_page(
     limit: Annotated[int, Query(ge=1, le=10_000)] = 50,
     copies: Annotated[int, Query(ge=1, le=10_000)] = 10,
 ) -> Response:
+    """The duplicate groups of a run, ``limit`` groups and ``copies`` copies
+    per group at most, with the copy suggested for keeping."""
     run = dupes_db.get_run(conn, run_id)
     if run is None:
         raise HTTPException(404, "Cette recherche de doublons n'existe pas.")
@@ -745,6 +761,8 @@ def search_page(
     config: Config,
     form: Annotated[SearchForm, Query()],
 ) -> Response:
+    """The search form and, once submitted, its result. Errors in the criteria
+    (a bad regex...) are shown on the form, never as a server error."""
     scan = _scan_or_404(conn, scan_id)
     result = None
     error = None

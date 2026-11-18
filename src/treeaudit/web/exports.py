@@ -100,6 +100,8 @@ def _scan(conn: Any, scan_id: int) -> Any:
 
 @router.get("/scans/{scan_id}.json")
 def scan_json(scan_id: int, conn: Db) -> Response:
+    """A scan's summary as JSON: its record (without the root's path on this
+    machine), extensions, biggest folders, errors and exclusions."""
     scan = _scan(conn, scan_id)
     return _json(
         f"treeaudit-scan{scan_id}.json",
@@ -128,6 +130,8 @@ def scan_json(scan_id: int, conn: Db) -> Response:
 
 @router.get("/scans/{scan_id}/entries.csv")
 def entries_csv(scan_id: int, conn: Db, config: Config) -> Response:
+    """Every entry of a scan as CSV, paths relative to the root, streamed
+    (millions of rows never sit in memory)."""
     _scan(conn, scan_id)
 
     def rows() -> Iterator[Sequence[Any]]:
@@ -155,6 +159,7 @@ def _parasites(conn: Any, scan_id: int, min_confidence: int) -> list[Any]:
 def parasites_csv(
     scan_id: int, conn: Db, min_confidence: Annotated[int, Query(ge=0, le=100)] = 30
 ) -> Response:
+    """The parasite findings as CSV, numbered as on the page."""
     findings = _parasites(conn, scan_id, min_confidence)
     rows = (
         (
@@ -177,6 +182,7 @@ def parasites_csv(
 def parasites_json(
     scan_id: int, conn: Db, min_confidence: Annotated[int, Query(ge=0, le=100)] = 30
 ) -> Response:
+    """The parasite findings as JSON, with every clue, found or not."""
     findings = _parasites(conn, scan_id, min_confidence)
     return _json(
         f"treeaudit-scan{scan_id}-parasites.json",
@@ -211,6 +217,7 @@ def _dupes(conn: Any, run_id: int) -> Any:
 
 @router.get("/dupes/{run_id}.csv")
 def dupes_csv(run_id: int, conn: Db) -> Response:
+    """One line per copy: its group, digest, and whether it is kept or removable."""
     report = _dupes(conn, run_id)
 
     def rows() -> Iterator[Sequence[Any]]:
@@ -232,6 +239,7 @@ def dupes_csv(run_id: int, conn: Db) -> Response:
 
 @router.get("/dupes/{run_id}.json")
 def dupes_json(run_id: int, conn: Db) -> Response:
+    """The duplicate groups of a run as JSON, with why each copy is kept."""
     report = _dupes(conn, run_id)
     return _json(
         f"treeaudit-dupes{run_id}.json",
@@ -265,6 +273,8 @@ def dupes_json(run_id: int, conn: Db) -> Response:
 
 @router.get("/scans/{scan_id}/search.csv")
 def search_csv(scan_id: int, conn: Db, form: Annotated[SearchForm, Query()]) -> Response:
+    """The results of a search as CSV, up to MAX_SEARCH_EXPORT, with notes
+    when the result is partial or cut."""
     _scan(conn, scan_id)
     try:
         spec = spec_from_form(form)
@@ -292,6 +302,9 @@ def search_csv(scan_id: int, conn: Db, form: Annotated[SearchForm, Query()]) -> 
 def _organize(
     request: Request, conn: Any, config: Any, scan_id: int, dir_id: int | None
 ) -> tuple[Any, str, dict[str, Any], int]:
+    """The plan of the « Ranger » page for a folder, with the user's
+    adjustments from the query, and the folder as the user knows it. Both
+    scripts are built from the same plan, so undoing matches tidying."""
     scan = _scan(conn, scan_id)
     node = (
         queries.start_node(conn, scan_id)
@@ -333,6 +346,7 @@ def organize_script(
     config: Config,
     dir: Annotated[int | None, Query(ge=1)] = None,
 ) -> Response:
+    """Download the tidying script of a folder (D-041); never run by TreeAudit."""
     plan, folder, meta, entry = _organize(request, conn, config, scan_id, dir)
     return _script(tidy_script(plan, folder, **meta), f"treeaudit-ranger-{scan_id}-{entry}.sh")
 
@@ -345,6 +359,8 @@ def organize_undo_script(
     config: Config,
     dir: Annotated[int | None, Query(ge=1)] = None,
 ) -> Response:
+    """Download the script undoing the tidying. It must be asked with the same
+    adjustments as the tidying script: the page builds both links together."""
     plan, folder, meta, entry = _organize(request, conn, config, scan_id, dir)
     return _script(
         undo_script(plan, folder, **meta), f"treeaudit-annuler-rangement-{scan_id}-{entry}.sh"

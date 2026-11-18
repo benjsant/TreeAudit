@@ -45,6 +45,8 @@ logger = logging.getLogger(__name__)
 
 
 class JobKind(StrEnum):
+    """The four kinds of background job: one runs at a time."""
+
     SCAN = "scan"
     DUPES = "dupes"
     ARCHIVE = "archive"
@@ -79,6 +81,9 @@ Outcome = ScanOutcome | DupOutcome | ArchiveOutcome | CompactOutcome
 
 @dataclass(slots=True)
 class Job:
+    """One background job: its progress while it runs, then its outcome, or
+    ``error`` when it could not even start (refused root, lock taken...)."""
+
     id: int
     kind: JobKind
     label: str
@@ -94,6 +99,7 @@ class Job:
 
     @property
     def running(self) -> bool:
+        """Not finished yet, whatever the cancellation asked."""
         return self.finished_at is None
 
     def snapshot(self) -> dict[str, Any]:
@@ -182,6 +188,10 @@ def _error_message(exc: TreeAuditError) -> str:
 
 
 class JobManager:
+    """Starts the jobs of the web interface, one at a time, each in its own
+    thread. The mount table and the personal folder are read again when a
+    job starts: disks may have come or gone since the server started."""
+
     def __init__(
         self,
         config: AppConfig,
@@ -201,6 +211,9 @@ class JobManager:
         job: Job,
         work: Callable[[Job], Outcome],
     ) -> Job:
+        """Run ``work`` in a thread, unless a job is already running (JobError).
+        Whatever happens, the job ends with an outcome or a message for the
+        user; an unexpected exception is logged, never shown in full."""
         with self._lock:
             if self.current is not None and self.current.running:
                 raise JobError("une tâche est déjà en cours ; attends sa fin ou annule-la")
@@ -224,6 +237,8 @@ class JobManager:
         return job
 
     def start_scan(self, root_id: str, subpath: str) -> Job:
+        """Scan a root (or one of its sub-folders), then compute the summaries
+        of its pages in the same job, so the pages open at once."""
         config = self.config  # kept by the job, even if the roots are refreshed meanwhile
         root = config.get_root(root_id)
         if root is None:
@@ -259,6 +274,8 @@ class JobManager:
             conn.close()
 
     def start_dupes(self, scan_id: int, *, micro: bool) -> Job:
+        """Search for duplicates (or for small ones) on a recorded scan, then
+        compute the summary of its page."""
         options = DupOptions.for_micro() if micro else DupOptions()
         label = "Recherche des petits fichiers en double" if micro else "Recherche des doublons"
         progress = DupProgress()
@@ -341,6 +358,7 @@ class JobManager:
         return self._start(job, work)
 
     def cancel(self) -> bool:
+        """Ask the running job to stop at its next check; False if none runs."""
         job = self.current
         if job is None or not job.running:
             return False

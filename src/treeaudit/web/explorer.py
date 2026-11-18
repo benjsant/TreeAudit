@@ -29,6 +29,8 @@ _CHUNK = 500  # SQLite parameters per query, well under its limit
 
 
 class Sort(StrEnum):
+    """Order of a folder's content in the explorer."""
+
     SIZE = "size"
     NAME = "name"
     MTIME = "mtime"
@@ -54,9 +56,11 @@ class Marks:
     copies: int = 0
     """Number of identical files (this one included) in the last duplicate analysis."""
     protection: str | None = None
+    """Why removing it would be a bad idea (project, software, held secrets)."""
 
     @property
     def any(self) -> bool:
+        """At least one badge to show."""
         return self.parasite is not None or self.copies > 1 or self.protection is not None
 
 
@@ -123,6 +127,8 @@ class MarkSource:
         self.holders = _holders(conn, scan_id)
 
     def protection(self, rel_path: bytes, kind: str) -> str | None:
+        """Why an entry should not be removed: it holds TreeAudit's own or
+        private folders, is a git repository, or lies in one or in software."""
         held = self.holders.get(rel_path)
         if held is not None:
             return held
@@ -152,12 +158,16 @@ class MarkSource:
 
 @dataclass(frozen=True, slots=True)
 class Copy:
+    """Another name of the same content, for the details panel."""
+
     entry_id: int
     rel_path_display: str
 
 
 @dataclass(frozen=True, slots=True)
 class Details:
+    """Everything the index knows about one entry, for its details panel."""
+
     entry_id: int
     parent_id: int | None
     depth: int
@@ -181,6 +191,8 @@ class Details:
 
 
 def entry_details(conn: sqlite3.Connection, scan_id: int, entry_id: int) -> Details | None:
+    """Details of one entry from the index, with its badges and, for a file,
+    its other copies (at most MAX_COPIES_SHOWN). None if unknown."""
     row = conn.execute(
         "SELECT * FROM entry WHERE scan_id = ? AND entry_id = ?", (scan_id, entry_id)
     ).fetchone()
@@ -224,6 +236,8 @@ def entry_details(conn: sqlite3.Connection, scan_id: int, entry_id: int) -> Deta
 def _other_copies(
     conn: sqlite3.Connection, scan_id: int, run_id: int, entry: sqlite3.Row
 ) -> tuple[Copy, ...]:
+    """Every other name with the same full digest in the run, hard links of
+    either side included."""
     rows = conn.execute(
         "SELECT DISTINCT e.entry_id, e.rel_path_display FROM entry me "
         "JOIN entry r ON r.scan_id = me.scan_id AND r.dev = me.dev AND r.ino = me.ino "
@@ -244,6 +258,8 @@ def _other_copies(
 
 @dataclass(frozen=True, slots=True)
 class BasketItem:
+    """One entry of the basket, read back from the index."""
+
     entry_id: int
     rel_path: bytes
     rel_path_display: str
@@ -255,6 +271,8 @@ class BasketItem:
 
 @dataclass(frozen=True, slots=True)
 class Basket:
+    """The basket as the index sees it (D-036): the page sends entry ids only."""
+
     items: tuple[BasketItem, ...]
     unknown: tuple[int, ...]
     """Numbers that are not entries of this analysis (another scan, stale page)."""
@@ -265,10 +283,12 @@ class Basket:
 
     @property
     def total(self) -> int:
+        """Space of the items whose size is known."""
         return sum(item.allocated or 0 for item in self.items)
 
     @property
     def unknown_size(self) -> bool:
+        """Some folder was not fully scanned: the total is a lower bound."""
         return any(item.allocated is None for item in self.items)
 
 
@@ -281,6 +301,9 @@ def _ancestors(rel_path: bytes) -> Iterable[bytes]:
 
 
 def resolve_basket(conn: sqlite3.Connection, scan_id: int, entry_ids: Sequence[int]) -> Basket:
+    """Read the basket back from the index: unknown ids set aside, entries
+    inside a selected folder dropped (the folder covers them), the analysed
+    folder itself refused."""
     wanted = sorted(set(entry_ids))
     rows: list[sqlite3.Row] = []
     for chunk in _chunks(wanted):

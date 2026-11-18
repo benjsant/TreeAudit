@@ -12,6 +12,8 @@ MAX_CHILDREN = 300
 
 @dataclass(frozen=True, slots=True)
 class Node:
+    """An entry as the space explorer shows it: the place it uses on the disk."""
+
     entry_id: int
     parent_id: int | None
     name: str
@@ -35,6 +37,9 @@ _NODE_SQL = (
 
 
 def _node(row: sqlite3.Row) -> Node:
+    """A row of _NODE_SQL as a Node. A folder's size is its own plus its
+    subtree's, unknown when it was not walked to the end; a file shows the
+    place it uses, its apparent size kept apart when it is sparse (D-047)."""
     if row["kind"] == "dir":
         size = None if row["subtree"] is None else row["subtree"] + row["allocated_size"]
         files = row["subtree_files"]
@@ -57,11 +62,13 @@ def _node(row: sqlite3.Row) -> Node:
 
 
 def start_node(conn: sqlite3.Connection, scan_id: int) -> Node | None:
+    """The analysed folder itself (depth 0); None for an empty or unknown scan."""
     row = conn.execute(_NODE_SQL + "WHERE e.scan_id = ? AND e.depth = 0", (scan_id,)).fetchone()
     return None if row is None else _node(row)
 
 
 def get_node(conn: sqlite3.Connection, scan_id: int, entry_id: int) -> Node | None:
+    """One entry of a scan; None if unknown."""
     row = conn.execute(
         _NODE_SQL + "WHERE e.scan_id = ? AND e.entry_id = ?", (scan_id, entry_id)
     ).fetchone()
@@ -69,6 +76,7 @@ def get_node(conn: sqlite3.Connection, scan_id: int, entry_id: int) -> Node | No
 
 
 def all_children(conn: sqlite3.Connection, scan_id: int, entry_id: int) -> list[Node]:
+    """Every child of a folder, unsorted and unbounded (``children`` pages them)."""
     rows = conn.execute(
         _NODE_SQL + "WHERE e.scan_id = ? AND e.parent_id = ?", (scan_id, entry_id)
     ).fetchall()
