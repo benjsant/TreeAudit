@@ -282,15 +282,31 @@ def list_scans(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
 
 
 def top_extensions(conn: sqlite3.Connection, scan_id: int, limit: int = 15) -> list[ExtensionStat]:
-    """The extensions that weigh the most, by apparent size. Counted per name:
-    a file with several hard links counts once for each of its names."""
-    rows = conn.execute(
+    """The extensions that weigh the most, by apparent size. As in the totals
+    (D-022), every name counts as a file but a file with several hard links
+    weighs once, under the extension of its first name."""
+    files: dict[str | None, int] = {}
+    sizes: dict[str | None, int] = {}
+    for row in conn.execute(
         "SELECT extension, COUNT(*) AS files, SUM(size) AS logical_size FROM entry "
-        "WHERE scan_id = ? AND kind = 'file' GROUP BY extension "
-        "ORDER BY logical_size DESC, files DESC LIMIT ?",
-        (scan_id, limit),
-    )
-    return [ExtensionStat(r["extension"], r["files"], r["logical_size"] or 0) for r in rows]
+        "WHERE scan_id = ? AND kind = 'file' GROUP BY extension",
+        (scan_id,),
+    ):
+        files[row["extension"]] = row["files"]
+        sizes[row["extension"]] = row["logical_size"] or 0
+    # The other names of a hard-linked file: few, found through the inode index
+    # (left to itself, SQLite took 24 s instead of 0.2 s on 400 000 entries).
+    for row in conn.execute(
+        "SELECT e.extension, SUM(e.size) AS extra FROM entry e "
+        "WHERE e.scan_id = ? AND e.kind = 'file' AND e.nlink > 1 AND EXISTS ("
+        "SELECT 1 FROM entry i INDEXED BY entry_by_inode WHERE i.scan_id = e.scan_id "
+        "AND i.dev = e.dev AND i.ino = e.ino AND i.kind = 'file' AND i.entry_id < e.entry_id) "
+        "GROUP BY e.extension",
+        (scan_id,),
+    ):
+        sizes[row["extension"]] -= row["extra"] or 0
+    ranked = sorted(files, key=lambda ext: (-sizes[ext], -files[ext], ext or ""))
+    return [ExtensionStat(ext, files[ext], sizes[ext]) for ext in ranked[: max(limit, 0)]]
 
 
 def largest_dirs(conn: sqlite3.Connection, scan_id: int, limit: int = 15) -> list[DirStat]:

@@ -108,6 +108,17 @@ def test_extensions_and_largest_dirs(
     assert [d.rel_path_display for d in largest][:1] == ["docs"]
 
 
+def test_extension_sizes_count_a_hard_linked_file_once(
+    conn: sqlite3.Connection, root: Path, ctx: ValidationContext
+) -> None:
+    """Like the totals (D-022): every name is a file, its size counts once."""
+    os.link(root / "photo.JPG", root / "docs" / "photo-again.jpg")
+    row = scan(conn, root, ctx)
+    stats = {s.extension: (s.files, s.logical_size) for s in scans.top_extensions(conn, row["id"])}
+    assert stats["jpg"] == (2, 9000)
+    assert sum(s.logical_size for s in scans.top_extensions(conn, row["id"])) == row["logical_size"]
+
+
 @non_root_only
 def test_permission_error_makes_scan_incomplete(
     conn: sqlite3.Connection, root: Path, ctx: ValidationContext
