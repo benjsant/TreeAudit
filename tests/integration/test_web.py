@@ -819,7 +819,13 @@ def test_invisible_characters_of_a_name_are_shown(client: TestClient, root: Path
     assert client.get("/scan/new?root=main&path=noms").status_code == 200
     # Names the script shows (basket, progress, archive) go through its visible().
     script = client.get("/static/app.js").text
-    for shown in ("visible(item.path)", "visible(p.current_dir)", "visible(problem.path)"):
+    for shown in (
+        "visible(item.path)",
+        "visible(p.current_dir)",
+        "visible(problem.path)",
+        "nom non affichable sans risque) : ${visible(path)}",
+        "⚠ ${visible(warning)}",
+    ):
         assert shown in script
 
 

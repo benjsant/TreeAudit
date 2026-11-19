@@ -491,8 +491,8 @@ function setupCommandBuilders() {
         if (data.outside_green && data.outside_green.length) {
           notes.push(`⚠ Sélection hors du vert (${data.outside_green.join(", ")}) : vérifie ces éléments.`);
         }
-        for (const path of data.skipped || []) notes.push(`⚠ Ignoré (nom non affichable sans risque) : ${path}`);
-        for (const warning of data.warnings || []) notes.push(`⚠ ${warning}`);
+        for (const path of data.skipped || []) notes.push(`⚠ Ignoré (nom non affichable sans risque) : ${visible(path)}`);
+        for (const warning of data.warnings || []) notes.push(`⚠ ${visible(warning)}`);
         for (const note of notes) {
           const item = document.createElement("li");
           item.textContent = note;
