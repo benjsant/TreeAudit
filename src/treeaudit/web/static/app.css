@@ -62,6 +62,9 @@ button:disabled { opacity: .55; cursor: default; }
 .notice.info { color: var(--accent); margin: 0; border-radius: 0; }
 .notice.warn, .warn-text { color: var(--warn); }
 .notice.error, .error-text, .danger { color: var(--bad); }
+.notice > p { margin: 0; }
+.notice .unread { margin-top: .5rem; }
+.notice .unread ul { color: var(--fg); }
 
 /* home */
 .hero { text-align: center; padding: 2.5rem 0 1rem; }

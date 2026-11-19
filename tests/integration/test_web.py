@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import errno
 import io
 import os
 import re
@@ -21,7 +22,7 @@ from treeaudit.db.connection import database_path
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.registry import evaluate_roots
 from treeaudit.roots.validation import RejectReason
-from treeaudit.web import explorer
+from treeaudit.web import explorer, pages
 from treeaudit.web import jobs as jobs_module
 from treeaudit.web.app import create_app
 
@@ -816,6 +817,46 @@ def test_invisible_characters_of_a_name_are_shown(client: TestClient, root: Path
     script = client.get("/static/app.js").text
     for shown in ("visible(item.path)", "visible(p.current_dir)", "visible(problem.path)"):
         assert shown in script
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses permission checks")
+def test_unread_files_are_listed_under_the_warning(
+    client: TestClient, root: Path, scanned: int
+) -> None:
+    """An incomplete search says how many files it could not read, which, and
+    why in words, right under its warning (not only in the technical details)."""
+    locked = root / "photos" / "a.jpg"
+    locked.chmod(0o000)
+    try:
+        snapshot = run_job(client, f"/api/scans/{scanned}/dupes", {"micro": False})
+    finally:
+        locked.chmod(0o644)
+    assert snapshot["status"] == "incomplete"
+    page = client.get(f"/dupes/{snapshot['run_id']}").text
+    assert_safe_html(page)
+    warning = page.split('<div class="notice warn" role="alert">')[1].split("</div>")[0]
+    assert "La recherche n'a pas pu lire 1 fichier(s)" in warning
+    assert "photos/a.jpg" in warning and "accès refusé" in warning
+    # The system's words stay in a tooltip only.
+    assert '<span title="open : Permission denied">accès refusé</span>' in warning
+
+
+@pytest.mark.parametrize(
+    ("operation", "code", "said"),
+    [
+        ("read", errno.EIO, "erreur de lecture : disque débranché ou abîmé ?"),
+        ("open", errno.ENOTCONN, "disque débranché"),
+        (
+            "changed",
+            None,
+            "a changé depuis l'analyse (ou le disque a été débranché) : relance l'analyse",
+        ),
+        ("read", errno.EOVERFLOW, "Value too large"),  # unusual: the system's words
+    ],
+)
+def test_errors_are_said_in_words(operation: str, code: int | None, said: str) -> None:
+    error = {"operation": operation, "errno": code, "message": "Value too large"}
+    assert pages._reason(error) == said
 
 
 def test_basket_content_and_command(client: TestClient, scanned: int) -> None:

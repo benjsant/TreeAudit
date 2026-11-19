@@ -92,7 +92,7 @@
   </table>
   {% if errors %}
     <h3>Éléments inaccessibles ({{ scan.errors }})</h3>
-    <ul class="plain">{% for e in errors %}<li><span class="path">{{ e.rel_path_display or "." }}</span> — {{ e.message }} <code>{{ e.operation }}</code></li>{% endfor %}</ul>
+    <ul class="plain">{% for e in errors %}<li><span class="path">{{ e.rel_path_display or "." }}</span> — <span title="{{ e.operation }} : {{ e.message }}">{{ e | reason }}</span></li>{% endfor %}</ul>
   {% endif %}
   {% if exclusions %}
     <h3>Non parcourus volontairement</h3>

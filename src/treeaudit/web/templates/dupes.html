@@ -8,7 +8,17 @@
   {% if report.groups %}{{ removable }} copie(s) en trop, {{ recoverable | size }} à récupérer. Pour chaque fichier, on garde un exemplaire (★) et tu choisis quels groupes nettoyer.
   {% else %}Aucun doublon à proposer 🎉{% endif %}
 </p>
-{% if run.status != "complete" %}<p class="notice warn" role="alert">La recherche n'a pas pu tout lire : il peut manquer des doublons.</p>{% endif %}
+{% if run.status != "complete" or errors %}
+<div class="notice warn" role="alert">
+  <p>{% if run.errors %}La recherche n'a pas pu lire {{ run.errors | number }} fichier(s){% else %}La recherche s'est arrêtée avant la fin{% endif %} : il peut manquer des doublons.</p>
+  {% if errors %}
+  <details class="unread"><summary>Voir lesquels et pourquoi</summary>
+    <ul class="plain">{% for e in errors %}<li>{{ full_path(prefix, e.rel_path_display) }} — <span title="{{ e.operation }} : {{ e.message }}">{{ e | reason }}</span></li>{% endfor %}</ul>
+    {% if run.errors > errors | length %}<p class="muted">… et {{ (run.errors - errors | length) | number }} autre(s).</p>{% endif %}
+  </details>
+  {% endif %}
+</div>
+{% endif %}
 {% if report.protected_copies %}<p class="muted">🔒 {{ report.protected_copies | number }} copie(s) dans des logiciels, jeux ou projets ne sont jamais proposées : elles sont nécessaires là où elles sont.</p>{% endif %}
 {% if report.groups | selectattr("is_empty_files") | list %}<p class="notice warn">Fichiers vides : ils ne prennent pas de place et certains programmes en ont besoin. Ne les coche que si tu sais à quoi ils servent.</p>{% endif %}
 
@@ -60,6 +70,5 @@
   <summary>Détails techniques</summary>
   <p>Recherche n° {{ run.id }} ({{ run.status | status }}) : {{ run.files_hashed | number }} fichier(s) lus et comparés par empreinte SHA-256. {{ report.hardlinked_inodes }} fichier(s) ont plusieurs noms sur le disque (liens physiques) : ce ne sont pas des doublons.</p>
   <p class="links"><a href="/export/dupes/{{ run.id }}.csv">Exporter (CSV)</a> <a href="/export/dupes/{{ run.id }}.json">Exporter (JSON)</a></p>
-  {% if errors %}<ul class="plain">{% for e in errors %}<li>{{ full_path(prefix, e.rel_path_display) }} — {{ e.message }} <code>{{ e.operation }}</code></li>{% endfor %}</ul>{% endif %}
 </details>
 {% endblock %}

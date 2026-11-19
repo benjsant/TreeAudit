@@ -11,8 +11,10 @@ only uses ``textContent`` (see static/app.js) and the CSP forbids inline code.
 
 from __future__ import annotations
 
+import errno
 import os
 import sqlite3
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -124,6 +126,30 @@ def _number(value: int) -> str:
     return f"{value:,}".replace(",", _THIN_SPACE)
 
 
+# Why a file could not be read, in words; the system's message stays in a tooltip.
+_ERRNO_REASONS = {
+    errno.EACCES: "accès refusé",
+    errno.EPERM: "accès refusé",
+    errno.ENOENT: "n'existe plus",
+    errno.EIO: "erreur de lecture : disque débranché ou abîmé ?",
+    errno.ENODEV: "disque débranché",
+    errno.ENXIO: "disque débranché",
+    errno.ENOTCONN: "disque débranché",
+    errno.ELOOP: "remplacé par un lien symbolique, non suivi",
+    errno.ENOTDIR: "n'est plus un dossier",
+    errno.ENAMETOOLONG: "chemin trop long",
+}
+
+
+def _reason(error: Mapping[str, Any]) -> str:
+    """A scan or duplicate-search error said in French."""
+    if error["operation"] == "changed":
+        return "a changé depuis l'analyse (ou le disque a été débranché) : relance l'analyse"
+    if error["operation"] == "verify" and error["errno"] is None:
+        return "même empreinte mais contenu différent : pas compté comme doublon"
+    return _ERRNO_REASONS.get(error["errno"]) or str(error["message"])
+
+
 def _shown(value: object) -> object:
     """Every text a template prints shows its invisible characters (a newline
     in a file name is not a space). HTML built by the templates is left as is."""
@@ -145,6 +171,7 @@ def _environment() -> jinja2.Environment:
     )
     env.filters["size"] = human_size
     env.filters["decimal"] = decimal
+    env.filters["reason"] = _reason
     env.filters["date"] = _date
     env.filters["datetime"] = _datetime
     env.filters["number"] = _number
