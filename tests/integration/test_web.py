@@ -819,6 +819,14 @@ def test_invisible_characters_of_a_name_are_shown(client: TestClient, root: Path
         assert shown in script
 
 
+def test_the_duplicates_page_points_to_similar_folders(client: TestClient, scanned: int) -> None:
+    """A copied folder shows as many file groups: the page says where whole
+    folders are compared, as the summary does."""
+    run = run_job(client, f"/api/scans/{scanned}/dupes", {"micro": False})
+    page = client.get(f"/dupes/{run['run_id']}").text
+    assert f'href="/scans/{scanned}/similar">🪞 voir les dossiers presque identiques' in page
+
+
 @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses permission checks")
 def test_unread_files_are_listed_under_the_warning(
     client: TestClient, root: Path, scanned: int

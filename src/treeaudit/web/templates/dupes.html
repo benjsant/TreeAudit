@@ -8,6 +8,7 @@
   {% if report.groups %}{{ removable }} copie(s) en trop, {{ recoverable | size }} à récupérer. Pour chaque fichier, on garde un exemplaire (★) et tu choisis quels groupes nettoyer.
   {% else %}Aucun doublon à proposer 🎉{% endif %}
 </p>
+{% if report.groups and not report.micro %}<p>Un dossier copié en entier apparaît ici fichier par fichier : <a href="/scans/{{ scan.id }}/similar">🪞 voir les dossiers presque identiques</a>.</p>{% endif %}
 {% if run.status != "complete" or errors %}
 <div class="notice warn" role="alert">
   <p>{% if run.errors %}La recherche n'a pas pu lire {{ run.errors | number }} fichier(s){% else %}La recherche s'est arrêtée avant la fin{% endif %} : il peut manquer des doublons.</p>
