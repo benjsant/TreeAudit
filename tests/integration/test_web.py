@@ -798,6 +798,26 @@ def test_entry_page(client: TestClient, scanned: int) -> None:
     assert client.get(f"/scans/999/entries/{ids[b'']}").status_code == 404
 
 
+def test_invisible_characters_of_a_name_are_shown(client: TestClient, root: Path) -> None:
+    """A newline or a tab in a name used to show as a space, and a direction
+    mark reversed the end of the name: each is now written as an escape."""
+    for name in ("nouvelle\nligne.txt", "tab\tulation.txt", "photo\u202egpj.exe"):
+        touch(root / "noms" / name, b"x")
+    scan_id = int(run_job(client, "/api/scans", {"root_id": "main", "subpath": ""})["scan_id"])  # type: ignore[call-overload]
+    ids = entry_ids(client, scan_id)
+    folder = client.get(f"/scans/{scan_id}/space?dir={ids[b'noms']}").text
+    entry = client.get(f"/scans/{scan_id}/entries/{ids[b'noms/nouvelle\nligne.txt']}").text
+    for page in (folder, entry):
+        assert "nouvelle\\x0aligne.txt" in page
+        assert "nouvelle\nligne" not in page and "nouvelle ligne" not in page
+    assert "tab\\x09ulation.txt" in folder and "photo\\u202egpj.exe" in folder
+    assert "\u202e" not in folder
+    # Names the script shows (basket, progress, archive) go through its visible().
+    script = client.get("/static/app.js").text
+    for shown in ("visible(item.path)", "visible(p.current_dir)", "visible(problem.path)"):
+        assert shown in script
+
+
 def test_basket_content_and_command(client: TestClient, scanned: int) -> None:
     ids = entry_ids(client, scanned)
     assert_safe_html(client.get(f"/scans/{scanned}/basket").text)

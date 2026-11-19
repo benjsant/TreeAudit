@@ -97,6 +97,18 @@ def is_displayable(raw: bytes) -> bool:
     return not _CONTROL_CHARS.search(text)
 
 
+def visible(text: str) -> str:
+    """The text with every character of _CONTROL_CHARS written as an escape,
+    "\\x0a" for a newline, "\\u202e" for a direction mark: on screen, nothing in
+    a name is hidden or turned into a space, as invalid bytes show as "\\xNN" (D-014)."""
+    return _CONTROL_CHARS.sub(_escape, text)
+
+
+def _escape(match: re.Match[str]) -> str:
+    code = ord(match.group())
+    return f"\\x{code:02x}" if code < 0x100 else f"\\u{code:04x}"
+
+
 def safe_root(root_display: str) -> bool:
     """The root can be written in a command: absolute and displayable."""
     return root_display.startswith("/") and is_displayable(root_display.encode())

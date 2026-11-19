@@ -78,6 +78,7 @@ La détection du volume système lit `/proc/self/mountinfo` (source du montage e
 - On enregistre la taille logique (`st_size`) et la taille allouée (`st_blocks × 512`). La répartition de l'espace utilise la taille allouée.
 - Un inode présent plusieurs fois (liens physiques) est compté une seule fois dans les totaux. Les liens physiques sont signalés à part et ne sont pas présentés comme des doublons qui consomment de l'espace.
 - Sous Linux, un nom de fichier est une suite d'octets, pas forcément de l'UTF-8 valide. Le nom brut est stocké en `BLOB`, accompagné d'une forme affichable (caractères invalides remplacés et signalés).
+- Complément (2026-11-19) : à l'écran, les caractères invisibles d'un nom (retour à la ligne, tabulation, caractères de contrôle, marques de sens d'écriture) sont écrits comme des échappements (`\x0a`, `‮`), comme les octets invalides. Avant, un retour à la ligne s'affichait comme une espace. L'index n'est pas changé : l'échappement se fait à l'affichage, sur tout le texte des pages et dans le script.
 
 ## D-015 — Doublons exacts (2026-10-19)
 Pipeline : regroupement par taille → empreinte partielle (SHA-256 des premiers et derniers 64 Kio) → SHA-256 complet sur les candidats restants.

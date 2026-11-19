@@ -45,7 +45,7 @@ from treeaudit.projects.detect import PROJECT, SOFTWARE, find_projects
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
 from treeaudit.scanner.walker import SubpathError, parse_subpath
-from treeaudit.shellcmd import host_path, safe_root
+from treeaudit.shellcmd import host_path, safe_root, visible
 from treeaudit.similar import trees as similar_trees
 from treeaudit.web import explorer, queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, browse_root, root_display
@@ -124,6 +124,14 @@ def _number(value: int) -> str:
     return f"{value:,}".replace(",", _THIN_SPACE)
 
 
+def _shown(value: object) -> object:
+    """Every text a template prints shows its invisible characters (a newline
+    in a file name is not a space). HTML built by the templates is left as is."""
+    if isinstance(value, str) and not hasattr(value, "__html__"):  # not Markup
+        return visible(value)
+    return value
+
+
 def _environment() -> jinja2.Environment:
     """The template engine: every value escaped, every name required (a typo
     in a template is an error, not an empty string), French filters."""
@@ -133,6 +141,7 @@ def _environment() -> jinja2.Environment:
         undefined=jinja2.StrictUndefined,
         trim_blocks=True,
         lstrip_blocks=True,
+        finalize=_shown,
     )
     env.filters["size"] = human_size
     env.filters["decimal"] = decimal

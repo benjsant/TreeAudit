@@ -36,6 +36,16 @@ function decimal(value) {
   return value.toFixed(1).replace(".", ",");
 }
 
+// Invisible characters of a name written as escapes, as visible() in shellcmd.py.
+const INVISIBLE = /[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+
+function visible(text) {
+  return text.replace(INVISIBLE, (char) => {
+    const code = char.charCodeAt(0);
+    return code < 0x100 ? `\\x${code.toString(16).padStart(2, "0")}` : `\\u${code.toString(16).padStart(4, "0")}`;
+  });
+}
+
 function humanSize(bytes) {
   const units = ["o", "Kio", "Mio", "Gio", "Tio"];
   let value = bytes;
@@ -137,7 +147,7 @@ function showArchiveResult(job) {
   const field = (name) => box.querySelector(`[data-field="${name}"]`);
   const result = job.archive;
   field("archive-title").textContent = ARCHIVE_TITLES[job.status] || job.status;
-  field("archive-path").textContent = result.path || "";
+  field("archive-path").textContent = visible(result.path || "");
   const details = [];
   if (result.verified) {
     details.push(
@@ -155,7 +165,7 @@ function showArchiveResult(job) {
   problems.replaceChildren();
   for (const problem of result.problems) {
     const item = document.createElement("li");
-    item.textContent = `${problem.path} : ${problem.message}`;
+    item.textContent = `${visible(problem.path)} : ${problem.message}`;
     problems.append(item);
   }
   const hidden = result.problem_count - result.problems.length;
@@ -201,12 +211,12 @@ function setupJobMonitor() {
     }
     const job = data.job;
     if (!job) return;
-    field("label").textContent = job.label;
+    field("label").textContent = visible(job.label);
     field("elapsed").textContent = decimal(job.elapsed);
     const p = job.progress;
     if (job.kind === "scan") {
       field("progress").textContent = `${p.entries.toLocaleString("fr-FR")} éléments vus`;
-      field("current").textContent = p.current_dir || "–";
+      field("current").textContent = p.current_dir ? visible(p.current_dir) : "–";
     } else if (job.kind === "compact") {
       field("progress").textContent = "Compactage de l'index…";
       field("current").textContent = "";
@@ -379,7 +389,7 @@ function setupBasketView() {
       text.className = "item-text";
       const name = document.createElement("strong");
       name.className = "path";
-      name.textContent = `${item.kind === "dir" ? "📁" : item.kind === "symlink" ? "🔗" : "📄"} ${item.path}`;
+      name.textContent = `${item.kind === "dir" ? "📁" : item.kind === "symlink" ? "🔗" : "📄"} ${visible(item.path)}`;
       const size = document.createElement("span");
       size.className = "size";
       size.textContent = item.size === null ? " · taille inconnue" : ` · ${humanSize(item.size)}`;
@@ -393,7 +403,7 @@ function setupBasketView() {
       if (!item.readable) {
         const warn = document.createElement("span");
         warn.className = "error-text small";
-        warn.textContent = " · nom illisible : pas de commande possible";
+        warn.textContent = " · nom non affichable sans risque : pas de commande possible";
         text.append(warn);
       }
       const remove = document.createElement("button");
