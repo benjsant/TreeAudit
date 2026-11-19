@@ -98,6 +98,32 @@
 
 La vitesse à froid sur ce type de disque est déjà mesurée (`ROADMAP.md`, phase 7, 2026-10-20).
 
+### Clé de test : exFAT, NTFS, btrfs
+Une clé USB dédiée, sans rien à garder : elle est formatée plusieurs fois.
+1. Formater la clé (exFAT, puis NTFS, puis btrfs), la monter, puis y générer le dossier de test, la fiche étant écrite **hors de la clé** :
+   `python3 tools/make_key_tree.py <clé>/treeaudit-test --manifest <ailleurs>/fiche-exfat.json`
+   (par défaut 20 000 petits fichiers et 2,5 Go de gros fichiers aléatoires, dont des copies exactes). Puis `sync`.
+2. La fiche donne ce que TreeAudit doit trouver dans ce dossier : nombres d'éléments, tailles, groupes de doublons (taille minimale par défaut), fichiers à liens physiques ; et ce que le système de fichiers a refusé (liens sur exFAT, noms interdits par Windows, noms ne différant que par la casse…). Un refus est noté, jamais une erreur : il décrit le système de fichiers.
+3. Analyser le dossier `treeaudit-test` de la clé (natif et Docker) : l'analyse se termine « terminée », les chiffres du dossier et les groupes de doublons sont **exactement** ceux de la fiche.
+4. Partie B ci-dessus sur cette clé, pendant l'analyse puis pendant la recherche de doublons (les gros fichiers donnent le temps de la retirer).
+   - Une recherche relancée sur des fichiers inchangés **ne relit rien** (empreintes réutilisées, même sur une clé rebranchée, sauf exFAT dont les numéros d'inode changent à chaque montage). Pour la retirer en pleine lecture, générer d'abord un second dossier jamais lu (`--small-files 0`), éjecter la clé pour vider le cache, la rebrancher, analyser, puis lancer la recherche.
+   - Vérifier que des octets sont vraiment lus sur la clé (`/proc/diskstats`) avant de la retirer.
+
+`tests/integration/test_key_tree.py` vérifie que la fiche est juste : le même dossier, généré en petit, est analysé par TreeAudit, y compris quand les liens et le tube nommé sont refusés. Sous `/tmp` (tmpfs) un dossier n'occupe aucun bloc : la place du dossier de départ est vérifiée à part.
+
+**Résultats du 2026-11-19** (clé USB 32 Go, AppImage sous bac à sable, sans fichier de configuration, disque détecté tout seul) :
+
+| | exFAT | NTFS (ntfs-3g) | btrfs |
+|---|---|---|---|
+| Analyse égale à la fiche (nombres, tailles, place occupée) | oui | oui | oui |
+| Doublons égaux à la fiche (24 groupes, liens physiques) | oui | oui | oui |
+| Éjection logicielle : analyse gardée, disque « plus disponible » | oui | oui | oui |
+| Retrait pendant la recherche : « incomplète », erreurs d'E/S notées | oui (5) | oui (8) | oui (26) |
+| Aucun groupe faux après le retrait | oui | oui | oui |
+| Refusés par le système de fichiers | 19 (liens, tube, noms Windows, casse, octets invalides) | 13 (noms Windows, octets invalides) | 1 (nom de plus de 255 octets) |
+
+Sur btrfs, la clé retirée reste montée sans disque (« missing disk ») : TreeAudit ne la propose plus. Le retrait pendant l'analyse elle-même n'a pas pu être fait à la main : 20 000 fichiers sont analysés en moins de 2 s.
+
 ## Ranger (D-041)
 - Plan : album gardé en entier, projet et installation Steam jamais découpés, fichiers en vrac par type et année, collisions renommées « (2) », éléments cachés, liens et dossiers vides laissés en place.
 - Un dossier sans photo ni vidéo mis par l'utilisateur dans « Photos » ou « Vidéos » y va sans dossier d'année (le plan plantait, trouvé par l'audit de novembre 2026).

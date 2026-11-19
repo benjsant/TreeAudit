@@ -74,3 +74,5 @@ strict = true
 mypy_path = "src"
 # The development bench too (D-066): it was type-checked inside the package.
 packages = ["treeaudit", "tools.subfolder_bench"]
+# The USB key generator: its sheet is what TreeAudit is checked against.
+modules = ["tools.make_key_tree"]

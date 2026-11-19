@@ -8,6 +8,7 @@ modules listed in WRITE_ALLOWED, which only write inside the data directory.
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -201,6 +202,26 @@ def test_the_subfolder_bench_executes_and_modifies_nothing(path: Path) -> None:
 
 def test_the_subfolder_bench_is_found() -> None:
     assert len(list(BENCH.glob("*.py"))) == 5
+
+
+# Development tools that build test trees: creating files is their job, but they
+# never run a command, nor remove, rename, replace or truncate anything.
+GENERATORS = sorted((SRC.parents[1] / "tools").glob("make_*_tree.py"))
+_CREATION = re.compile(
+    r"call to (mkdir|makedirs|write_bytes|touch|symlink_to|symlink|link|mkfifo|ftruncate)\(\)"
+    r"|open\(\) in write mode 'wb'"
+    r"|os\.open\(\) with write flags \['O_CREAT', 'O_WRONLY'\]"  # no O_TRUNC nor O_APPEND
+)
+
+
+@pytest.mark.parametrize("path", GENERATORS, ids=lambda p: p.name)
+def test_the_tree_generators_run_nothing_and_remove_nothing(path: Path) -> None:
+    violations = find_violations(path.read_text(encoding="utf-8"), f"tools/{path.name}")
+    assert [v for v in violations if not _CREATION.search(v)] == []
+
+
+def test_the_tree_generators_are_found() -> None:
+    assert [p.name for p in GENERATORS] == ["make_dummy_tree.py", "make_key_tree.py"]
 
 
 def test_the_sandbox_only_calls_syscall_and_prctl_from_libc() -> None:
