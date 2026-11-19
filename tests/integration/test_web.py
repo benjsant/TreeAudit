@@ -813,6 +813,10 @@ def test_invisible_characters_of_a_name_are_shown(client: TestClient, root: Path
         assert "nouvelle\nligne" not in page and "nouvelle ligne" not in page
     assert "tab\\x09ulation.txt" in folder and "photo\\u202egpj.exe" in folder
     assert "\u202e" not in folder
+    # The picker never offers such a folder, nor takes it from a hand-made link:
+    # its path is written into the page, escaped, and sent back from there.
+    assert client.get("/scan/new?root=main&path=noms%0Aautre").status_code == 422
+    assert client.get("/scan/new?root=main&path=noms").status_code == 200
     # Names the script shows (basket, progress, archive) go through its visible().
     script = client.get("/static/app.js").text
     for shown in ("visible(item.path)", "visible(p.current_dir)", "visible(problem.path)"):

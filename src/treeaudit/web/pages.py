@@ -47,7 +47,7 @@ from treeaudit.projects.detect import PROJECT, SOFTWARE, find_projects
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
 from treeaudit.scanner.walker import SubpathError, parse_subpath
-from treeaudit.shellcmd import host_path, safe_root, visible
+from treeaudit.shellcmd import host_path, is_displayable, safe_root, visible
 from treeaudit.similar import trees as similar_trees
 from treeaudit.web import explorer, queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, accepted_root, browse_root, root_display
@@ -313,6 +313,10 @@ def new_scan(
         status = accepted_root(request, root)
     except HTTPException as exc:
         raise HTTPException(404, "Ce dossier n'est pas autorisé.") from exc
+    if not is_displayable(path.encode()):
+        # The picker never offers such a folder; and the path, shown with its
+        # invisible characters escaped, would not be the one sent back.
+        raise HTTPException(422, "Chemin invalide.")
     try:
         parts = parse_subpath(path)
         listing = browse_root(request.app.state.config, status.root, path)
