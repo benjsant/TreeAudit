@@ -28,7 +28,7 @@ from treeaudit import __version__
 from treeaudit.archive.listing import list_archives
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig, RootConfig
 from treeaudit.core.datadir import index_size
-from treeaudit.core.sizes import human_size, is_sparse
+from treeaudit.core.sizes import decimal, human_size, is_sparse
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
@@ -135,6 +135,7 @@ def _environment() -> jinja2.Environment:
         lstrip_blocks=True,
     )
     env.filters["size"] = human_size
+    env.filters["decimal"] = decimal
     env.filters["date"] = _date
     env.filters["datetime"] = _datetime
     env.filters["number"] = _number

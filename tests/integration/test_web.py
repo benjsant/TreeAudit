@@ -301,6 +301,16 @@ def test_job_page(client: TestClient, scanned: int) -> None:
     page = client.get("/jobs/current")
     assert page.status_code == 200
     assert_safe_html(page.text)
+    elapsed = re.search(r'data-field="elapsed">([^<]*)<', page.text)
+    assert elapsed and re.fullmatch(r"\d+,\d", elapsed.group(1)), elapsed
+
+
+def test_the_script_writes_decimals_with_a_comma(client: TestClient) -> None:
+    script = client.get("/static/app.js").text
+    # One place rounds a decimal, and it writes the French comma.
+    assert script.count("toFixed(") == 1
+    assert 'toFixed(1).replace(".", ",")' in script
+    assert "String(job.elapsed)" not in script
 
 
 # --- parasites -------------------------------------------------------------------------------

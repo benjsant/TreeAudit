@@ -24,6 +24,7 @@ from treeaudit.filters.spec import (
         ("1024", 1024),
         ("10k", 10 * 1024),
         ("2.5M", int(2.5 * 1024**2)),
+        ("2,5 Mio", int(2.5 * 1024**2)),  # as TreeAudit writes it
         ("1 G", 1024**3),
         ("1Gio", 1024**3),
         ("3GB", 3 * 1024**3),
@@ -34,7 +35,7 @@ def test_parse_size(text: str, expected: int) -> None:
     assert parse_size(text) == expected
 
 
-@pytest.mark.parametrize("text", ["", "abc", "-1", "10x", "1.2.3M"])
+@pytest.mark.parametrize("text", ["", "abc", "-1", "10x", "1.2.3M", "1,2,3M", "1,M"])
 def test_invalid_size(text: str) -> None:
     with pytest.raises(FilterError, match="taille"):
         parse_size(text)

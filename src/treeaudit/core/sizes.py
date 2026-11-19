@@ -24,14 +24,19 @@ def shown_file_size(size: int, allocated: int) -> int:
     return allocated if is_sparse(size, allocated) else size
 
 
+def decimal(value: float) -> str:
+    """One decimal, with the French decimal comma: 2.25 -> "2,2"."""
+    return f"{value:.1f}".replace(".", ",")
+
+
 def human_size(size: int | None) -> str:
-    """A size as people read it, in binary units with French symbols:
-    "512 o", "1.5 Kio", "3.2 Gio". None (unknown) is said in words."""
+    """A size as people read it, in binary units with French symbols and
+    decimal comma: "512 o", "1,5 Kio", "3,2 Gio". None (unknown) is said in words."""
     if size is None:
         return "taille inconnue"
     value = float(size)
     for unit in ("o", "Kio", "Mio", "Gio", "Tio"):
         if value < 1024 or unit == "Tio":
-            return f"{value:.0f} {unit}" if unit == "o" else f"{value:.1f} {unit}"
+            return f"{value:.0f} {unit}" if unit == "o" else f"{decimal(value)} {unit}"
         value /= 1024
     raise AssertionError("unreachable")

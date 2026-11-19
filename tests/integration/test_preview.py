@@ -207,7 +207,7 @@ def test_a_sparse_file_shows_the_place_it_uses(client: TestClient, tmp_path: Pat
     page = client.get(f"/scans/{scan_id}/space").text
     row = re.search(r'entries/(\d+)">📄 vm.img</a>.*?</li>', page, re.S)
     assert row is not None
-    assert ">creux</span>" in row.group(0) and "1.0 Gio en apparence" in row.group(0)
-    assert "1.0 Gio</span>" not in row.group(0)
+    assert ">creux</span>" in row.group(0) and "1,0 Gio en apparence" in row.group(0)
+    assert "1,0 Gio</span>" not in row.group(0)
     fiche = client.get(f"/scans/{scan_id}/entries/{row.group(1)}").text
-    assert "Fichier creux" in fiche and "Il paraît faire 1.0 Gio" in fiche
+    assert "Fichier creux" in fiche and "Il paraît faire 1,0 Gio" in fiche

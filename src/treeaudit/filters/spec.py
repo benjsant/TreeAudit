@@ -18,7 +18,7 @@ from typing import Any
 from treeaudit.core.errors import TreeAuditError
 
 MAX_PATTERN_LENGTH = 1000
-_SIZE = re.compile(r"(?i)\s*(\d+(?:\.\d+)?)\s*([kmgt]?)(?:i?o|i?b)?\s*")
+_SIZE = re.compile(r"(?i)\s*(\d+(?:[.,]\d+)?)\s*([kmgt]?)(?:i?o|i?b)?\s*")
 _SIZE_UNITS = {"": 1, "k": 1024, "m": 1024**2, "g": 1024**3, "t": 1024**4}
 _EXTENSION = re.compile(r"[^/\x00]{1,32}")
 
@@ -106,11 +106,12 @@ class CompiledFilter:
 
 
 def parse_size(text: str) -> int:
-    """'1024', '10k', '2.5M', '1 Gio', '3GB' -> bytes (binary units)."""
+    """'1024', '10k', '2.5M', '2,5 Mio', '1 Gio', '3GB' -> bytes (binary units)."""
     match = _SIZE.fullmatch(text)
     if not match:
         raise FilterError(f"taille invalide : {text!r} (exemples : 500, 10k, 2.5M, 1G)")
-    return int(float(match.group(1)) * _SIZE_UNITS[match.group(2).lower()])
+    number = float(match.group(1).replace(",", "."))
+    return int(number * _SIZE_UNITS[match.group(2).lower()])
 
 
 def parse_extensions(text: str) -> tuple[str, ...]:
@@ -322,7 +323,7 @@ def compile_filter(spec: FilterSpec) -> CompiledFilter:
 def _size_text(size: int) -> str:
     for unit, factor in (("Gio", 1024**3), ("Mio", 1024**2), ("Kio", 1024)):
         if size >= factor:
-            return f"{size / factor:.4g} {unit}"
+            return f"{size / factor:.4g} {unit}".replace(".", ",")
     return f"{size} o"
 
 

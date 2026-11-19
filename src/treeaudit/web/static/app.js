@@ -31,6 +31,11 @@ function showError(scope, message) {
   }
 }
 
+// One decimal, with the French decimal comma, as decimal() in core/sizes.py.
+function decimal(value) {
+  return value.toFixed(1).replace(".", ",");
+}
+
 function humanSize(bytes) {
   const units = ["o", "Kio", "Mio", "Gio", "Tio"];
   let value = bytes;
@@ -39,7 +44,7 @@ function humanSize(bytes) {
     value /= 1024;
     unit += 1;
   }
-  return unit === 0 ? `${value} o` : `${value.toFixed(1)} ${units[unit]}`;
+  return unit === 0 ? `${value} o` : `${decimal(value)} ${units[unit]}`;
 }
 
 // --- starting jobs -------------------------------------------------------------------
@@ -197,7 +202,7 @@ function setupJobMonitor() {
     const job = data.job;
     if (!job) return;
     field("label").textContent = job.label;
-    field("elapsed").textContent = String(job.elapsed);
+    field("elapsed").textContent = decimal(job.elapsed);
     const p = job.progress;
     if (job.kind === "scan") {
       field("progress").textContent = `${p.entries.toLocaleString("fr-FR")} éléments vus`;
