@@ -228,6 +228,9 @@ Aucun parcours de fichiers dans cette phase.
 - Suggestions d'archivage ou de compression.
 - Propositions de rangement à examiner (sans exécution).
 - Éventuelle quarantaine réversible, après spécification et revue de sécurité séparées.
+- **Outil pour agents IA (serveur MCP), reporté** (2026-11-18). L'idée : un serveur sur l'entrée et la sortie standard, sans port réseau, qui donnerait à un agent les faits de l'index (recherche, doublons, place prise, dossiers recréables). Il ne donnerait jamais de commande de nettoyage, et les noms de fichiers y seraient marqués comme de simples données. Il serait pour le seul mainteneur, pas une brique pour d'autres développeurs. Il ne sera rouvert, par une décision écrite, qu'à l'une de ces conditions :
+  - un modèle local bat les règles sur les cas de D-052, sur une machine ordinaire ;
+  - le mainteneur accepte explicitement que les noms partent chez un fournisseur en ligne, ce qui reviendrait sur D-052.
 
 ## V2 — Plus tard
 - [ ] Évaluer Windows après stabilisation Linux.
