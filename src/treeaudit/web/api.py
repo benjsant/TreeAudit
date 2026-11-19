@@ -35,6 +35,7 @@ from treeaudit.scanner.walker import SubpathError
 from treeaudit.shellcmd import Action, CleanupCommand, cleanup_command, is_displayable
 from treeaudit.web.explorer import Basket, resolve_basket
 from treeaudit.web.jobs import Job, JobError, JobManager
+from treeaudit.web.live import refresh_roots
 
 RootId = Annotated[str, Field(pattern=f"^{ROOT_ID_PATTERN.pattern}$")]
 MAX_SELECTION = 100_000
@@ -73,9 +74,15 @@ Jobs = Annotated[JobManager, Depends(get_jobs)]
 
 def accepted_root(request: Request, root_id: str) -> RootStatus:
     """The root, if it is known and accepted right now (disks come and go:
-    the live statuses are read); 404 or 409 otherwise."""
+    the live statuses are read); 404 or 409 otherwise. A root not accepted at
+    the last look is looked for once more: its disk may just have been
+    plugged in again, with a link to it still open (native mode)."""
     statuses: dict[str, RootStatus] = request.app.state.statuses
     status = statuses.get(root_id)
+    if status is None or not status.accepted:
+        refresh_roots(request.app)
+        statuses = request.app.state.statuses
+        status = statuses.get(root_id)
     if status is None:
         raise HTTPException(404, "racine inconnue")
     if not status.accepted:

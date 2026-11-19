@@ -1080,8 +1080,16 @@ def test_disks_plugged_in_while_running_are_offered(
 
         plugged.clear()  # removed: no longer offered
         assert "🔌 USB" not in live.get("/scan/new").text
+        assert live.get(f"/scan/new?root={usb_id}").status_code == 404
         assert live.get("/api/roots").json()["roots"] == []
         assert live.get("/").status_code == 200  # earlier analyses stay readable
+
+        # Plugged in again: a link to it still open works at once, without
+        # going through the list of disks first (seen with a real USB key).
+        plugged.append(True)
+        assert live.get(f"/scan/new?root={usb_id}").status_code == 200
+        snapshot = run_job(live, "/api/scans", {"root_id": usb_id, "subpath": ""})
+        assert snapshot["status"] == "complete"
         app.state.jobs.wait()
 
 

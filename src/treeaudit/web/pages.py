@@ -50,7 +50,7 @@ from treeaudit.scanner.walker import SubpathError, parse_subpath
 from treeaudit.shellcmd import host_path, safe_root, visible
 from treeaudit.similar import trees as similar_trees
 from treeaudit.web import explorer, queries, summaries
-from treeaudit.web.api import Config, Db, Jobs, browse_root, root_display
+from treeaudit.web.api import Config, Db, Jobs, accepted_root, browse_root, root_display
 from treeaudit.web.live import refresh_roots
 from treeaudit.web.search_form import SearchForm, spec_from_form
 
@@ -309,9 +309,10 @@ def new_scan(
                 external_enabled=external_enabled,
                 root=None,
             )
-    status = statuses.get(root)
-    if status is None or not status.accepted:
-        raise HTTPException(404, "Ce dossier n'est pas autorisé.")
+    try:
+        status = accepted_root(request, root)
+    except HTTPException as exc:
+        raise HTTPException(404, "Ce dossier n'est pas autorisé.") from exc
     try:
         parts = parse_subpath(path)
         listing = browse_root(request.app.state.config, status.root, path)
