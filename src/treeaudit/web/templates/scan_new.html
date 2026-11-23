@@ -4,6 +4,7 @@
 <p class="steps"><strong>1. Choisir le dossier</strong> › 2. Analyse › 3. Bilan</p>
 {% if root is none %}
   <h1>Quel disque ou dossier ?</h1>
+  <p class="lead">Choisis d'abord où chercher. À l'étape suivante, tu pourras tout analyser ou seulement un de ses dossiers.</p>
   {% if home or internal %}
   <h2>💻 Sur cet ordinateur</h2>
   <ul class="cards">
@@ -12,6 +13,7 @@
       <a class="card link" href="/scan/new?root={{ card.root.id }}">
         <span class="card-title">🏠 {{ card.root.label }}</span>
         <span class="muted path">{{ card.root.shown_path }}</span>
+        <span>En entier, ou seulement un de ses dossiers (Documents, Images…)</span>
         <span class="muted small">Clés, mots de passe et profils de navigateur ne sont jamais lus.</span>
       </a>
     </li>
@@ -73,6 +75,7 @@
     <a href="/scan/new?root={{ root.id }}">💽 {{ root_name }}</a>
     {% for path, name in crumbs %} › <a href="/scan/new?root={{ root.id }}&amp;path={{ path | urlencode }}">{{ name }}</a>{% endfor %}
   </nav>
+  <p class="lead">Analyse tout « {{ current_name }} », ou ouvre un de ses dossiers plus bas pour n'analyser que lui.</p>
 
   <div class="choice">
     <button type="button" class="button big primary" data-start-scan data-root="{{ root.id }}" data-path="{{ listing.path }}">
@@ -91,7 +94,7 @@
   <p class="muted">Archivage désactivé : {{ archive.message }}.</p>
   {% endif %}
 
-  <h2>…ou ouvrir un sous-dossier</h2>
+  <h2>…ou n'analyser qu'un de ses dossiers</h2>
   <ul class="folders">
   {% if parent is not none %}
     <li><a href="/scan/new?root={{ root.id }}&amp;path={{ parent | urlencode }}">⬆ Remonter</a></li>

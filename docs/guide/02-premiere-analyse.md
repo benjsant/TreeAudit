@@ -6,11 +6,11 @@ La page d'accueil propose ce que TreeAudit a le droit de lire :
 
 - **🔌 les disques externes** branchés et ouverts (sous `/run/media/<toi>`, `/media` ou `/mnt`), avec leur occupation ;
 - **💽 les partitions de données** du disque système, comme `/mnt/Data`. Jamais celles du système lui-même (`/`, `/boot`, `/home`, `/usr`, `/var`) ;
-- **🏠 ton dossier personnel**, en entier, caches cachés compris. Les dossiers de secrets (clés SSH et GPG, mots de passe, profils de navigateur et de messagerie) ne sont **jamais lus**.
+- **🏠 ton dossier personnel**, en entier (caches cachés compris) ou seulement un de ses dossiers. Les dossiers de secrets (clés SSH et GPG, mots de passe, profils de navigateur et de messagerie) ne sont **jamais lus**.
 
 Un disque refusé est listé avec la raison : disque réseau, image ISO, ou disque dont TreeAudit ne peut pas prouver qu'il n'est pas celui du système. En cas de doute, il refuse.
 
-Tu peux analyser un disque entier ou seulement un de ses dossiers : navigue jusqu'au dossier voulu, puis clique sur **« Analyser »**.
+Tu peux tout analyser (le disque ou le dossier personnel entier) ou seulement un de leurs dossiers : navigue jusqu'au dossier voulu, puis clique sur **« Analyser »**. Analyser un seul dossier va plus vite, et le bilan ne parle que de lui.
 
 ## Pendant l'analyse
 

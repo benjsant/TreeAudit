@@ -284,6 +284,8 @@ def test_scan_page_and_explorer(client: TestClient, scanned: int) -> None:
     assert "photos" in page.text
     assert_safe_html(page.text)
     assert "Où va la place" in page.text and "À nettoyer" in page.text
+    # Why a scan is quick: it never reads what is in the files.
+    assert "jamais son contenu : c'est pour cela qu'elle est rapide" in page.text
     space = client.get(f"/scans/{scanned}/space")
     assert_safe_html(space.text)
     match = re.search(
@@ -977,6 +979,10 @@ def test_this_computer_is_offered(computer_client: TestClient) -> None:
     assert "🏠 Mon dossier personnel" in page.text and "/home/me" in page.text
     assert "💽 Data" in page.text and "Partition de données du disque système" in page.text
     assert "branché <strong>et ouvert</strong>" in page.text
+    # Choosing the personal folder does not mean analysing all of it.
+    assert "En entier, ou seulement un de ses dossiers" in page.text
+    inside = computer_client.get("/scan/new", params={"root": "home"})
+    assert "ouvre un de ses dossiers plus bas pour n'analyser que lui" in inside.text
 
 
 def test_picker_hides_private_and_own_folders(computer_client: TestClient, home: Path) -> None:

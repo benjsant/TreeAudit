@@ -73,7 +73,7 @@ Ouvre **http://127.0.0.1:8765** dans ton navigateur : tout se fait là. `Ctrl+C`
 
 En résumé ; chaque étape a son chapitre dans le [guide](docs/guide/README.md).
 
-1. **Choisir le disque** : TreeAudit propose les disques externes branchés, avec leur occupation. Navigue dans les dossiers, puis « Analyser ».
+1. **Choisir le dossier** : TreeAudit propose ton dossier personnel, les partitions de données et les disques externes branchés. Analyse-les en entier, ou navigue jusqu'à un seul de leurs dossiers, puis « Analyser ».
 2. **Analyse** : la progression s'affiche, et tu peux annuler.
 3. **Bilan** : ce qui peut être nettoyé sans risque, les doublons, où va la place, et une recherche.
 4. **Explorer** : « 📂 Explorer les fichiers » se parcourt comme un gestionnaire de fichiers. Un dossier de photos s'affiche aussi en **🖼️ galerie**, et la fiche d'une image la montre. Chaque élément porte ses repères (🧹 à nettoyer, 📑 en double, 🛡 protégé), et ⓘ ouvre sa fiche. Coche ce que tu veux dans n'importe quels dossiers : tout va dans le **🧺 panier**, qui prépare la commande.
@@ -84,7 +84,7 @@ En résumé ; chaque étape a son chapitre dans le [guide](docs/guide/README.md)
 
 ### Qu'est-ce qui est proposé ?
 
-- **🏠 Ton dossier personnel**, en entier, caches cachés compris (`~/.cache`…). Les dossiers de secrets ne sont **jamais lus** : clés SSH et GPG, gestionnaires de mots de passe, profils de navigateur et de messagerie, identifiants de services en ligne.
+- **🏠 Ton dossier personnel**, en entier (caches cachés compris, `~/.cache`…) ou seulement un de ses dossiers. Les dossiers de secrets ne sont **jamais lus** : clés SSH et GPG, gestionnaires de mots de passe, profils de navigateur et de messagerie, identifiants de services en ligne.
 - **💽 Les partitions de données du disque système**, comme `/mnt/Data`. Les partitions du système lui-même (`/`, `/boot`, `/home`, `/usr`, `/var`) ne sont jamais proposées.
 - **🔌 Les disques externes** : ce qui est monté sous `/run/media/<toi>`, `/media/<toi>`, `/media` ou `/mnt`. TreeAudit remonte jusqu'au disque physique. En cas de doute (disque réseau, image ISO…), il ne propose pas le disque, et l'interface dit pourquoi.
 - **Le dossier de TreeAudit est toujours ignoré**, même s'il se trouve sur un disque analysé : il est reconnu par son identité sur le disque, pas par son nom.

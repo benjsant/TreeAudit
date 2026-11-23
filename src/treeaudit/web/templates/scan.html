@@ -4,6 +4,7 @@
 <p class="steps">1. Choisir le dossier › 2. Analyse › <strong>3. Bilan</strong></p>
 <h1>📁 {{ title }}</h1>
 <p class="lead">{{ scan.allocated_size | size }} · {{ scan.files | number }} fichiers · {{ scan.dirs | number }} dossiers · analysé le {{ scan.started_at | date }}</p>
+<p class="muted">L'analyse lit seulement le nom, la taille et la date de chaque fichier, jamais son contenu : c'est pour cela qu'elle est rapide. Seule la recherche de doublons lit le contenu.</p>
 {% if scan.status != "complete" %}
   <p class="notice warn" role="alert">
     L'analyse n'a pas pu tout voir ({{ scan.status | status }}){% if scan.errors %} : {{ scan.errors }} élément(s) inaccessible(s){% endif %}. Les chiffres ci-dessous peuvent être incomplets. Détails en bas de page.
@@ -31,7 +32,7 @@
       <a class="button primary" href="/dupes/{{ dupes.run.id }}">Voir les doublons</a>
       <p><a href="/scans/{{ scan.id }}/similar">🪞 Dossiers presque identiques</a></p>
     {% else %}
-      <p>Pas encore cherchés : TreeAudit lit les fichiers de même taille pour les comparer.</p>
+      <p>Pas encore cherchés : TreeAudit lit le contenu des fichiers de même taille pour les comparer. C'est plus long que l'analyse.</p>
       <div class="actions">
         <button type="button" class="button primary" data-start-dupes data-scan="{{ scan.id }}" data-micro="0">Chercher les doublons</button>
         <p class="error-text" data-error role="alert" hidden></p>
