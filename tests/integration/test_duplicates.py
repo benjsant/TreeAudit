@@ -29,6 +29,7 @@ from treeaudit.roots.validation import ValidationContext
 from treeaudit.scanner.models import ScanStatus
 from treeaudit.scanner.runner import ScanRequest, run_scan
 from treeaudit.shellcmd import Action
+from treeaudit.web.explorer import MarkSource
 
 non_root_only = pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses permission checks")
 
@@ -224,9 +225,39 @@ def test_protected_copies(root: Path, harness: Harness) -> None:
         "Steam/steamapps/common/Game/data.txt",
     }
     assert "dépôt git" in (protected["repo/data.txt"] or "")
-    assert "steamapps" in (protected["Steam/steamapps/common/Game/data.txt"] or "")
+    assert protected["Steam/steamapps/common/Game/data.txt"] == (
+        "dans un logiciel (Bibliothèque Steam)"
+    )
     # Protected copies are kept, plus one free copy: only the "copy of" goes.
     assert [c.rel_path_display for c in group.removable] == ["docs/copy of data.txt"]
+
+
+def test_a_portable_program_is_protected_wherever_it_is_kept(root: Path, harness: Harness) -> None:
+    """Found on a real disk: two copies of a portable Windows program kept in
+    ordinary folders. It is recognised by what it holds (.exe and .dll), not
+    by a folder name: removing one of its DLLs would break that copy."""
+    dll, guide = os.urandom(4 * KIB), os.urandom(4 * KIB)
+    programs = ("portables/KeePassXC", "Téléchargements/KeePassXC")
+    for where in programs:
+        touch(root / where / "KeePassXC.exe", os.urandom(4 * KIB))
+        touch(root / where / "Qt5Gui.dll", dll)
+        touch(root / where / "share" / "docs" / "guide.html", guide)  # deeper inside
+    touch(root / "docs" / "Qt5Gui.dll", dll)
+    touch(root / "docs" / "copie" / "Qt5Gui.dll", dll)
+    _, report = harness.groups()
+    [group] = report.groups  # the guide's group: nothing to remove, dropped
+    protected = {c.rel_path_display: c.protection for c in group.copies if c.protection}
+    assert protected == {
+        f"{where}/Qt5Gui.dll": "dans un logiciel (Programme Windows)" for where in programs
+    }
+    assert [c.rel_path_display for c in group.removable] == ["docs/copie/Qt5Gui.dll"]
+    assert report.protected_copies == 4
+    # The explorer marks the program and what it holds the same way.
+    assert harness.scan_id is not None
+    marks = MarkSource(harness.conn, harness.scan_id)
+    assert marks.protection(b"portables/KeePassXC", "dir") == "logiciel (Programme Windows)"
+    assert marks.protection(b"portables/KeePassXC/share/docs", "dir") is not None
+    assert marks.protection(b"docs/Qt5Gui.dll", "file") is None
 
 
 def test_a_single_free_copy_is_never_proposed(root: Path, harness: Harness) -> None:

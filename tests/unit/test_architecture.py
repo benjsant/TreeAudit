@@ -51,7 +51,8 @@ ALLOWED: dict[str, set[str]] = {
     "gateway": {"core"},
     "archive": {"core", "duplicates", "roots", "scanner"},
     "db": {"scanner"},
-    "duplicates": {"core", "db", "roots", "scanner", "shellcmd"},
+    # projects: software is recognised by its content, as on the projects page (D-068).
+    "duplicates": {"core", "db", "projects", "roots", "scanner", "shellcmd"},
     "filters": {"core", "db", "shellcmd"},
     "organize": {"core", "duplicates", "shellcmd"},
     "parasites": {"core", "db", "scanner", "shellcmd"},

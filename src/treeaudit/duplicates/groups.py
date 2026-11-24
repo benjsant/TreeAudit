@@ -18,6 +18,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from treeaudit.db.connection import from_sqlite_int
+from treeaudit.projects.detect import software_folders
 
 PROTECTED_NAMES = frozenset(
     {
@@ -193,7 +194,24 @@ def repo_dirs_of(conn: sqlite3.Connection, scan_id: int) -> set[bytes]:
     return {row[0].rpartition(b"/")[0] for row in rows}
 
 
-def protection_reason(rel_path: bytes, repo_dirs: set[bytes]) -> str | None:
+@dataclass(frozen=True, slots=True)
+class Guarded:
+    """Folders of a scan whose files are never proposed for removal, found by
+    what they hold rather than by their name (rule 11 of CLAUDE.md)."""
+
+    repos: set[bytes]
+    """Git repositories."""
+    software: dict[bytes, str]
+    """Software recognised by its content (a portable Windows program, a GOG
+    game...), with what made it so."""
+
+
+def guarded_places(conn: sqlite3.Connection, scan_id: int) -> Guarded:
+    """The git repositories and the software of a scan, from the index only."""
+    return Guarded(repo_dirs_of(conn, scan_id), software_folders(conn, scan_id))
+
+
+def protection_reason(rel_path: bytes, guarded: Guarded) -> str | None:
     """Why a copy must never be proposed for removal: a marker file, a file
     inside a git repository, or installed software and dependencies. A
     duplicate there is expected; removing it would break the program."""
@@ -202,8 +220,12 @@ def protection_reason(rel_path: bytes, repo_dirs: set[bytes]) -> str | None:
         return f"fichier-marqueur {name.decode('utf-8', 'backslashreplace')}"
     parts = parent.split(b"/") if parent else []
     for depth in range(len(parts), -1, -1):
-        if b"/".join(parts[:depth]) in repo_dirs:
+        if b"/".join(parts[:depth]) in guarded.repos:
             return "dans un dépôt git"
+    for depth in range(len(parts), -1, -1):
+        kinds = guarded.software.get(b"/".join(parts[:depth]))
+        if kinds is not None:
+            return f"dans un logiciel ({kinds})"
     for part in parts:
         if part in SOFTWARE_DIRS or part.endswith(b".app"):
             label = part.decode("utf-8", "backslashreplace")
@@ -254,7 +276,7 @@ def load_groups(conn: sqlite3.Connection, run_id: int) -> GroupReport:
     scan_id = run["scan_id"]
     options = json.loads(run["options"])
     micro = bool(options.get("micro"))
-    repo_dirs = repo_dirs_of(conn, scan_id)
+    guarded = guarded_places(conn, scan_id)
 
     groups: list[DuplicateGroup] = []
     digests = conn.execute(
@@ -272,7 +294,7 @@ def load_groups(conn: sqlite3.Connection, run_id: int) -> GroupReport:
             "WHERE h.run_id = ? AND h.size = ? AND h.full = ?",
             (scan_id, run_id, digest_row["size"], digest_row["full"]),
         )
-        copies = [_copy(row, protection_reason(row["rel_path"], repo_dirs)) for row in rows]
+        copies = [_copy(row, protection_reason(row["rel_path"], guarded)) for row in rows]
         groups.append(_make_group(digest_row["size"], digest_row["full"], copies))
 
     protected_empty = 0
@@ -287,7 +309,7 @@ def load_groups(conn: sqlite3.Connection, run_id: int) -> GroupReport:
         # Protected ones are only counted: there can be hundreds of thousands.
         zones: dict[bytes, list[Copy]] = {}
         for row in empty:
-            protection = protection_reason(row["rel_path"], repo_dirs)
+            protection = protection_reason(row["rel_path"], guarded)
             if protection:
                 protected_empty += 1
                 continue

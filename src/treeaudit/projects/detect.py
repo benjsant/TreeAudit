@@ -204,6 +204,28 @@ def _candidates(conn: sqlite3.Connection, scan_id: int) -> dict[int, _Candidate]
     return found
 
 
+def software_folders(conn: sqlite3.Connection, scan_id: int) -> dict[bytes, str]:
+    """Every folder recognised as software by what it holds (a Windows program,
+    a GOG game, a Wine prefix...), nested ones included, with what made it so.
+
+    Found by content, not by the folder's name: a portable program kept in any
+    folder counts. Removing one of its files would break it.
+    """
+    candidates = {i: c for i, c in _candidates(conn, scan_id).items() if c.group == SOFTWARE}
+    ids = sorted(candidates)
+    folders: dict[bytes, str] = {}
+    for start in range(0, len(ids), _CHUNK):
+        chunk = ids[start : start + _CHUNK]
+        marks = ",".join("?" * len(chunk))
+        for row in conn.execute(
+            "SELECT entry_id, rel_path FROM entry "  # noqa: S608 - placeholders only
+            f"WHERE scan_id = ? AND kind = 'dir' AND entry_id IN ({marks})",
+            (scan_id, *chunk),
+        ):
+            folders[bytes(row["rel_path"])] = ", ".join(sorted(candidates[row["entry_id"]].kinds))
+    return folders
+
+
 def _holds_another(paths: list[bytes], rel_path: bytes) -> bool:
     """Another candidate lies below ``rel_path`` (``paths`` sorted)."""
     if not rel_path:

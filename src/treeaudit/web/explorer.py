@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from treeaudit.db import dupes as dupes_db
-from treeaudit.duplicates.groups import protection_reason, repo_dirs_of
+from treeaudit.duplicates.groups import guarded_places, protection_reason
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.detect import Finding
 from treeaudit.shellcmd import is_displayable
@@ -122,7 +122,7 @@ class MarkSource:
         self._conn = conn
         self._scan_id = scan_id
         self.findings = {f.entry_id: f for f in parasite_findings(conn, scan_id)}
-        self.repo_dirs = repo_dirs_of(conn, scan_id)
+        self.guarded = guarded_places(conn, scan_id)
         self.dupes_run = dupes_db.latest_run(conn, scan_id, micro=False)
         self.holders = _holders(conn, scan_id)
 
@@ -132,9 +132,11 @@ class MarkSource:
         held = self.holders.get(rel_path)
         if held is not None:
             return held
-        if kind == "dir" and rel_path in self.repo_dirs:
+        if kind == "dir" and rel_path in self.guarded.repos:
             return "dépôt git"
-        return protection_reason(rel_path, self.repo_dirs)
+        if kind == "dir" and rel_path in self.guarded.software:
+            return f"logiciel ({self.guarded.software[rel_path]})"
+        return protection_reason(rel_path, self.guarded)
 
     def marks(self, entries: Sequence[tuple[int, bytes, str]]) -> dict[int, Marks]:
         """Marks of (entry id, raw relative path, kind) entries."""
