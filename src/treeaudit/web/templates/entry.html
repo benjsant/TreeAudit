@@ -62,7 +62,7 @@
 {% if entry.marks.copies > 1 %}
 <section>
   <h2>📑 Fichier en {{ entry.marks.copies }} exemplaires</h2>
-  <p>Même contenu, vérifié octet par octet (empreinte SHA-256). Les autres copies :</p>
+  <p>Même contenu, vérifié sur le fichier entier (empreinte SHA-256). Les autres copies :</p>
   <ul class="plain">
   {% for copy in entry.other_copies %}<li><a href="/scans/{{ scan.id }}/entries/{{ copy.entry_id }}">{{ full_path(prefix, copy.rel_path_display) }}</a></li>{% endfor %}
   </ul>
