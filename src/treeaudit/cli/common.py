@@ -152,10 +152,14 @@ def run_in_thread[R](
 
     thread = threading.Thread(target=worker, name=name)
     thread.start()
+    shown = 0
     try:
         while thread.is_alive():
             thread.join(0.5)
-            print(f"\r{describe()}", end="", file=sys.stderr)
+            line = describe()
+            # Spaces cover what is left of a longer previous line.
+            print(f"\r{line.ljust(shown)}", end="", file=sys.stderr)
+            shown = len(line)
     except KeyboardInterrupt:
         print("\nannulation demandée…", file=sys.stderr)
         cancel.set()

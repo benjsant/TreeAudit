@@ -506,6 +506,48 @@ def test_reads_follow_the_physical_order(
     assert reads == ["d", "b", "a", "c"]
 
 
+def test_each_stage_counts_its_own_files(
+    root: Path, harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Seen on Linux Mint: "101 / 101 fichiers comparés" was shown from the first
+    stage on, while the whole files were still to be read."""
+    same = os.urandom(200 * KIB)
+    touch(root / "a", same)
+    touch(root / "b", same)
+    touch(root / "c", os.urandom(200 * KIB))  # same size, other start: stops after the head
+    ended: list[tuple[str, int, int, int]] = []
+    real_start = runner.DupProgress.start_stage
+
+    def record(self: runner.DupProgress, name: str, files: int = 0, whole_bytes: int = 0) -> None:
+        if self.stage:
+            ended.append((self.stage, self.stage_done, self.stage_total, self.stage_bytes_total))
+        real_start(self, name, files, whole_bytes)
+
+    monkeypatch.setattr(runner.DupProgress, "start_stage", record)
+    progress = runner.DupProgress()
+    scan_id = harness.scan()
+    run_duplicates(
+        harness.conn,
+        scan_id,
+        harness.root_config,
+        ctx=harness.ctx,
+        options=DupOptions(),
+        cancel=threading.Event(),
+        progress=progress,
+    )
+    ended.append(
+        (progress.stage, progress.stage_done, progress.stage_total, progress.stage_bytes_total)
+    )
+    assert ended == [
+        ("repérage sur le disque", 3, 3, 0),
+        ("début des fichiers", 3, 3, 0),
+        ("fin des fichiers", 2, 2, 0),
+        ("lecture complète", 2, 2, 400 * KIB),
+    ]
+    assert progress.stage_bytes_done == 400 * KIB
+    assert progress.files_hashed == 3  # already all there after the first stage
+
+
 def test_digests_are_reused_when_nothing_changed(root: Path, harness: Harness) -> None:
     content = os.urandom(200 * KIB)
     for name in "abc":

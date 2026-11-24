@@ -41,10 +41,16 @@ def dupes_run(args: argparse.Namespace) -> int:
     progress = DupProgress()
 
     def describe() -> str:
-        return (
-            f"{progress.stage} : {progress.files_hashed}/{progress.candidates} fichiers, "
-            f"{human_size(progress.bytes_read)} lus, {progress.errors} erreurs"
-        )
+        """The current stage's own counters, as on the web page."""
+        text = progress.stage or "préparation"
+        if progress.stage_total:
+            text += f" : {progress.stage_done}/{progress.stage_total} fichiers"
+        if progress.stage_bytes_total:
+            done, total = progress.stage_bytes_done, progress.stage_bytes_total
+            text += f", {human_size(done)} lus sur {human_size(total)}"
+        else:
+            text += f", {human_size(progress.bytes_read)} lus en tout"
+        return f"{text}, {progress.errors} erreurs"
 
     outcome, failure = run_in_thread(
         lambda cancel: execute_duplicates(

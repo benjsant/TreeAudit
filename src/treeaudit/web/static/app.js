@@ -119,6 +119,22 @@ const ARCHIVE_STAGES = {
   done: "Terminé",
 };
 
+// The counters of the current stage: the files read at least once are all
+// counted after the first stage, while the longest reads are still to come.
+function dupesProgress(p) {
+  if (!p.stage) return `${p.candidates.toLocaleString("fr-FR")} fichiers à comparer`;
+  let text = p.stage;
+  if (p.stage_total) {
+    text += ` : ${p.stage_done.toLocaleString("fr-FR")} / ${p.stage_total.toLocaleString("fr-FR")} fichiers`;
+  }
+  if (p.stage_bytes_total) {
+    text += ` · ${humanSize(p.stage_bytes_done)} lus sur ${humanSize(p.stage_bytes_total)}`;
+  } else {
+    text += ` (${humanSize(p.bytes_read)} lus en tout)`;
+  }
+  return text;
+}
+
 function archiveProgress(p) {
   const stage = ARCHIVE_STAGES[p.stage] || p.stage;
   if (p.stage === "preparing") {
@@ -224,9 +240,7 @@ function setupJobMonitor() {
       field("progress").textContent = archiveProgress(p);
       field("current").textContent = p.problems ? `${p.problems} élément(s) à signaler` : "";
     } else {
-      field("progress").textContent =
-        `${p.files_hashed.toLocaleString("fr-FR")} / ${p.candidates.toLocaleString("fr-FR")} ` +
-        `fichiers comparés (${humanSize(p.bytes_read)} lus)`;
+      field("progress").textContent = dupesProgress(p);
       field("current").textContent = "–";
     }
     if (job.running) {

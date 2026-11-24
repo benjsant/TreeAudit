@@ -347,6 +347,14 @@ def test_parasites_page_and_command(client: TestClient, scanned: int) -> None:
 
 def test_duplicates_page_and_command(client: TestClient, scanned: int) -> None:
     snapshot = run_job(client, f"/api/scans/{scanned}/dupes", {"micro": False})
+    # The page shows the last stage's own counters, not files read once.
+    progress = snapshot["progress"]
+    assert progress["stage"] == "lecture complète"
+    # Small files: their head was the whole file, nothing was left to read.
+    assert progress["stage_done"] == progress["stage_total"]
+    assert progress["stage_bytes_done"] == progress["stage_bytes_total"]
+    script = client.get("/static/app.js").text
+    assert "fichiers comparés" not in script and "lus sur" in script
     run_id = snapshot["run_id"]
     page = client.get(f"/dupes/{run_id}")
     assert page.status_code == 200

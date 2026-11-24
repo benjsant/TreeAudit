@@ -145,6 +145,10 @@ class Job:
                 "files_hashed": progress.files_hashed,
                 "bytes_read": progress.bytes_read,
                 "errors": progress.errors,
+                "stage_done": progress.stage_done,
+                "stage_total": progress.stage_total,
+                "stage_bytes_done": progress.stage_bytes_done,
+                "stage_bytes_total": progress.stage_bytes_total,
             }
             data["run_id"] = progress.run_id
         if self.outcome is not None:

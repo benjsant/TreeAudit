@@ -93,6 +93,20 @@ class DupProgress:
     reused: int = 0
     bytes_read: int = 0
     errors: int = 0
+    stage_done: int = 0
+    """Files done in the current stage: ``files_hashed`` is already complete
+    after the first one, while the longest reads are still to come."""
+    stage_total: int = 0
+    """Files of the current stage (0 when the stage counts none)."""
+    stage_bytes_done: int = 0
+    stage_bytes_total: int = 0
+    """Bytes the current stage reads in full; 0 when it only reads the edges."""
+
+    def start_stage(self, name: str, files: int = 0, whole_bytes: int = 0) -> None:
+        """A new stage begins: its own counters start from zero."""
+        self.stage = name
+        self.stage_done, self.stage_total = 0, files
+        self.stage_bytes_done, self.stage_bytes_total = 0, whole_bytes
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +166,7 @@ class _Analysis:
 
     def _read(self, data: int) -> None:
         self.progress.bytes_read += data
+        self.progress.stage_bytes_done += data
 
     def _check_cancel(self) -> None:
         if self.cancel.is_set():
@@ -203,10 +218,12 @@ class _Analysis:
 
     def _locate(self, items: list[dupes.Candidate]) -> None:
         """Ask the position of each file on the disk (in path order: directories are reused)."""
+        self.progress.start_stage("repérage sur le disque", len(items))
         for candidate in sorted(items, key=lambda c: c.rel_path):
             self._check_cancel()
             errors_before = len(self.errors)
             position = self._with_file(candidate, "locate", physical_offset)
+            self.progress.stage_done += 1
             if len(self.errors) > errors_before:
                 continue  # not readable: reported, and left out of every stage
             self.order[candidate.entry_id] = read_order_key(position, candidate.dev, candidate.ino)
@@ -218,13 +235,17 @@ class _Analysis:
         operation: str,
         work: Callable[[dupes.Candidate, int], bytes],
         store: dict[int, bytes],
+        *,
+        whole: bool = False,
     ) -> None:
         """Compute one digest for each file of ``items``, in disk order, and
-        keep it in ``store``; failures are reported by _with_file."""
-        self.progress.stage = name
+        keep it in ``store``; failures are reported by _with_file. ``whole``:
+        the files are read in full, so the bytes to read are known."""
+        self.progress.start_stage(name, len(items), sum(c.size for c in items) if whole else 0)
         for candidate in self._ordered(items):
             self._check_cancel()
             digest = self._with_file(candidate, operation, functools.partial(work, candidate))
+            self.progress.stage_done += 1
             if digest is not None:
                 store[candidate.entry_id] = digest
                 self.read_ids.add(candidate.entry_id)
@@ -249,6 +270,7 @@ class _Analysis:
         reference = group[0]
         for other in group[1:]:
             self._check_cancel()
+            self.progress.stage_done += 1
             try:
                 fd_a = self.reader.open_file(reference.rel_path, _expected(reference))
                 try:
@@ -279,7 +301,6 @@ class _Analysis:
         files still tied with another one after the previous stage."""
         # Every stage skips digests already known from an earlier analysis.
         need_head = [c for c in candidates if c.entry_id not in self.head]
-        self.progress.stage = "repérage sur le disque"
         self._locate(need_head)
         need_head = [c for c in need_head if c.entry_id in self.order]
         self._stage("début des fichiers", need_head, "read", self._head, self.head)
@@ -299,11 +320,14 @@ class _Analysis:
 
         same_edges = [c for g in _groups(same_head, head_and_tail) for c in g]
         need_full = [c for c in same_edges if c.entry_id not in self.full]
-        self._stage("lecture complète", need_full, "read", self._full, self.full)
+        self._stage("lecture complète", need_full, "read", self._full, self.full, whole=True)
 
         if self.options.verify_bytes:
-            self.progress.stage = "comparaison octet par octet"
-            for group in _groups(candidates, lambda c: self.full.get(c.entry_id)):
+            groups = _groups(candidates, lambda c: self.full.get(c.entry_id))
+            self.progress.start_stage(
+                "comparaison octet par octet", sum(len(g) - 1 for g in groups)
+            )
+            for group in groups:
                 self._verify(group)
 
         self.progress.reused = sum(
