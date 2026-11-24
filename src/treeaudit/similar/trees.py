@@ -268,13 +268,19 @@ def _copies(
         yield current[0], paths
 
 
+def _git_internal(path: bytes) -> bool:
+    """A file of git itself (hook samples, submodules): the same in every
+    repository, never a copy the user made. Only hides pairs from the list."""
+    return b".git" in path.split(b"/")[:-1]
+
+
 def candidate_pairs(
     conn: sqlite3.Connection, scan_id: int, run_id: int
 ) -> list[tuple[bytes, bytes, int, int]]:
     """(folder A, folder B, bytes, files) in common, the most bytes first."""
     shared: dict[tuple[bytes, bytes], list[int]] = defaultdict(lambda: [0, 0])
     for size, paths in _copies(conn, scan_id, run_id):
-        chosen = sorted(paths)[:MAX_GROUP_PATHS]
+        chosen = sorted(p for p in paths if not _git_internal(p))[:MAX_GROUP_PATHS]
         seen: set[tuple[bytes, bytes]] = set()
         for i, first in enumerate(chosen):
             for second in chosen[i + 1 :]:

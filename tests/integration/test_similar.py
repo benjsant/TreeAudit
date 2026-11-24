@@ -161,6 +161,19 @@ def test_unrelated_folders_make_no_pair(analyse: Callable[..., Report | None]) -
     assert report is not None and report.pairs == []
 
 
+def test_git_internal_files_make_no_pair(analyse: Callable[..., Report | None]) -> None:
+    """Found on a real disk: every repository holds the same hook samples."""
+    hooks = {f"hooks/{n}.sample": blob(n) for n in ("pre-commit", "pre-push", "update")}
+    tree = {f"site/.git/{p}": c for p, c in hooks.items()}
+    tree |= {f"site/.git/modules/theme/{p}": c for p, c in hooks.items()}
+    tree |= {f"outil/.git/{p}": c for p, c in hooks.items()}
+    tree |= {f"Photos/{n}.jpg": blob(n) for n in "ab"} | {
+        f"Photos (copie)/{n}.jpg": blob(n) for n in "ab"
+    }
+    pair = only(analyse(tree))
+    assert {pair.a_path, pair.b_path} == {"Photos", "Photos (copie)"}
+
+
 def test_nothing_is_said_without_a_search_for_duplicates(
     analyse: Callable[..., Report | None],
 ) -> None:
