@@ -203,11 +203,12 @@ Aucun parcours de fichiers dans cette phase.
 - [x] Définir un score de similarité explicable : part de chaque côté retrouvée dans l'autre, octets et fichiers (D-058).
 - [x] Tester arbres renommés, sous-ensembles et fichiers manquants (aussi modifiés, déplacés, liens physiques, petits fichiers, familles).
 - [x] Distinguer faits et heuristiques dans l'affichage : suppositions à part, jamais comptées.
+- [x] Photos ressemblantes (D-069) : le navigateur décode, TreeAudit calcule empreinte et vignette ; deux tests (empreinte, corrélation), copies identiques séparées des autres versions. Essayé sur 2 999 images réelles.
 - [ ] Plus tard : comparer deux analyses (deux disques analysés séparément).
 
 ## Phase 8 — Validation Linux
-- [ ] Tests complets sous Linux Mint et Fedora/Nobara. Nobara 44 (noyau 7.3) fait le 2026-11-09 : suite complète en Docker ; AppImage en natif (analyse, doublons, serveur sur 127.0.0.1 seulement, liens non suivis, sonde du bac à sable 34/34 sur l'hôte). Reste Linux Mint.
-- [ ] Volumes externes (ext4, btrfs, NTFS, exFAT), noms particuliers.
+- [ ] Tests complets sous Linux Mint et Fedora/Nobara. Nobara 44 (noyau 7.3) fait le 2026-11-09 : suite complète en Docker ; AppImage en natif (analyse, doublons, serveur sur 127.0.0.1 seulement, liens non suivis, sonde du bac à sable 34/34 sur l'hôte), refait le 2026-11-25 (37 essais, io_uring compris, tous conformes). Linux Mint 22.3 en machine virtuelle (noyau 7.0, Landlock ABI 8), 2026-11-23 : AppImage lancée par double-clic, sonde du bac à sable, analyses et doublons conformes à la fiche. Reste sur Mint : une clé USB, et le mode Docker.
+- [x] Volumes externes (ext4, btrfs, NTFS, exFAT), noms particuliers : clé USB formatée en exFAT, NTFS et btrfs le 2026-11-19 (`TEST_PLAN.md`), disque dur USB ext4 le 2026-11-24 ; analyses et doublons identiques à la fiche, débranchement pendant une lecture signalé.
 - [x] Revue de sécurité complète (2026-11-09, `SECURITY.md` « Revue V1 ») : 5 défauts corrigés et testés, risques résiduels documentés.
 - [x] Documentation installation, désinstallation, emplacement et suppression de la base locale (guide 01, « Où sont tes données » et « Désinstaller »).
 - [x] Prérequis vérifiés et expliqués, jamais installés : `./treeaudit requirements` (D-059).

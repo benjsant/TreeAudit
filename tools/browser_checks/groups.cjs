@@ -1,5 +1,5 @@
 // Look at the groups of the similar images page (not shipped), in the Playwright image:
-//   node ui.cjs <page url> <out dir>
+//   node groups.cjs <page url> <out dir>
 // Ticks the first group, keeps its second image instead, prepares the trash
 // command, and takes screenshots: desktop light, phone dark.
 const pw = require("/app/node_modules/playwright");

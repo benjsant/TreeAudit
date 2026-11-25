@@ -1,5 +1,5 @@
 // End-to-end check of the similar images page (not shipped), in the Playwright image:
-//   node e2e.cjs <engine> <page url> [stop seconds]   engine: chromium, firefox or firefox-rfp
+//   node signatures.cjs <engine> <page url> [stop seconds]   engine: chromium, firefox or firefox-rfp
 // With [stop seconds]: "Arrêter" after that long, then start again (resume).
 // Clicks "Calculer les signatures" and waits for the end or an error message;
 // prints the progress lines it saw, then the final state, as JSON.

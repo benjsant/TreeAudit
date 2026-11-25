@@ -228,7 +228,7 @@ Toute fonction, classe, méthode et tout module public de `src/` et `tools/` a u
 |---|---|
 | `tests/unit/` | fonctions pures : règles, commandes et double vérification, filtres, tailles, validation des racines, montages |
 | `tests/integration/` | arborescences synthétiques analysées pour de vrai : analyse, doublons, archives (relues par GNU tar), Ranger (scripts exécutés), projets, aperçu, pages web |
-| `tests/security/` | absence d'appels au shell (`test_static_code.py`), conteneurs (`test_compose.py`), lanceur, AppImage, et la **sonde du bac à sable** (`test_sandbox.py`) qui tente 36 actions interdites |
+| `tests/security/` | absence d'appels au shell (`test_static_code.py`), conteneurs (`test_compose.py`), lanceur, AppImage, et la **sonde du bac à sable** (`test_sandbox.py`) qui tente 37 actions, dont 29 doivent être refusées |
 
 On ne teste jamais sur les vrais dossiers de l'utilisateur : uniquement des arborescences synthétiques, `dummy_folder` et `big_dummy_folder` (un million d'entrées).
 
