@@ -25,8 +25,15 @@ async function main() {
   }
   step("dossier choisi");
   await page.locator("[data-start-scan]").click();
-  // A finished analysis opens its summary by itself.
-  await page.waitForURL(/\/scans\/\d+$/, { timeout: 600000 });
+  // A finished analysis opens its summary by itself, once the page saw it
+  // running; one done before the first look shows "Voir le bilan" instead.
+  const result = page.locator('[data-field="result"]');
+  await Promise.race([
+    page.waitForURL(/\/scans\/\d+$/, { timeout: 600000 }),
+    result.waitFor({ state: "visible", timeout: 600000 }),
+  ]);
+  if (!/\/scans\/\d+$/.test(page.url())) await result.click();
+  await page.waitForURL(/\/scans\/\d+$/);
   step(`bilan ouvert : ${(await page.locator("p.lead").first().innerText()).trim()}`);
   await page.getByRole("link", { name: "🖼️ Photos ressemblantes" }).click();
   await page.locator("[data-start-signing]").waitFor({ state: "visible" });
