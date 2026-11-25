@@ -1699,6 +1699,14 @@ def test_similar_images_are_shown_in_groups(client: TestClient, scanned: int) ->
     assert "&lt;img src=x onerror=alert(1)&gt;" in page.text and XSS not in page.text
     assert "4000 \u00d7 3000" in page.text and "la plus grande résolution" in page.text
     assert 'data-version="' in page.text and 'name="keep-1" value="2"' in page.text
+    # The fixture's photos hold the same bytes: a likely copy until the
+    # duplicates search proves it, then a fact, with the way to that page.
+    assert "sans doute une copie identique de l&#39;image gardée" in page.text
+    assert "de copies identiques</strong>" in page.text
+    run = run_job(client, f"/api/scans/{scanned}/dupes", {"micro": False})
+    proven = client.get(f"/scans/{scanned}/images").text
+    assert "= copie identique de l&#39;image gardée" in proven
+    assert f'href="/dupes/{run["run_id"]}"' in proven
 
 
 def test_the_similar_images_command_removes_what_is_not_kept(

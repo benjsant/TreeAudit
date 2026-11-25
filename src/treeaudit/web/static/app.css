@@ -225,4 +225,6 @@ meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 9
 .preview .preview-failed { aspect-ratio: auto; min-height: 4rem; max-width: 30rem; }
 
 /* similar images (D-069) */
+/* A long path in a caption breaks anywhere rather than widen the page. */
+.gallery-item > span { overflow-wrap: anywhere; min-width: 0; }
 .facts { margin: .4rem 0 .8rem; padding-left: 1.2rem; }

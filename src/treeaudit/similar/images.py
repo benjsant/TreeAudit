@@ -21,12 +21,14 @@ Nothing on the disk is read here, nothing is changed.
 
 from __future__ import annotations
 
+import dataclasses
 import operator
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
 
 from treeaudit.db import cache
+from treeaudit.db import dupes as dupes_db
 from treeaudit.db.images import ALGO, HASH_BYTES, THUMB_BYTES
 from treeaudit.duplicates.groups import Guarded, guarded_places, protection_reason
 
@@ -95,6 +97,11 @@ class Member:
     close: bool
     """Directly similar to the kept image: only those may be proposed."""
     protection: str | None
+    same_as: Image | None = None
+    """An earlier member with the same content: this one is only a copy of it."""
+    proof: str | None = None
+    """How the copy is known: SAME_BYTES (the duplicates search compared the
+    bytes) or SAME_LOOK (same size and same signature, not compared)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +127,11 @@ class Group:
         """Bytes freed by removing every removable member."""
         return sum(m.image.size for m in self.removable)
 
+    @property
+    def copies_recoverable(self) -> int:
+        """Part of it that only removes copies of a picture kept elsewhere."""
+        return sum(m.image.size for m in self.removable if m.same_as is not None)
+
 
 @dataclass(frozen=True, slots=True)
 class Report:
@@ -144,6 +156,12 @@ class Report:
     def recoverable(self) -> int:
         """Bytes freed by removing them all."""
         return sum(g.recoverable for g in self.groups)
+
+    @property
+    def copies_recoverable(self) -> int:
+        """Part of it made of identical copies: the rest removes other
+        versions or other shots of a picture."""
+        return sum(g.copies_recoverable for g in self.groups)
 
 
 class SelectionError(ValueError):
@@ -283,6 +301,52 @@ def _cached_pairs(
     return pairs
 
 
+SAME_BYTES = "octets"
+SAME_LOOK = "signature"
+
+
+def full_digests(conn: sqlite3.Connection, scan_id: int) -> dict[int, bytes] | None:
+    """SHA-256 of the files the latest finished duplicates search read in full,
+    by entry id (every name of an inode); None if there was no such search."""
+    run = dupes_db.latest_run(conn, scan_id, micro=False)
+    if run is None:
+        return None
+    rows = conn.execute(
+        "SELECT e.entry_id, h.full FROM file_hash h "
+        "JOIN entry r ON r.scan_id = ? AND r.entry_id = h.entry_id "
+        "JOIN entry e ON e.scan_id = r.scan_id AND e.dev = r.dev AND e.ino = r.ino "
+        "WHERE h.run_id = ? AND h.full IS NOT NULL",
+        (scan_id, run["id"]),
+    )
+    return {row[0]: bytes(row[1]) for row in rows}
+
+
+def mark_copies(group: Group, digests: dict[int, bytes] | None) -> Group:
+    """Mark the members that are copies of an earlier one (the kept one first).
+
+    With a duplicates search, two files are copies when they have the same
+    size and the same SHA-256: a fact. A file the search did not read in full
+    while another of its size was is left unmarked (it may differ). Without a
+    search, the same size and the same signature make a likely copy, said so."""
+    first: dict[object, Image] = {}
+    members = []
+    for member in group.members:
+        image = member.image
+        if digests is None:
+            key: object = ("look", image.size, image.hash, image.thumb)
+            proof = SAME_LOOK
+        elif image.entry_id in digests:
+            key, proof = ("bytes", image.size, digests[image.entry_id]), SAME_BYTES
+        else:
+            key, proof = ("alone", image.entry_id), SAME_BYTES
+        earlier = first.setdefault(key, image)
+        if earlier is image:
+            members.append(member)
+        else:
+            members.append(dataclasses.replace(member, same_as=earlier, proof=proof))
+    return Group(tuple(members), group.reasons)
+
+
 def similar_images(conn: sqlite3.Connection, scan_id: int) -> Report:
     """The groups of similar images of an analysis, from its stored signatures."""
     version = signatures_version(conn, scan_id)
@@ -301,7 +365,10 @@ def similar_images(conn: sqlite3.Connection, scan_id: int) -> Report:
     for index, image in enumerate(images):
         components[root(index)].append(image)
     guarded = guarded_places(conn, scan_id)
-    groups = [make_group(m, guarded) for m in components.values() if len(m) > 1]
+    digests = full_digests(conn, scan_id)
+    groups = [
+        mark_copies(make_group(m, guarded), digests) for m in components.values() if len(m) > 1
+    ]
     groups.sort(key=lambda g: (-g.recoverable, -len(g.members), g.keep.image.rel_path))
     failed = conn.execute(
         "SELECT COUNT(*) FROM image_sig WHERE scan_id = ? AND algo = ? AND failure IS NOT NULL",

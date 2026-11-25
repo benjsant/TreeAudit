@@ -29,6 +29,13 @@ Deux images se ressemblent si leurs empreintes sont proches **et** si leurs vign
 
 Clique sur **« garder celle-ci »** sous une autre image pour la choisir à la place.
 
+**Copies identiques.** Un groupe mélange souvent deux choses : d'autres versions ou d'autres prises d'une photo, et de simples **copies** (la même photo sauvegardée à plusieurs endroits). Sous chaque copie, la page écrit « = copie identique de… » :
+
+- après une [recherche de doublons](04-doublons.md), c'est un fait : les deux fichiers ont été comparés octet par octet ;
+- sans elle, TreeAudit écrit « sans doute une copie identique » : même taille et même signature, mais les octets n'ont pas été comparés.
+
+Le total est séparé : ce que libèrent les copies identiques, sans aucune perte, et ce que libèrent les autres versions ou prises, qui sont un vrai choix. Sur une sauvegarde de téléphone copiée deux fois, presque tout est souvent fait de copies : **commence alors par la page Doublons**, puis reviens ici pour les rafales.
+
 **Ce qui n'est jamais proposé** :
 
 - l'image gardée ;

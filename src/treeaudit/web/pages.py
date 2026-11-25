@@ -744,6 +744,7 @@ def similar_images_page(
         report=report,
         groups=report.groups[:limit],
         limit=limit,
+        dupes_run=dupes_db.latest_run(conn, scan_id, micro=False),
     )
 
 

@@ -34,7 +34,12 @@
   {% elif not report.groups %}
     <p>Aucune photo ressemblante parmi les {{ report.signed | number }} image(s) traitée(s) 🎉</p>
   {% else %}
-    <p class="lead">{{ report.groups | length | number }} groupe(s) parmi {{ report.signed | number }} image(s) traitée(s) : {{ report.removable | number }} image(s) proposée(s), {{ report.recoverable | size }} à récupérer. Dans chaque groupe, on garde une image (★) ; change-la si tu en préfères une autre.</p>
+    <p class="lead">{{ report.groups | length | number }} groupe(s) parmi {{ report.signed | number }} image(s) traitée(s) : {{ report.removable | number }} image(s) proposée(s), {{ report.recoverable | size }} à récupérer{% if report.copies_recoverable %}, dont <strong>{{ report.copies_recoverable | size }} de copies identiques</strong> et {{ (report.recoverable - report.copies_recoverable) | size }} d'autres versions ou d'autres prises{% endif %}. Dans chaque groupe, on garde une image (★) ; change-la si tu en préfères une autre.</p>
+    {% if report.copies_recoverable %}
+    <p class="notice info small">Une partie des images sont de simples <strong>copies identiques</strong> (la même photo sauvegardée à plusieurs endroits).
+    {% if dupes_run %}La page <a href="/dupes/{{ dupes_run.id }}">📑 Doublons</a> les traite déjà : commence par elle, puis reviens ici pour les autres versions et les rafales.
+    {% else %}Ici, elles sont repérées à leur taille et à leur signature (« sans doute identique ») : la <a href="/scans/{{ scan.id }}">recherche de doublons</a> du bilan le vérifie octet par octet.{% endif %}</p>
+    {% endif %}
     <p class="notice warn small">Ressemblantes ne veut pas dire identiques : les photos d'une rafale sont des prises différentes. Regarde les aperçus avant de cocher un groupe.</p>
     <div data-command-builder data-endpoint="/api/scans/{{ scan.id }}/images/command" data-kind="images" data-version="{{ report.version }}">
       <div class="actions">
@@ -47,7 +52,7 @@
           <label class="item-main">
             <input type="checkbox" data-pick="{{ number }}" {% if not group.removable %}disabled{% endif %}>
             <span class="item-text">
-              <strong>{{ group.members | length }} images</strong>{% if group.removable %} <span class="size">→ {{ group.recoverable | size }} à récupérer</span>{% else %} <span class="muted">— rien à proposer</span>{% endif %}<br>
+              <strong>{{ group.members | length }} images</strong>{% if group.removable %} <span class="size">→ {{ group.recoverable | size }} à récupérer{% if group.copies_recoverable %} (dont {{ group.copies_recoverable | size }} de copies identiques){% endif %}</span>{% else %} <span class="muted">— rien à proposer</span>{% endif %}<br>
               On garde : ★ {{ full_path(prefix, group.keep.image.rel_path_display) }} <span class="muted small">({{ group.reasons | join(" ; ") }})</span>
             </span>
           </label>
@@ -58,6 +63,7 @@
               <label class="gallery-caption"><input type="radio" name="keep-{{ number }}" value="{{ loop.index }}" {% if loop.first %}checked data-default{% endif %}> <span class="small">{{ "★ gardée" if loop.first else "garder celle-ci" }}</span></label>
               <span class="path small" title="{{ image.rel_path_display }}">{{ image.rel_path_display }}</span>
               <span class="muted small">{{ image.width }} × {{ image.height }} · {{ image.size | size }} · {{ image.mtime_ns | date }}</span>
+              {% if member.same_as %}<span class="small" title="{{ member.same_as.rel_path_display }}">= {{ "copie identique" if member.proof == "octets" else "sans doute une copie identique" }} de {{ "l'image gardée" if member.same_as.entry_id == group.keep.image.entry_id else member.same_as.rel_path_display.rsplit("/", 1)[-1] }}</span>{% endif %}
               {% if member.protection %}<span class="muted small">🔒 {{ member.protection }}</span>
               {% elif not member.close %}<span class="muted small">pas assez proche de l'image gardée : jamais proposée</span>{% endif %}
             </li>

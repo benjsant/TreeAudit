@@ -18,6 +18,7 @@ from treeaudit.core.config import RootConfig
 from treeaudit.db import images as images_db
 from treeaudit.db.connection import connect_memory
 from treeaudit.duplicates.groups import Guarded
+from treeaudit.duplicates.runner import DupOptions, run_duplicates
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.validation import ValidationContext
 from treeaudit.scanner.runner import ScanRequest, run_scan
@@ -54,18 +55,30 @@ def conn() -> Iterator[sqlite3.Connection]:
     connection.close()
 
 
+searches: dict[int, tuple[RootConfig, ValidationContext]] = {}
+
+
+def search_duplicates(conn: sqlite3.Connection, scan_id: int) -> None:
+    config, ctx = searches[scan_id]
+    run_duplicates(conn, scan_id, config, ctx=ctx, options=DupOptions(), cancel=threading.Event())
+
+
 @pytest.fixture
 def analyse(
     tmp_path: Path, conn: sqlite3.Connection, data_disk_table: Callable[..., MountTable]
 ) -> Callable[..., tuple[int, dict[str, int]]]:
     """Scan a tree of files named .jpg; the content does not matter here."""
 
-    def run(names: list[str], links: dict[str, str] | None = None) -> tuple[int, dict[str, int]]:
+    def run(
+        names: list[str],
+        links: dict[str, str] | None = None,
+        contents: dict[str, bytes] | None = None,
+    ) -> tuple[int, dict[str, int]]:
         root = tmp_path / "root"
         for name in names:
             target = root / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(name.encode() * 50)
+            target.write_bytes((contents or {}).get(name, name.encode() * 50))
         for link, existing in (links or {}).items():
             os.link(root / existing, root / link)
         config = RootConfig(id="r", path=str(root), label="r")
@@ -73,6 +86,7 @@ def analyse(
         scan_id = run_scan(
             conn, ScanRequest(root=config), ctx=ctx, cancel=threading.Event()
         ).scan_id
+        searches[scan_id] = (config, ctx)
         ids = {
             row[1]: row[0]
             for row in conn.execute(
@@ -301,3 +315,48 @@ def test_the_reason_is_what_put_the_kept_one_first() -> None:
     )
     heavier = similar.make_group([*copies[2:], shot(5, 1400, 2026)], Guarded(set(), {}))
     assert heavier.reasons == ("à résolution égale, le fichier le plus lourd",)
+
+
+def test_identical_copies_are_told_apart_from_other_shots(
+    conn: sqlite3.Connection, analyse: Callable[..., tuple[int, dict[str, int]]]
+) -> None:
+    """Found on real photos: most groups were the same photo saved twice.
+    Without a duplicates search, the same size and signature make a likely copy;
+    with one, only the same bytes do, whatever the signatures say."""
+    same, other = os.urandom(4096), os.urandom(4096)
+    names = ["2024/plage.jpg", "sauvegarde/plage.jpg", "2024/plage-2.jpg", "retouchée/plage.jpg"]
+    contents = {names[0]: same, names[1]: same, names[2]: os.urandom(4096), names[3]: other}
+    scan_id, ids = analyse(names, contents=contents)
+    h, thumb = random_hash(), random_thumb()
+    sign(
+        conn,
+        scan_id,
+        ids,
+        {
+            names[0]: (h, thumb, 4000, 3000),
+            names[1]: (h, thumb, 4000, 3000),  # the same file, saved twice
+            names[2]: (flipped(h, 6), nearby(thumb), 4000, 3000),  # another shot
+            names[3]: (h, thumb, 4000, 3000),  # same look and size, other bytes
+        },
+    )
+
+    def marks() -> tuple[dict[str, tuple[str | None, str | None]], int]:
+        [group] = similar.similar_images(conn, scan_id).groups
+        found = {
+            m.image.rel_path_display: (m.same_as and m.same_as.rel_path_display, m.proof)
+            for m in group.members
+        }
+        return found, group.copies_recoverable
+
+    guessed, guessed_bytes = marks()
+    assert guessed[names[1]] == (names[0], similar.SAME_LOOK)
+    assert guessed[names[3]] == (names[0], similar.SAME_LOOK)
+    assert guessed[names[2]] == (None, None)
+    assert guessed_bytes == 2 * 4096
+
+    search_duplicates(conn, scan_id)
+    proven, proven_bytes = marks()
+    assert proven[names[1]] == (names[0], similar.SAME_BYTES)
+    assert proven[names[3]] == (None, None)  # it only looked the same
+    assert proven[names[2]] == (None, None)
+    assert proven_bytes == 4096
