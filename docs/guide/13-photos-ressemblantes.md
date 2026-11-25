@@ -11,7 +11,8 @@ Clique sur **« Calculer les signatures »**. Ton navigateur ouvre chaque image 
 - **Rien ne sort de ton ordinateur.** C'est ton navigateur qui ouvre les images, comme pour l'aperçu. TreeAudit lui-même n'en décode aucune et ne garde jamais l'image : seulement la signature.
 - **Garde l'onglet ouvert.** Compte une à deux minutes pour 1 000 photos, plus le temps de lecture du disque. Tu peux **arrêter** et reprendre plus tard : ce qui est fait est gardé.
 - **Une image déjà traitée n'est pas recalculée**, même dans une nouvelle analyse, tant qu'elle n'a pas changé (même fichier, même taille, même date).
-- Une image que le navigateur ne sait pas ouvrir (fichier abîmé, faux `.jpg`) est comptée comme **illisible** et laissée de côté.
+- Une image que le navigateur ne sait pas ouvrir (fichier abîmé, faux `.jpg`) est comptée comme **illisible** et laissée de côté. Une image modifiée depuis l'analyse, ou qui n'a pas pu être lue sur le disque, est laissée de côté elle aussi, mais elle est **redemandée** au calcul suivant.
+- **Disque débranché pendant le calcul** : la page s'arrête aussitôt (« Calcul interrompu : dossier indisponible »), sans marquer les images restantes comme illisibles. Rebranche le disque (avec Docker, relance aussi TreeAudit, voir [Dépannage](11-depannage.md#jai-débranché-le-disque-pendant-une-analyse)), puis clique de nouveau sur « Calculer les signatures » : ce qui est fait est gardé.
 
 **Si TreeAudit refuse de calculer** en parlant de « protection contre le pistage » : ton navigateur brouille volontairement les images que lit une page (Brave, LibreWolf, Tor Browser, Firefox en protection renforcée). Les signatures seraient fausses. TreeAudit le vérifie avant tout calcul avec une petite image de contrôle. Ouvre TreeAudit dans un autre navigateur (Firefox ou Chrome par défaut), ou désactive cette protection pour `127.0.0.1`.
 
@@ -40,7 +41,8 @@ Le total est séparé : ce que libèrent les copies identiques, sans aucune pert
 
 - l'image gardée ;
 - une image qui ne ressemble pas **directement** à l'image gardée. Dans une rafale, la 1ʳᵉ photo peut ressembler à la 2ᵉ et la 2ᵉ à la 3ᵉ, sans que la 1ʳᵉ ressemble à la 3ᵉ. La 3ᵉ reste montrée, avec la mention « pas assez proche de l'image gardée » ;
-- une image dans un logiciel, un jeu ou un dépôt git (🔒), comme pour les doublons.
+- une image dans un logiciel, un jeu ou un dépôt git (🔒), comme pour les doublons ;
+- un fichier qui a **plusieurs noms** sur le disque (liens physiques, 🔒) : en supprimer un nom ne libère rien.
 
 ## 3. Préparer la commande
 

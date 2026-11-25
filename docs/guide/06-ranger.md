@@ -10,7 +10,7 @@ Tout irait dans un nouveau dossier, **`Rangé/`** par défaut, à l'intérieur d
 |---|---|
 | Photos, Vidéos | classées **par année** : `Rangé/Photos/2019/` (voir plus bas) |
 | Musique, Documents, Archives, Installateurs, Code, Polices | par type de fichier |
-| **Projets** | les projets informatiques, **déplacés en entier** (un dossier avec `package.json`, `.git`…). Un `requirements.txt` ou un `Makefile` seul ne compte que si le dossier ne contient pas d'autre projet. Un **dossier de code** sans marqueur (des fichiers de code à son niveau, des sous-dossiers, et au moins trois quarts de fichiers de code) est déplacé en entier lui aussi : une application n'est jamais dispersée en `Code/pages`, `Code/config`… |
+| **Projets** | les projets informatiques, **déplacés en entier** (un dossier avec `package.json`, `.git`…). Un `requirements.txt` ou un `Makefile` seul ne compte que si le dossier ne contient pas d'autre projet. Un **dossier de code** sans marqueur (des fichiers de code à son niveau, des sous-dossiers, et au moins trois quarts de fichiers de code) est déplacé en entier lui aussi : une application n'est jamais dispersée en `Code/pages`, `Code/config`… Sauf s'il contient un lien symbolique (une fois déplacé, il pointerait ailleurs), un fichier spécial ou un nom qu'on ne peut pas écrire sans ambiguïté dans un script : ce dossier est alors réparti comme un dossier mélangé. |
 | **Logiciels** | les jeux et logiciels, **déplacés en entier** (Steam, préfixe Wine, programme Windows…) |
 | Autres | le reste |
 

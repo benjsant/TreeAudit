@@ -25,6 +25,14 @@ Regarde les avertissements au-dessus de la commande :
 
 L'image a été modifiée ou déplacée depuis l'analyse, son contenu n'est pas une image reconnue (malgré son extension), ou elle dépasse 20 Mio. Relance une analyse si le dossier a changé.
 
+## Photos ressemblantes : le calcul s'arrête
+
+- **« protection contre le pistage »** : ton navigateur brouille les images que lit une page. Ouvre TreeAudit dans un autre navigateur, ou désactive cette protection pour `127.0.0.1`.
+- **« dossier indisponible »** : le disque a été débranché ou démonté. Rebranche-le (avec Docker, relance aussi TreeAudit), puis relance le calcul : ce qui est fait est gardé.
+- **« La page n'est pas à jour »** ou **« recharge la page »** : TreeAudit a changé, ou de nouvelles images ont été traitées dans un autre onglet. Recharge la page.
+
+Voir [13. Photos ressemblantes](13-photos-ressemblantes.md).
+
 ## Une taille me paraît fausse
 
 - Un dossier montre la **place qu'il occupe** sur le disque, un fichier sa **taille**. Un petit fichier de 32 o occupe pourtant 4 Kio : c'est la taille d'un bloc du disque.

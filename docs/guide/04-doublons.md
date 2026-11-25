@@ -31,4 +31,5 @@ Coche les groupes à nettoyer (« Tout cocher » ignore les fichiers vides), pui
 - Ce ne sont que des doublons **exacts**. Une photo redimensionnée ou un document réenregistré ne sont pas des doublons pour TreeAudit.
 - Un dossier copié en entier apparaît ici fichier par fichier. La page **🪞 Dossiers presque identiques** le montre dossier par dossier ([chapitre 12](12-dossiers-presque-identiques.md)).
 - Les images seulement ressemblantes (redimensionnées, recompressées, aux métadonnées modifiées) ne sont pas des doublons exacts : la page [🖼️ Photos ressemblantes](13-photos-ressemblantes.md) les retrouve.
+- Un fichier modifié pendant la recherche est écarté de son groupe et listé dans les erreurs ; la recherche finit « incomplète ». Si c'était la copie gardée, la suivante prend sa place : les autres copies restent dans le groupe.
 - Si un fichier est modifié par un outil qui lui remet exactement la même date, la recherche suivante ne le relit pas. C'est le même critère que `rsync`.

@@ -57,6 +57,25 @@
 - Fichier modifié pendant le calcul d'empreinte : marqué, exclu.
 - Erreur de lecture pendant le calcul : signalée.
 - Comparaison octet à octet activée : résultat identique.
+- Copie de référence modifiée avant la comparaison octet par octet : c'est elle qui est signalée, la suivante prend sa place, les copies intactes restent dans le groupe (audit du 2026-11-25).
+- Copies protégées (logiciel, jeu, dépendances, dépôt git) toujours gardées ; programme portable reconnu à son contenu où qu'il soit rangé.
+- Progression : chaque étape compte ses propres fichiers ; empreintes réutilisées quand rien n'a changé.
+
+## Dossiers presque identiques (D-058, `test_similar.py`)
+- Copie renommée : une paire, identique dans les deux sens ; sous-ensemble : le sens est dit ; fichiers modifiés, déplacés et manquants.
+- Petits fichiers : une supposition, jamais comptée, devenue un fait après la recherche des petits fichiers.
+- Liens physiques et fichiers vides ; paire incluse dans une paire non répétée ; dossiers sans rapport, fichiers internes de git : aucune paire.
+- Rien n'est dit sans recherche de doublons ; noms piégés gardés comme données ; plusieurs copies en une famille ; analyse d'un sous-dossier.
+
+## Photos ressemblantes (D-069)
+- Regroupement (`test_similar_images.py`) : copie réduite regroupée, la plus grande gardée ; photos d'écrans différents non regroupées (corrélation) ; seuil de l'empreinte exact ; rafale qui dérive montrée, seulement en partie proposée ; l'index trouve exactement les paires d'une comparaison de toutes les paires ; corrélation de Pearson ; raison écrite = critère qui a vraiment choisi l'image gardée.
+- Jamais proposées : images d'un logiciel ou d'un dépôt git ; fichier à plusieurs noms (liens physiques), compté une fois ; échecs et images trop éloignées de l'image gardée.
+- Copies identiques séparées des autres versions (preuve octet par octet ou supposition) ; signatures enregistrées pendant la lecture jamais mélangées aux groupes affichés (audit du 2026-11-25).
+- Web (`test_web.py`) : signatures enregistrées puis reprises pour un fichier inchangé, recalculées pour un fichier modifié ; signatures mal formées ou d'une image hors de l'analyse refusées ; image de contrôle de la page aux pixels attendus ; page avec son seul script ; commande versionnée (409 si les signatures ont changé, 422 pour un groupe ou un choix inconnu, CSRF exigé) ; paires mises en cache puis oubliées.
+- Disque débranché pendant le calcul (`test_preview.py`, `test_web.py`) : dossier indisponible → 503, la page s'arrête ; fichier changé → 409, l'image est redemandée au calcul suivant.
+
+## Vérifications dans un vrai navigateur (`tools/browser_checks/`)
+Hors de la suite, avec Playwright dans un conteneur (voir son `README.md`) : tour de toutes les pages (ordinateur en thème clair, téléphone en thème sombre : erreurs de la console, débordement horizontal, requêtes vers l'extérieur), parcours jusqu'aux photos ressemblantes, calcul des signatures avec arrêt et reprise, refus d'un navigateur qui brouille les images, page des groupes, Ranger « seulement le développement ». Dernier passage : 2026-11-25, Chromium et Firefox, 77 pages et 70 téléchargements sans erreur.
 
 ## Archives vérifiées (phase 6 bis, D-032)
 - Dossier d'archives refusé : dossier système, `/tmp`, dossier personnel entier, lien symbolique, non accessible en écriture, `tmpfs`, lecture seule, chevauchement avec une racine ou le dossier de données ; dans le conteneur : non monté, sous-dossier du montage, deux montages du même dossier de l'hôte.
@@ -128,6 +147,7 @@ Sur btrfs, la clé retirée reste montée sans disque (« missing disk ») : Tre
 - Plan : album gardé en entier, projet et installation Steam jamais découpés, fichiers en vrac par type et année, collisions renommées « (2) », éléments cachés, liens et dossiers vides laissés en place.
 - Un dossier sans photo ni vidéo mis par l'utilisateur dans « Photos » ou « Vidéos » y va sans dossier d'année (le plan plantait, trouvé par l'audit de novembre 2026).
 - Scripts exécutés pour de vrai sur une arborescence de test : rangement sans perte (empreintes identiques), annulation à l'identique, fichier modifié ignoré, place prise jamais écrasée, nom piégé sans effet.
+- Catégories à ranger (D-070) : choix lu dans l'adresse, « seulement le développement et les logiciels » ne déplace ni photos ni documents, même dans un dossier mélangé, éléments non cochés laissés en place et comptés. Dossier de code sans marqueur déplacé en entier, sauf s'il contient un lien. Un `.ts` d'au moins 1 Mio est une vidéo (sauf `.d.ts`) ; un dossier renommé « (2) » garde ses points.
 - Plan d'exécution de la descente dans les sous-dossiers (index des parents), page d'aperçu et téléchargements avec des noms piégés.
 - Sous-dossiers par règles (D-050, `test_subfolders.py`) : mots normalisés (casse, accents, chiffres, mots vides), thèmes, sujet plus fort qu'un type de papier, thème isolé laissé aux mots communs, aucun sous-dossier qui contiendrait tout, thèmes selon la catégorie, séries d'appareil photo écartées (mais gardées parmi les documents), mots collés coupés seulement quand un morceau est un mot de thème ou un mot ailleurs (marques entières, préfixe d'appareil collé toujours écarté), lots de 30 avec « suite » (éléments déjà rangés et noms déjà pris laissés tranquilles), noms sûrs et jamais vagues, même réponse pour la même entrée, 50 000 éléments en moins de 10 s. Page : proposition sans mode expert, affichée seulement, script inchangé, catégorie inconnue ou interdite sans effet.
 - Cas mis de côté (`tools/subfolder_bench/cases.py`), figés avant l'algorithme : le banc d'essai `python -m tools.subfolder_bench` (D-066) mesure les règles sur ces cas et sur ceux écrits autrefois pour l'IA ; `test_subfolders.py` exige au moins 95 % sur chaque cas mis de côté. Retrait de l'IA de Ranger (D-051) : ni bouton ni route.
