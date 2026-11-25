@@ -168,4 +168,24 @@ _V4 = (
     """,
 )
 
-MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1, _V2, _V3, _V4)
+# v5: similar images (D-069). The page decodes each image and sends back a
+# hash and a small grey thumbnail; the image itself is never stored.
+_V5 = (
+    """
+    CREATE TABLE image_sig (
+        scan_id   INTEGER NOT NULL,
+        entry_id  INTEGER NOT NULL,
+        algo      INTEGER NOT NULL,
+        hash      BLOB,
+        thumb     BLOB,
+        width     INTEGER,
+        height    INTEGER,
+        failure   TEXT,
+        PRIMARY KEY (scan_id, entry_id),
+        FOREIGN KEY (scan_id, entry_id) REFERENCES entry(scan_id, entry_id) ON DELETE CASCADE,
+        CHECK ((failure IS NULL) = (hash IS NOT NULL AND thumb IS NOT NULL))
+    )
+    """,
+)
+
+MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1, _V2, _V3, _V4, _V5)

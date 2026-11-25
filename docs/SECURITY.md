@@ -124,6 +124,12 @@ Le mode expert a été retiré : TreeAudit ne contient plus d'IA. Si une IA reve
 - Taille plafonnée à 20 Mio : l'image est lue entièrement en mémoire. La galerie montre 40 images par page, chargées à l'affichage, pour ne pas saturer la mémoire du navigateur.
 - Une racine refusée, un fichier hors de l'index, un dossier privé (secrets du dossier personnel) ou une racine qui a changé depuis l'analyse ne donnent aucun aperçu.
 
+## Images ressemblantes (D-069)
+- Le serveur ne décode toujours aucune image. La page demande chaque image par la route d'aperçu, avec les mêmes contrôles, la décode dans le navigateur et renvoie seulement une **empreinte** (32 octets) et une **vignette en gris** (32 × 32 octets), ou la raison d'un échec.
+- Ces données viennent du navigateur : le serveur les **vérifie toutes**. Version de l'algorithme attendue, texte hexadécimal de longueur fixe, dimensions positives, raison d'échec prise dans une liste fermée, au plus 500 résultats par requête, routes POST protégées contre les requêtes d'un autre site. Chaque numéro doit désigner une image de cette analyse, sinon rien n'est enregistré. Aucun chemin n'est accepté.
+- Le module de l'index (`db/images.py`) refait les contrôles de taille et de raison : une erreur de la route ne suffirait pas à enregistrer n'importe quoi.
+- Une signature n'est reprise d'une analyse précédente que pour un fichier inchangé (périphérique, inode, taille, date à la nanoseconde), et jamais un échec. « Oublier » une analyse efface ses signatures.
+
 ## Archives vérifiées (D-024, D-032)
 - Par défaut, le dossier d'archives est `archives/`, dans le dossier de TreeAudit (D-034). C'est un dossier dédié, que TreeAudit possède, et non un disque choisi dans l'interface : cela évite de monter un disque externe en écriture.
 - C'est la seule fonction qui écrit en dehors du dossier de données. Tout passe par un descripteur du dossier d'archives, ouvert sans suivre de lien juste après sa validation. Le code est dans un seul module, `archive/output.py`, le seul ajouté à la liste blanche du test statique.

@@ -18,7 +18,8 @@ from fastapi.testclient import TestClient
 
 from treeaudit.archive import destination
 from treeaudit.core.config import AppConfig, RootConfig
-from treeaudit.db.connection import database_path
+from treeaudit.db import images as images_db
+from treeaudit.db.connection import connect, database_path
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.registry import evaluate_roots
 from treeaudit.roots.validation import RejectReason
@@ -1479,3 +1480,136 @@ def test_almost_identical_folders_pages(client: TestClient, root: Path) -> None:
     a_file = entry_ids(client, scan_id)[b"Sauvegarde/a.jpg"]
     assert client.get(f"{url}/{a_file}/{b_id}").status_code == 404  # a file, not a folder
     assert client.get(f"{url}/0/{b_id}").status_code == 422
+
+
+# --- similar images: signatures computed by the page (D-069) ------------------------------
+
+HASH = "ab" * 32
+THUMB = "7f" * 1024
+
+
+def signed(entry: int, hash_hex: str = HASH) -> dict[str, object]:
+    return {"entry": entry, "hash": hash_hex, "thumb": THUMB, "width": 4000, "height": 3000}
+
+
+def signatures_of(client: TestClient, scan_id: int) -> dict[int, tuple[object, ...]]:
+    data_dir = client.app.state.config.data_dir  # type: ignore[attr-defined]
+    conn = sqlite3.connect(database_path(data_dir))
+    try:
+        return {
+            row[0]: row[1:]
+            for row in conn.execute(
+                "SELECT entry_id, algo, hash, width, failure FROM image_sig WHERE scan_id = ?",
+                (scan_id,),
+            )
+        }
+    finally:
+        conn.close()
+
+
+def test_image_signatures_are_stored_then_reused(client: TestClient, scanned: int) -> None:
+    ids = entry_ids(client, scanned)
+    url = f"/api/scans/{scanned}/images"
+    assert client.post(f"{url}/todo", json={}).status_code == 403  # CSRF guard
+    todo = client.post(f"{url}/todo", json={}, headers=CSRF).json()
+    images = sorted(ids[p] for p in ids if p.startswith(b"photos/"))
+    assert (todo["algo"], todo["total"], todo["done"], todo["failed"]) == (1, 3, 0, 0)
+    assert sorted(todo["todo"]) == images
+    first, second, broken = todo["todo"]
+    body = {
+        "algo": 1,
+        "items": [signed(first), signed(second), {"entry": broken, "failure": "undecodable"}],
+    }
+    saved = client.post(f"{url}/signatures", json=body, headers=CSRF)
+    assert saved.json() == {"saved": 2, "failed": 1}
+    after = client.post(f"{url}/todo", json={}, headers=CSRF).json()
+    assert (after["done"], after["failed"], after["todo"]) == (2, 1, [])
+    stored = signatures_of(client, scanned)
+    assert stored[first] == (1, bytes.fromhex(HASH), 4000, None)
+    assert stored[broken] == (1, None, None, "undecodable")
+
+    # Unchanged files: a new analysis reuses the signatures, not the failure
+    # (a newer browser may decode that image).
+    rescan = run_job(client, "/api/scans", {"root_id": "main", "subpath": ""})
+    again = int(rescan["scan_id"])  # type: ignore[call-overload]
+    state = client.post(f"/api/scans/{again}/images/todo", json={}, headers=CSRF).json()
+    assert (state["total"], state["done"], state["failed"], len(state["todo"])) == (3, 2, 0, 1)
+
+    # Forgetting the analysis forgets its signatures (D-043).
+    assert client.post(f"/api/scans/{scanned}/forget", json={}, headers=CSRF).status_code == 200
+    assert signatures_of(client, scanned) == {}
+    assert len(signatures_of(client, again)) == 2
+
+
+@pytest.mark.parametrize(
+    ("item", "status"),
+    [
+        ({"entry": 0, "hash": "AB" * 32, "thumb": THUMB, "width": 1, "height": 1}, 422),
+        ({"entry": 0, "hash": "ab" * 31, "thumb": THUMB, "width": 1, "height": 1}, 422),
+        ({"entry": 0, "hash": HASH, "thumb": THUMB[:-2], "width": 1, "height": 1}, 422),
+        ({"entry": 0, "hash": HASH, "width": 1, "height": 1}, 422),
+        ({"entry": 0, "hash": HASH, "thumb": THUMB, "width": 0, "height": 1}, 422),
+        ({**signed(0), "failure": "undecodable"}, 422),
+        ({"entry": 0, "failure": "../../etc/passwd"}, 422),
+        ({"entry": -1, "failure": "undecodable"}, 422),
+    ],
+)
+def test_image_signatures_are_checked(
+    client: TestClient, scanned: int, item: dict[str, object], status: int
+) -> None:
+    ids = entry_ids(client, scanned)
+    if item["entry"] == 0:
+        item = {**item, "entry": ids[b"photos/a.jpg"]}
+    body = {"algo": 1, "items": [item]}
+    response = client.post(f"/api/scans/{scanned}/images/signatures", json=body, headers=CSRF)
+    assert response.status_code == status
+    assert signatures_of(client, scanned) == {}
+
+
+def test_image_signatures_only_for_images_of_the_analysis(client: TestClient, scanned: int) -> None:
+    ids = entry_ids(client, scanned)
+    url = f"/api/scans/{scanned}/images/signatures"
+    image, not_an_image = ids[b"photos/a.jpg"], ids[b"app/package.json"]
+    mixed = {"algo": 1, "items": [signed(image), signed(not_an_image)]}
+    refused = client.post(url, json=mixed, headers=CSRF)
+    assert refused.status_code == 422 and str(not_an_image) in refused.json()["detail"]
+    assert signatures_of(client, scanned) == {}  # all or nothing
+    old_page = {"algo": 2, "items": [signed(image)]}
+    assert client.post(url, json=old_page, headers=CSRF).status_code == 409
+    too_many = {"algo": 1, "items": [signed(image)] * 501}
+    assert client.post(url, json=too_many, headers=CSRF).status_code == 422
+    unknown = {"algo": 1, "items": [signed(image)]}
+    assert (
+        client.post("/api/scans/999/images/signatures", json=unknown, headers=CSRF).status_code
+        == 404
+    )
+    assert signatures_of(client, scanned) == {}
+
+
+def test_a_changed_image_is_signed_again(client: TestClient, scanned: int, root: Path) -> None:
+    ids = entry_ids(client, scanned)
+    images = [ids[b"photos/a.jpg"], ids[f"photos/{XSS}.jpg".encode()]]
+    body = {"algo": 1, "items": [signed(i) for i in images]}
+    client.post(f"/api/scans/{scanned}/images/signatures", json=body, headers=CSRF)
+    (root / "photos" / "a.jpg").write_bytes(b"another picture " * 200)
+    rescan = run_job(client, "/api/scans", {"root_id": "main", "subpath": ""})
+    again = int(rescan["scan_id"])  # type: ignore[call-overload]
+    state = client.post(f"/api/scans/{again}/images/todo", json={}, headers=CSRF).json()
+    assert state["done"] == 1
+    assert entry_ids(client, again)[b"photos/a.jpg"] in state["todo"]
+
+
+def test_the_index_refuses_malformed_signatures(client: TestClient, scanned: int) -> None:
+    data_dir = client.app.state.config.data_dir  # type: ignore[attr-defined]
+    image = entry_ids(client, scanned)[b"photos/a.jpg"]
+    limits = {"extensions": {"jpg"}, "max_size": 10**6}
+    conn = connect(data_dir)
+    try:
+        short = images_db.Signature(image, b"\x00" * 31, b"\x00" * 1024, 1, 1)
+        with pytest.raises(ValueError, match="wrong size"):
+            images_db.save(conn, scanned, [short], [], **limits)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="failure reason"):
+            images_db.save(conn, scanned, [], [images_db.Failure(image, "x")], **limits)  # type: ignore[arg-type]
+    finally:
+        conn.close()
+    assert signatures_of(client, scanned) == {}

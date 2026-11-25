@@ -22,7 +22,7 @@ Deux principes structurent tout le code :
 | `core/` | configuration TOML, dossier de données et verrous, bac à sable du noyau, convention des tailles | `config.py`, `datadir.py`, `sandbox.py` (D-038), `sizes.py` (D-047) |
 | `roots/` | ce qui peut être audité : validation d'une racine, table des montages, disques externes et partitions de données, dossier personnel | `validation.py` (D-009), `mountinfo.py`, `external.py` (D-033, D-037), `personal.py`, `registry.py` |
 | `scanner/` | parcours d'une racine par descripteurs (`O_NOFOLLOW`), sélecteur de dossiers, exécution d'une analyse | `walker.py` (D-013, D-022), `browse.py`, `runner.py`, `models.py` |
-| `db/` | schéma et migrations, écriture par lots, lecture des analyses et doublons, cache des résumés | `schema.py`, `connection.py`, `scans.py`, `dupes.py`, `cache.py` |
+| `db/` | schéma et migrations, écriture par lots, lecture des analyses et doublons, cache des résumés | `schema.py`, `connection.py`, `scans.py`, `dupes.py`, `images.py` (D-069), `cache.py` |
 | `filters/` | recherche : critères, compilation unique des motifs, parcours de l'index en flux | `spec.py`, `search.py` ([FILTERS_AND_REGEX.md](FILTERS_AND_REGEX.md)) |
 | `parasites/` | dossiers « à nettoyer » : catalogue de 45 règles, détection sur l'index, confiance expliquée, cache | `rules.toml`, `rules.py`, `detect.py` (D-023), `cached.py` |
 | `duplicates/` | doublons exacts : lecture sûre, empreintes en étapes, ordre physique, groupes et copie à garder | `reader.py`, `hashing.py`, `placement.py`, `runner.py` (D-015, D-030), `groups.py` (D-026 ; logiciels reconnus par leur contenu avec `projects/`, D-068) |
@@ -151,6 +151,7 @@ Le schéma en est à la version 4. La version est gardée dans `PRAGMA user_vers
 | `dir_summary` | totaux du contenu de chaque dossier entièrement parcouru (D-022) |
 | `scan_error`, `scan_exclusion` | éléments illisibles (opération, `errno`) et écartés (point de montage…) |
 | `dup_run`, `file_hash`, `dup_error` | recherches de doublons, empreintes (début, fin, complète) d'un inode représentatif, fichiers non lus ; jamais de contenu |
+| `image_sig` | images ressemblantes (D-069) : empreinte et vignette en gris calculées par la page, ou raison d'un échec, avec la version de l'algorithme ; jamais l'image |
 | `summary_cache` | résumés des analyses terminées, sous des clés versionnées |
 
 Index notables : `entry_by_parent` (scan, parent), `entry_by_name`, `entry_by_extension`, `entry_by_identity` (périphérique, inode, pour réutiliser les empreintes).

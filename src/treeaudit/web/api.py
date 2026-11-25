@@ -14,12 +14,13 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi import Path as PathParam
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from treeaudit.archive.destination import ArchiveDirStatus
 from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig, RootConfig
 from treeaudit.core.datadir import own_dirs
 from treeaudit.db import dupes as dupes_db
+from treeaudit.db import images as images_db
 from treeaudit.db import scans as scans_db
 from treeaudit.db.connection import connect, from_sqlite_int
 from treeaudit.duplicates.groups import load_groups
@@ -27,7 +28,13 @@ from treeaudit.duplicates.reader import Expected
 from treeaudit.duplicates.report import SelectionError, override_keep
 from treeaudit.duplicates.runner import expected_root_of
 from treeaudit.parasites.cached import parasite_findings
-from treeaudit.preview.images import PreviewError, previewable, read_image
+from treeaudit.preview.images import (
+    IMAGE_EXTENSIONS,
+    MAX_PREVIEW_SIZE,
+    PreviewError,
+    previewable,
+    read_image,
+)
 from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES
 from treeaudit.scanner.browse import Listing, list_folders
@@ -291,6 +298,102 @@ def entry_image(
     except (PreviewError, OSError) as exc:
         raise HTTPException(409, str(exc) or "aperçu impossible") from exc
     return Response(image.content, media_type=image.media_type, headers=IMAGE_HEADERS)
+
+
+# --- similar images (D-069): signatures computed by the page --------------------------------
+
+MAX_SIGNATURES = 500
+"""Signatures per request: a page sends them as it goes, never all at once."""
+
+
+def _final_scan(conn: sqlite3.Connection, scan_id: int) -> sqlite3.Row:
+    scan = scans_db.get_scan(conn, scan_id)
+    if scan is None:
+        raise HTTPException(404, "scan inconnu")
+    if scan["status"] in ("pending", "running"):
+        raise HTTPException(409, "l'analyse n'est pas terminée")
+    return scan
+
+
+@router.post("/scans/{scan_id}/images/todo")
+def images_todo(scan_id: int, conn: Db) -> dict[str, Any]:
+    """The images of the analysis still to sign, after reusing the signatures of
+    unchanged files. POST: reusing them writes to the index."""
+    _final_scan(conn, scan_id)
+    state = images_db.pending(conn, scan_id, extensions=IMAGE_EXTENSIONS, max_size=MAX_PREVIEW_SIZE)
+    return {
+        "algo": images_db.ALGO,
+        "total": state.total,
+        "done": state.done,
+        "failed": state.failed,
+        "todo": list(state.todo),
+    }
+
+
+class SignatureItem(BaseModel):
+    """One image: its signature, or why the page has none. Hex text only, of
+    fixed length: the page is not trusted, the server checks everything."""
+
+    entry: int = Field(ge=0)
+    hash: str | None = Field(default=None, pattern=f"^[0-9a-f]{{{2 * images_db.HASH_BYTES}}}$")
+    thumb: str | None = Field(default=None, pattern=f"^[0-9a-f]{{{2 * images_db.THUMB_BYTES}}}$")
+    width: int | None = Field(default=None, ge=1, le=1_000_000)
+    height: int | None = Field(default=None, ge=1, le=1_000_000)
+    failure: Literal["undecodable", "unreadable"] | None = None
+
+    @model_validator(mode="after")
+    def _one_or_the_other(self) -> SignatureItem:
+        signed = (self.hash, self.thumb, self.width, self.height)
+        if self.failure is None and None in signed:
+            raise ValueError("signature incomplète")
+        if self.failure is not None and any(v is not None for v in signed):
+            raise ValueError("une image est signée ou en échec, pas les deux")
+        return self
+
+
+class SignatureBody(BaseModel):
+    """A batch of results, computed with one version of the signature."""
+
+    algo: int
+    items: list[SignatureItem] = Field(min_length=1, max_length=MAX_SIGNATURES)
+
+
+@router.post("/scans/{scan_id}/images/signatures")
+def save_signatures(scan_id: int, body: SignatureBody, conn: Db) -> dict[str, int]:
+    """Store the signatures the page computed, all or nothing."""
+    _final_scan(conn, scan_id)
+    if body.algo != images_db.ALGO:
+        raise HTTPException(409, "la page n'est pas à jour : recharge-la")
+    signatures = [
+        images_db.Signature(
+            item.entry,
+            bytes.fromhex(item.hash),
+            bytes.fromhex(item.thumb),
+            item.width,
+            item.height,
+        )
+        for item in body.items
+        if item.hash is not None
+        and item.thumb is not None
+        and item.width is not None
+        and item.height is not None
+    ]
+    failures = [
+        images_db.Failure(item.entry, item.failure)
+        for item in body.items
+        if item.failure is not None
+    ]
+    refused = images_db.save(
+        conn,
+        scan_id,
+        signatures,
+        failures,
+        extensions=IMAGE_EXTENSIONS,
+        max_size=MAX_PREVIEW_SIZE,
+    )
+    if refused:
+        raise HTTPException(422, f"pas des images de cette analyse : {refused[:10]}")
+    return {"saved": len(signatures), "failed": len(failures)}
 
 
 class ParasiteCommand(BaseModel):
