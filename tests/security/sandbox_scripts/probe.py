@@ -147,6 +147,20 @@ def chattr_read_only_fd() -> None:
         os.close(fd)
 
 
+def io_uring_setup() -> None:
+    """An io_uring ring does I/O and opens sockets outside the other filters
+    (found untested by the audit of 2026-11-25). 425 on x86_64 and aarch64."""
+    import ctypes
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    params = ctypes.create_string_buffer(120)  # struct io_uring_params
+    fd = libc.syscall(425, 1, params)
+    if fd < 0:
+        code = ctypes.get_errno()
+        raise OSError(code, os.strerror(code))
+    os.close(fd)
+
+
 attempt("tcp_fast_open", lambda: fast_open(int(server_port)))
 attempt("tcp_fast_open_sendmsg", lambda: fast_open_sendmsg(int(server_port)))
 attempt("tcp_fast_open_ipv6", lambda: fast_open_v6(int(server_port)))
@@ -158,6 +172,7 @@ attempt("hard_link_outside_in", lambda: link_in(os.path.join(outside, "existing.
 attempt("write_through_symlink", write_through_symlink)
 attempt("truncate_outside", lambda: os.truncate(os.path.join(outside, "existing.txt"), 0))
 attempt("chattr_outside", chattr_read_only_fd)
+attempt("io_uring_setup", io_uring_setup)
 # Last: on success the process would be replaced and print nothing.
 print(json.dumps({"report": dataclasses.asdict(report), "results": results}), flush=True)
 attempt("exec", lambda: os.execv("/bin/true", ["true"]))  # noqa: S606 - must be refused

@@ -80,6 +80,8 @@ def test_a_sandboxed_process_can_neither_write_elsewhere_nor_talk_to_anyone(
     assert lines[2] == {"exec_from_memory": "EACCES"}
     # The security review's findings (step 4): refused with these errors.
     assert results["chattr_outside"] == "ENOTTY"
+    # Refused by our seccomp filter (EACCES), not by the kernel's own switch (EPERM).
+    assert results["io_uring_setup"] == "EACCES"
     assert results["sctp_stream_socket"] == results["mptcp_stream_socket"] == "EACCES"
     # TCP Fast Open (D-063): refused by seccomp, whatever the kernel's Landlock does.
     for name in ("tcp_fast_open", "tcp_fast_open_sendmsg", "tcp_fast_open_ipv6"):
