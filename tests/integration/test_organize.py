@@ -482,3 +482,37 @@ def test_a_link_inside_the_destination_is_never_followed(
     assert (root / DESTINATION / "Mes vieux dossiers vides").is_dir()
     assert (root / DESTINATION / "Documents").is_symlink()
     assert not (root / DESTINATION / "Musique").exists()  # created by the tidying: removed
+
+
+def test_a_tv_recording_named_ts_is_a_video_not_code(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    """Found on a real disk: ".ts" is also TypeScript; the size tells them apart."""
+    root = tmp_path / "disque"
+    touch(root / "enregistrement.ts", b"G" * (1024 * 1024))
+    touch(root / "app.ts", b"export const x = 1;")
+    touch(root / "types.d.ts", b"d" * (2 * 1024 * 1024))
+    plan, _ = scan_and_plan(tmp_path, root, data_disk_table)
+    categories = {move.source: move.category for move in plan.moves}
+    assert categories == {
+        "enregistrement.ts": "Vidéos",
+        "app.ts": "Code",
+        "types.d.ts": "Code",
+    }
+
+
+def test_a_folder_renamed_to_avoid_a_clash_keeps_its_dots(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    """Found on a real disk: two copies of a portable program with a dotted name."""
+    root = tmp_path / "disque"
+    for where in ("Telechargement", "portables"):
+        touch(root / where / "KeePassXC-2.7.10-Win64" / "KeePassXC.exe", b"MZ" + where.encode())
+        touch(root / where / "KeePassXC-2.7.10-Win64" / "Qt5Gui.dll", b"dll" + where.encode())
+        touch(root / where / "notes.txt", b"n" + where.encode())  # not a program folder
+    plan, _ = scan_and_plan(tmp_path, root, data_disk_table)
+    targets = sorted(m.target for m in plan.moves if m.category == "Logiciels")
+    assert targets == [
+        f"{DESTINATION}/Logiciels/KeePassXC-2.7.10-Win64",
+        f"{DESTINATION}/Logiciels/KeePassXC-2.7.10-Win64 (2)",
+    ]

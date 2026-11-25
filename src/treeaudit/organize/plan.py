@@ -229,8 +229,17 @@ _INSTALL_DIRS = frozenset(
 NEUTRAL_FILES = frozenset({b"Thumbs.db", b".DS_Store", b"desktop.ini", b".directory"})
 
 
-def category_of(extension: str | None) -> str:
-    """Category of a file from its extension; "Autres" when unknown."""
+VIDEO_TS_SIZE = 1024 * 1024
+""".ts is TypeScript (code) or MPEG-TS (a TV recording): nothing is read, the
+size decides. A TypeScript source rarely reaches 1 MiB, a second of video does.
+Found on a real disk: a recording was about to go into "Code"."""
+
+
+def category_of(extension: str | None, size: int = 0, name: bytes = b"") -> str:
+    """Category of a file from its extension; "Autres" when unknown. A large
+    ".ts" is a video, except a TypeScript declaration file (".d.ts")."""
+    if extension == "ts":
+        return VIDEOS if size >= VIDEO_TS_SIZE and not name.endswith(b".d.ts") else CODE
     return _CATEGORY_OF.get(extension or "", OTHER)
 
 
@@ -563,7 +572,7 @@ def _summarize(node: _Node) -> None:
                 if _hidden(child) or not is_displayable(child.rel_path):
                     current.unmovable = True
                     continue
-                category = category_of(child.extension)
+                category = category_of(child.extension, child.size, child.name)
                 current.categories[category] += 1
                 if category in BY_YEAR:
                     current.years[_photo_year(child.name_display, child.mtime_ns)[0]] += 1
@@ -630,19 +639,21 @@ class _Planner:
         self.plan.kept.append(Kept(self._relative(node), reason))
 
     def _target(
-        self, category: str, year: int | None, sub: str | None, name: str
+        self, category: str, year: int | None, sub: str | None, name: str, is_dir: bool
     ) -> tuple[str, bool]:
         """Target path below the destination, and whether it was renamed:
-        a name already given in this plan gets " (2)", " (3)"... before its
-        extension. Clashes with files already on the disk are left to the
-        script, which never overwrites (mv -n)."""
+        a name already given in this plan gets " (2)", " (3)"... before a
+        file's extension, at the end of a folder's name (found on a real
+        disk: "KeePassXC-2.7.10-Win64" became "KeePassXC-2.7 (2).10-Win64").
+        Clashes with files already on the disk are left to the script, which
+        never overwrites (mv -n)."""
         folder = f"{self.adjust.destination}/{self.adjust.folder(category)}"
         folder += f"/{year}" if year else ""
         folder += f"/{sub}" if sub else ""
         target = f"{folder}/{name}"
         number = 1
         stem, dot, suffix = name.rpartition(".")
-        if not stem:  # no extension (or a dot only at the start)
+        if is_dir or not stem:  # a folder, or no extension (or a dot only at the start)
             stem, dot, suffix = name, "", ""
         while target in self.taken:
             number += 1
@@ -670,7 +681,7 @@ class _Planner:
                 if from_name:
                     reason = f"{reason} · {NAME_YEAR}"
         sub = self.adjust.subfolders.get(node.entry_id)
-        target, renamed = self._target(category, year, sub, node.name_display)
+        target, renamed = self._target(category, year, sub, node.name_display, node.kind == "dir")
         self.plan.moves.append(
             Move(
                 entry_id=node.entry_id,
@@ -722,7 +733,9 @@ class _Planner:
         if node.kind == "file":
             if node.name in NEUTRAL_FILES:
                 return  # desktop clutter: left with its folder
-            self._move(node, category_of(node.extension), "fichier rangé par type")
+            self._move(
+                node, category_of(node.extension, node.size, node.name), "fichier rangé par type"
+            )
             return
         block = _block_kind(node)
         if block is not None:
