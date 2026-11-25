@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Photos ressemblantes · {{ title }}{% endblock %}
+{% block scripts %}<script src="/static/similar_images.js" defer></script>{% endblock %}
+{% block content %}
+<p class="back"><a href="/scans/{{ scan.id }}">← Bilan de {{ title }}</a></p>
+<h1>🖼️ Photos ressemblantes</h1>
+<p class="lead">La même photo en plusieurs versions (réduite, recompressée, convertie) ou les photos d'une rafale. <strong>Rien n'est supprimé</strong>.</p>
+
+<section class="panel" data-sign-images data-scan="{{ scan.id }}" aria-live="polite">
+  <h2>1. Calculer les signatures</h2>
+  <p>Ton navigateur ouvre chaque image de l'analyse et en garde une signature : une empreinte et une vignette de 32 × 32 points en gris. Rien ne sort de ton ordinateur, et TreeAudit ne garde jamais l'image elle-même. Une image déjà traitée, et pas modifiée depuis, n'est pas recalculée.</p>
+  <ul class="facts">
+    <li><span data-field="total">…</span> image(s) dans l'analyse (JPEG, PNG, GIF, WebP, BMP, AVIF, jusqu'à 20 Mio)</li>
+    <li><span data-field="done">…</span> déjà traitée(s), <span data-field="failed">…</span> illisible(s)</li>
+    <li><span data-field="todo">…</span> à traiter</li>
+  </ul>
+  <p class="muted">Compte une à deux minutes pour 1 000 photos, plus le temps de lecture du disque. Garde cet onglet ouvert : si tu le fermes, le calcul reprendra là où il s'est arrêté.</p>
+  <p class="big-number" data-field="progress"></p>
+  <div class="choice">
+    <button type="button" class="button primary" data-start-signing hidden>Calculer les signatures</button>
+    <button type="button" class="button" data-stop-signing hidden>Arrêter</button>
+  </div>
+  <p class="notice info" data-field="finished" hidden>Toutes les images sont traitées. Les groupes de photos ressemblantes arrivent dans une prochaine version.</p>
+  <p class="muted" data-field="none" hidden>Aucune image dans cette analyse.</p>
+  <p class="error-text" data-field="error" role="alert" hidden></p>
+  <noscript><p class="notice warn">Cette page a besoin de JavaScript : c'est le navigateur qui ouvre les images.</p></noscript>
+</section>
+{% endblock %}

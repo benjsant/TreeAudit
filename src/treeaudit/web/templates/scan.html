@@ -38,6 +38,7 @@
         <p class="error-text" data-error role="alert" hidden></p>
       </div>
     {% endif %}
+    <p><a href="/scans/{{ scan.id }}/images">🖼️ Photos ressemblantes</a></p>
     {% if micro %}
       <p class="muted"><a href="/dupes/{{ micro.run.id }}">Petits fichiers en double : {{ micro.removable }}</a></p>
     {% else %}

@@ -221,3 +221,6 @@ meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 9
 .gallery-caption .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-failed { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; border: 1px dashed var(--line); border-radius: 6px; padding: .5rem; text-align: center; }
 .preview .preview-failed { aspect-ratio: auto; min-height: 4rem; max-width: 30rem; }
+
+/* similar images (D-069) */
+.facts { margin: .4rem 0 .8rem; padding-left: 1.2rem; }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import csv
 import errno
 import io
@@ -9,6 +10,7 @@ import os
 import re
 import sqlite3
 import threading
+import zlib
 from collections.abc import Callable, Iterator
 from html.parser import HTMLParser
 from pathlib import Path
@@ -1613,3 +1615,52 @@ def test_the_index_refuses_malformed_signatures(client: TestClient, scanned: int
     finally:
         conn.close()
     assert signatures_of(client, scanned) == {}
+
+
+def test_the_similar_images_page_loads_its_own_script(client: TestClient, scanned: int) -> None:
+    summary = client.get(f"/scans/{scanned}")
+    assert f'href="/scans/{scanned}/images"' in summary.text  # even before any duplicates search
+    page = client.get(f"/scans/{scanned}/images")
+    assert page.status_code == 200
+    assert_safe_html(page.text)
+    assert '<script src="/static/similar_images.js" defer></script>' in page.text
+    assert f'data-sign-images data-scan="{scanned}"' in page.text
+    assert client.get("/scans/999/images").status_code == 404
+    # Only this page loads it: the others do not compute anything.
+    assert "similar_images.js" not in summary.text
+    script = client.get("/static/similar_images.js").text
+    assert "algo: 1," in script and f"algo: {images_db.ALGO}," in script
+    assert "innerHTML" not in script
+
+
+def test_the_self_test_image_of_the_page_has_the_expected_pixels(client: TestClient) -> None:
+    """The page refuses a browser whose pixels differ from selfTestPixel(): the
+    embedded PNG must hold exactly those, decoded here with the standard library."""
+    script = client.get("/static/similar_images.js").text
+    block = script.split("const SELF_TEST_PNG =", 1)[1].split(";", 1)[0]
+    png = base64.b64decode("".join(re.findall(r'"([^"]*)"', block)))
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    chunks, offset = {}, 8
+    while offset < len(png):
+        length = int.from_bytes(png[offset : offset + 4], "big")
+        kind = png[offset + 4 : offset + 8]
+        chunks[kind] = chunks.get(kind, b"") + png[offset + 8 : offset + 8 + length]
+        offset += 12 + length
+    width, height = (
+        int.from_bytes(chunks[b"IHDR"][:4], "big"),
+        int.from_bytes(chunks[b"IHDR"][4:8], "big"),
+    )
+    assert (width, height, chunks[b"IHDR"][8], chunks[b"IHDR"][9]) == (8, 8, 8, 2)  # 8-bit RGB
+    raw = zlib.decompress(chunks[b"IDAT"])
+    for y in range(8):
+        line = raw[y * 25 : (y + 1) * 25]
+        assert line[0] == 0  # no filter: the bytes are the pixels
+        for x in range(8):
+            expected = ((x * 31 + y * 7) % 256, (x * 13 + y * 29) % 256, (x * y * 5 + 40) % 256)
+            assert tuple(line[1 + x * 3 : 4 + x * 3]) == expected
+    formula = re.search(r"function selfTestPixel\(x, y\) \{\s*return (\[.*?\]);", script)
+    assert formula is not None
+    assert (
+        formula.group(1)
+        == "[(x * 31 + y * 7) % 256, (x * 13 + y * 29) % 256, (x * y * 5 + 40) % 256]"
+    )

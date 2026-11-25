@@ -722,6 +722,13 @@ def similar_page(request: Request, scan_id: int, conn: Db, config: Config) -> Re
     )
 
 
+@router.get("/scans/{scan_id}/images")
+def similar_images_page(request: Request, scan_id: int, conn: Db, config: Config) -> Response:
+    """Similar images (D-069): the page computes the signatures in the browser."""
+    scan = _scan_or_404(conn, scan_id)
+    return render(request, "similar_images.html", scan=scan, title=analysis_title(config, scan))
+
+
 @router.get("/scans/{scan_id}/similar/{a_id}/{b_id}")
 def similar_pair_page(
     request: Request,

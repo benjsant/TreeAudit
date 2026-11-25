@@ -178,7 +178,8 @@ Toute nouvelle requête qui parcourt un sous-arbre doit suivre le même modèle.
 | `jobs.py`, `live.py` | tâches de fond ; disques en direct (natif) |
 | `explorer.py`, `queries.py`, `summaries.py`, `search_form.py` | lectures pour l'explorateur, le panier, le bilan et la recherche |
 | `security.py` | contrôle de l'en-tête `Host` (contre le DNS rebinding), en-tête `X-TreeAudit-Request` et JSON exigés sur toute requête qui modifie, CSP stricte |
-| `static/app.js` | le seul JavaScript : tâches, sélections, commandes, panier, thème ; uniquement `textContent`, jamais de HTML injecté |
+| `static/app.js` | le JavaScript commun : tâches, sélections, commandes, panier, thème ; uniquement `textContent`, jamais de HTML injecté |
+| `static/similar_images.js` | chargé par la seule page des photos ressemblantes (D-069) : contrôle du navigateur, décodage, empreinte et vignette calculées par la page elle-même, envoi par lots, arrêt et reprise ; les mêmes bits dans Chromium, Firefox et WebKit |
 
 Les noms de fichiers viennent des disques audités : ce sont des **données hostiles**. Les gabarits sont rendus avec l'échappement automatique et `StrictUndefined`, jamais avec `|safe`. La CSP interdit tout code en ligne, et `test_web.py` vérifie chaque page avec `assert_safe_html`. La seule image autorisée est l'aperçu servi par TreeAudit lui-même.
 
