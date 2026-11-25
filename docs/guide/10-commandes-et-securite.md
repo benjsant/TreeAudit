@@ -44,6 +44,6 @@ Les commandes de recréation (`npm ci`…) et les scripts de [rangement](06-rang
 - **Rien ne sort de ta machine** : le serveur n'est joignable que depuis ton ordinateur (`127.0.0.1`), et ce qui lit tes fichiers n'a pas accès à Internet.
 - TreeAudit tourne avec **ton utilisateur**, jamais `root`, sans aucun privilège. L'AppImage est en plus enfermée par le noyau.
 - Les dossiers de secrets de ton dossier personnel ne sont **jamais lus**.
-- L'index (`data/`) contient les **chemins** de tes fichiers, jamais leur contenu. Il reste sur ta machine, mais ne le partage pas.
+- L'index (`data/`) contient les **chemins** de tes fichiers, jamais leur contenu : seulement des empreintes et, pour les photos ressemblantes, une vignette de 32 × 32 points en gris de chaque image traitée, où l'on devine encore la forme d'une photo. Il reste sur ta machine, mais ne le partage pas.
 
 Le modèle de sécurité complet, avec les menaces couvertes et les limites, est dans [SECURITY.md](../SECURITY.md).

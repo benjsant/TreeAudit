@@ -460,7 +460,7 @@ function setupCommandBuilders() {
       }
     });
     builder.querySelector("[data-select-all-groups]")?.addEventListener("click", () => {
-      for (const box of picks()) box.checked = box.dataset.empty !== "1";
+      for (const box of picks()) box.checked = !box.disabled && box.dataset.empty !== "1";
     });
     builder.querySelector("[data-select-none]")?.addEventListener("click", () => {
       for (const box of picks()) box.checked = false;
@@ -486,8 +486,9 @@ function setupCommandBuilders() {
       const body = { action };
       if (builder.dataset.kind === "basket") {
         body.entries = chosen;
-      } else if (builder.dataset.kind === "dupes") {
+      } else if (builder.dataset.kind === "dupes" || builder.dataset.kind === "images") {
         body.groups = chosen;
+        if (builder.dataset.version) body.version = builder.dataset.version;
         body.keep = {};
         for (const number of chosen) {
           const radio = builder.querySelector(`input[name="keep-${number}"]:checked`);

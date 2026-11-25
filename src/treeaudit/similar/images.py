@@ -26,6 +26,7 @@ import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
 
+from treeaudit.db import cache
 from treeaudit.db.images import ALGO, HASH_BYTES, THUMB_BYTES
 from treeaudit.duplicates.groups import Guarded, guarded_places, protection_reason
 
@@ -122,13 +123,31 @@ class Group:
 
 @dataclass(frozen=True, slots=True)
 class Report:
-    """The groups of an analysis, the most space to recover first."""
+    """The groups of an analysis, the most space to recover first; a group's
+    number is its rank, from 1."""
 
     groups: tuple[Group, ...]
     signed: int
     """Images with a signature taken into account."""
     failed: int
     """Images the page could not sign."""
+    version: str
+    """Changes whenever a signature is stored: a command prepared on an older
+    page is refused, its group numbers may mean other groups now."""
+
+    @property
+    def removable(self) -> int:
+        """Images that could go, over every group."""
+        return sum(len(g.removable) for g in self.groups)
+
+    @property
+    def recoverable(self) -> int:
+        """Bytes freed by removing them all."""
+        return sum(g.recoverable for g in self.groups)
+
+
+class SelectionError(ValueError):
+    """A choice of the page that does not fit the groups (shown in French)."""
 
 
 _SIGNED_SQL = (
@@ -208,9 +227,13 @@ def _reasons(kept: Image, others: list[Image]) -> tuple[str, ...]:
     return ("chemin le plus court",)
 
 
-def make_group(images: list[Image], guarded: Guarded) -> Group:
-    """One group: the best version first, every member compared with it."""
+def make_group(images: list[Image], guarded: Guarded, kept: Image | None = None) -> Group:
+    """One group: the best version first (or ``kept``, the user's choice),
+    every member compared with it."""
     ordered = sorted(images, key=_keep_order)
+    if kept is not None:
+        ordered.remove(kept)
+        ordered.insert(0, kept)
     kept = ordered[0]
     members = [Member(kept, 0, 1.0, True, protection_reason(kept.rel_path, guarded))]
     for image in ordered[1:]:
@@ -221,8 +244,43 @@ def make_group(images: list[Image], guarded: Guarded) -> Group:
     return Group(tuple(members), _reasons(kept, ordered[1:]))
 
 
+def override_keep(group: Group, position: int, guarded: Guarded) -> Group:
+    """The same group with the member at ``position`` (1-based, in the order
+    shown) kept instead: every other member is compared with it again."""
+    if not 1 <= position <= len(group.members):
+        raise SelectionError(f"pas d'image n° {position} dans ce groupe")
+    images = [m.image for m in group.members]
+    regrouped = make_group(images, guarded, kept=images[position - 1])
+    return Group(regrouped.members, ("ton choix",))
+
+
+def signatures_version(conn: sqlite3.Connection, scan_id: int) -> str:
+    """How many signatures, and the last row written: any new one changes it."""
+    count, last = conn.execute(
+        "SELECT COUNT(*), COALESCE(MAX(rowid), 0) FROM image_sig WHERE scan_id = ?", (scan_id,)
+    ).fetchone()
+    return f"{count}-{last}"
+
+
+def _cached_pairs(
+    conn: sqlite3.Connection, scan_id: int, version: str, images: list[Image]
+) -> list[tuple[int, int]]:
+    """similar_pairs(), kept in the index cache: the slow part (8 s for
+    50 000 images), the same answer as long as no signature changes."""
+    key = f"similar-images:{scan_id}:{version}:a{ALGO}:{MAX_BITS}:{MIN_CORRELATION}:{CHUNKS}"
+    index_of = {image.entry_id: index for index, image in enumerate(images)}
+    cached = cache.get(conn, key)
+    if cached is not None:
+        return [(index_of[a], index_of[b]) for a, b in cached["pairs"]]
+    pairs = similar_pairs(images)
+    ids = [[images[a].entry_id, images[b].entry_id] for a, b in pairs]
+    cache.put(conn, key, {"pairs": ids})
+    return pairs
+
+
 def similar_images(conn: sqlite3.Connection, scan_id: int) -> Report:
     """The groups of similar images of an analysis, from its stored signatures."""
+    version = signatures_version(conn, scan_id)
     images = load_images(conn, scan_id)
     parent = list(range(len(images)))
 
@@ -232,7 +290,7 @@ def similar_images(conn: sqlite3.Connection, scan_id: int) -> Report:
             i = parent[i]
         return i
 
-    for a, b in similar_pairs(images):
+    for a, b in _cached_pairs(conn, scan_id, version, images):
         parent[root(a)] = root(b)
     components: dict[int, list[Image]] = defaultdict(list)
     for index, image in enumerate(images):
@@ -244,4 +302,4 @@ def similar_images(conn: sqlite3.Connection, scan_id: int) -> Report:
         "SELECT COUNT(*) FROM image_sig WHERE scan_id = ? AND algo = ? AND failure IS NOT NULL",
         (scan_id, ALGO),
     ).fetchone()[0]
-    return Report(tuple(groups), len(images), failed)
+    return Report(tuple(groups), len(images), failed, version)

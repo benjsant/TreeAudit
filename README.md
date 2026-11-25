@@ -33,7 +33,8 @@
 | Exports JSON et CSV | ✅ disponible |
 | **Archive vérifiée** d'un dossier avant nettoyage (`.tar.gz`), relue et comparée fichier par fichier | ✅ disponible |
 | Mode expert (avis d'une IA locale) | ❌ essayé puis retiré : pas assez fiable sur une carte grand public, et pas d'IA en ligne ([D-052](docs/DECISIONS.md)) |
-| Dossiers presque identiques (similarité) | 🚧 prévu |
+| **Dossiers presque identiques** : copies de dossiers et ce qui diffère | ✅ disponible |
+| **Photos ressemblantes** : la même photo réduite, recompressée ou convertie, les rafales ; décodées par le navigateur | ✅ disponible |
 | Windows, macOS | ❌ pas en V1 |
 
 Des outils comme [Czkawka](https://github.com/qarmin/czkawka) trouvent très bien les doublons. TreeAudit vise plutôt l'**audit de dossiers** : comprendre un vieux disque de sauvegarde, repérer les projets de développement et ce qui s'y recrée tout seul, et toujours **expliquer pourquoi** un élément est proposé.
@@ -79,8 +80,9 @@ En résumé ; chaque étape a son chapitre dans le [guide](docs/guide/README.md)
 4. **Explorer** : « 📂 Explorer les fichiers » se parcourt comme un gestionnaire de fichiers. Un dossier de photos s'affiche aussi en **🖼️ galerie**, et la fiche d'une image la montre. Chaque élément porte ses repères (🧹 à nettoyer, 📑 en double, 🛡 protégé), et ⓘ ouvre sa fiche. Coche ce que tu veux dans n'importe quels dossiers : tout va dans le **🧺 panier**, qui prépare la commande.
 5. **Ranger** : « 🗂 Ranger ce dossier » (dans l'explorateur) propose un rangement par catégories (Photos/2019, Documents, Projets…), avec un aperçu du résultat. Tu télécharges le script qui fait le rangement, et celui qui l'annule. Rien n'est écrasé, et un fichier modifié depuis l'analyse est laissé en place.
 6. **Projets et logiciels** : la tuile « 📦 Projets et logiciels » du bilan liste les projets informatiques (JavaScript, Python, Rust, .NET, dépôts git…), les jeux et les logiciels, avec leur taille et la date de leur dernière modification réelle. Les dépendances réinstallées n'en tiennent pas compte. Trie par ancienneté pour retrouver les vieux projets. Leurs dossiers recréables (`node_modules`, environnements Python, compilations) sont proposés, et les sûrs sont déjà cochés.
-7. **Archiver si besoin** : « 🗜 Archiver » crée une copie compressée et vérifiée du dossier. Tu la retrouves dans « 🗜 Mes archives ».
-8. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
+7. **Photos ressemblantes** : « 🖼️ Photos ressemblantes » (tuile Doublons du bilan) fait calculer par ton navigateur une signature de chaque image, puis regroupe la même photo en plusieurs versions et les photos d'une rafale. On garde la meilleure version (la plus grande résolution), ou celle que tu choisis.
+8. **Archiver si besoin** : « 🗜 Archiver » crée une copie compressée et vérifiée du dossier. Tu la retrouves dans « 🗜 Mes archives ».
+9. **Nettoyer** : coche ce que tu veux (les éléments sûrs le sont déjà), choisis « corbeille », copie la commande, colle-la dans un terminal et relis-la avant d'appuyer sur Entrée.
 
 ### Qu'est-ce qui est proposé ?
 

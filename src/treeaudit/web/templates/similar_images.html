@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% from "paths.html" import full_path %}
 {% block title %}Photos ressemblantes · {{ title }}{% endblock %}
 {% block scripts %}<script src="/static/similar_images.js" defer></script>{% endblock %}
 {% block content %}
 <p class="back"><a href="/scans/{{ scan.id }}">← Bilan de {{ title }}</a></p>
 <h1>🖼️ Photos ressemblantes</h1>
-<p class="lead">La même photo en plusieurs versions (réduite, recompressée, convertie) ou les photos d'une rafale. <strong>Rien n'est supprimé</strong>.</p>
+<p class="lead">La même photo en plusieurs versions (réduite, recompressée, convertie) ou les photos d'une rafale. <strong>Rien n'est supprimé</strong> : tu choisis ce que tu gardes, TreeAudit prépare la commande.</p>
 
 <section class="panel" data-sign-images data-scan="{{ scan.id }}" aria-live="polite">
   <h2>1. Calculer les signatures</h2>
@@ -20,9 +21,57 @@
     <button type="button" class="button primary" data-start-signing hidden>Calculer les signatures</button>
     <button type="button" class="button" data-stop-signing hidden>Arrêter</button>
   </div>
-  <p class="notice info" data-field="finished" hidden>Toutes les images sont traitées. Les groupes de photos ressemblantes arrivent dans une prochaine version.</p>
+  <p class="notice info" data-field="finished" hidden>Toutes les images sont traitées.</p>
   <p class="muted" data-field="none" hidden>Aucune image dans cette analyse.</p>
   <p class="error-text" data-field="error" role="alert" hidden></p>
   <noscript><p class="notice warn">Cette page a besoin de JavaScript : c'est le navigateur qui ouvre les images.</p></noscript>
+</section>
+
+<section aria-labelledby="groups-title">
+  <h2 id="groups-title">2. Les groupes</h2>
+  {% if report.signed == 0 %}
+    <p class="muted">Les groupes apparaîtront ici une fois les signatures calculées.</p>
+  {% elif not report.groups %}
+    <p>Aucune photo ressemblante parmi les {{ report.signed | number }} image(s) traitée(s) 🎉</p>
+  {% else %}
+    <p class="lead">{{ report.groups | length | number }} groupe(s) parmi {{ report.signed | number }} image(s) traitée(s) : {{ report.removable | number }} image(s) proposée(s), {{ report.recoverable | size }} à récupérer. Dans chaque groupe, on garde une image (★) ; change-la si tu en préfères une autre.</p>
+    <p class="notice warn small">Ressemblantes ne veut pas dire identiques : les photos d'une rafale sont des prises différentes. Regarde les aperçus avant de cocher un groupe.</p>
+    <div data-command-builder data-endpoint="/api/scans/{{ scan.id }}/images/command" data-kind="images" data-version="{{ report.version }}">
+      <div class="actions">
+        <button type="button" class="button small" data-select-all-groups>Tout cocher</button>
+        <button type="button" class="button small" data-select-none>Tout décocher</button>
+      </div>
+      <ul class="items">
+      {% for group in groups %}{% set number = loop.index %}
+        <li class="item">
+          <label class="item-main">
+            <input type="checkbox" data-pick="{{ number }}" {% if not group.removable %}disabled{% endif %}>
+            <span class="item-text">
+              <strong>{{ group.members | length }} images</strong>{% if group.removable %} <span class="size">→ {{ group.recoverable | size }} à récupérer</span>{% else %} <span class="muted">— rien à proposer</span>{% endif %}<br>
+              On garde : ★ {{ full_path(prefix, group.keep.image.rel_path_display) }} <span class="muted small">({{ group.reasons | join(" ; ") }})</span>
+            </span>
+          </label>
+          <ul class="gallery">
+          {% for member in group.members %}{% set image = member.image %}
+            <li class="gallery-item">
+              <a href="/scans/{{ scan.id }}/entries/{{ image.entry_id }}" title="{{ image.rel_path_display }}"><img src="/api/scans/{{ scan.id }}/entries/{{ image.entry_id }}/image" alt="{{ image.rel_path_display }}" loading="lazy" decoding="async"></a>
+              <label class="gallery-caption"><input type="radio" name="keep-{{ number }}" value="{{ loop.index }}" {% if loop.first %}checked data-default{% endif %}> <span class="small">{{ "★ gardée" if loop.first else "garder celle-ci" }}</span></label>
+              <span class="path small" title="{{ image.rel_path_display }}">{{ image.rel_path_display }}</span>
+              <span class="muted small">{{ image.width }} × {{ image.height }} · {{ image.size | size }} · {{ image.mtime_ns | date }}</span>
+              {% if member.protection %}<span class="muted small">🔒 {{ member.protection }}</span>
+              {% elif not member.close %}<span class="muted small">pas assez proche de l'image gardée : jamais proposée</span>{% endif %}
+            </li>
+          {% endfor %}
+          </ul>
+        </li>
+      {% endfor %}
+      </ul>
+      {% if report.groups | length > limit %}<p><a href="/scans/{{ scan.id }}/images?limit={{ report.groups | length }}">Afficher les {{ report.groups | length }} groupes</a></p>{% endif %}
+      <p class="muted small">Une image que tu choisis de garder change aussi ce qui est proposé : seules les images qui lui ressemblent directement le sont. Les images d'un logiciel ou d'un dépôt git ne sont jamais proposées.</p>
+      {% set allow_archive = false %}
+      {% include "command_panel.html" %}
+    </div>
+  {% endif %}
+  {% if report.failed %}<p class="muted">{{ report.failed | number }} image(s) n'ont pas pu être ouvertes par le navigateur ou lues sur le disque : elles ne sont dans aucun groupe.</p>{% endif %}
 </section>
 {% endblock %}

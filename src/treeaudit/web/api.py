@@ -23,7 +23,7 @@ from treeaudit.db import dupes as dupes_db
 from treeaudit.db import images as images_db
 from treeaudit.db import scans as scans_db
 from treeaudit.db.connection import connect, from_sqlite_int
-from treeaudit.duplicates.groups import load_groups
+from treeaudit.duplicates.groups import guarded_places, load_groups
 from treeaudit.duplicates.reader import Expected
 from treeaudit.duplicates.report import SelectionError, override_keep
 from treeaudit.duplicates.runner import expected_root_of
@@ -40,6 +40,7 @@ from treeaudit.roots.validation import REASON_MESSAGES
 from treeaudit.scanner.browse import Listing, list_folders
 from treeaudit.scanner.walker import SubpathError
 from treeaudit.shellcmd import Action, CleanupCommand, cleanup_command, is_displayable
+from treeaudit.similar import images as similar_images
 from treeaudit.web.explorer import Basket, resolve_basket
 from treeaudit.web.jobs import Job, JobError, JobManager
 from treeaudit.web.live import refresh_roots
@@ -483,6 +484,64 @@ def dupes_command(run_id: int, body: DupesCommand, conn: Db, config: Config) -> 
         "freed": sum(g.recoverable for g in selected),
         "skipped": [c.rel_path_display for c in result.skipped],
         "warnings": refused_warnings(result),
+    }
+
+
+class ImagesCommand(BaseModel):
+    """Groups of similar images chosen by their number, the image to keep where
+    the user picked another one, and the version of the signatures the page saw."""
+
+    groups: list[int] = Field(min_length=1, max_length=MAX_SELECTION)
+    keep: dict[int, int] = Field(default_factory=dict)
+    """Group number -> 1-based position of the image to keep instead of the suggestion."""
+    action: Literal["trash", "delete"] = "trash"
+    version: str = Field(max_length=64)
+
+
+@router.post("/scans/{scan_id}/images/command")
+def images_command(scan_id: int, body: ImagesCommand, conn: Db, config: Config) -> dict[str, Any]:
+    """The command removing the images proposed in the chosen groups, built
+    from the index again: only images directly like the kept one, never a
+    protected one (D-069)."""
+    scan = _final_scan(conn, scan_id)
+    report = similar_images.similar_images(conn, scan_id)
+    if body.version != report.version:
+        raise HTTPException(409, "de nouvelles images ont été traitées depuis : recharge la page")
+    unknown = sorted(n for n in set(body.groups) if not 1 <= n <= len(report.groups))
+    if unknown:
+        raise HTTPException(422, f"groupes inconnus : {unknown[:10]}")
+    guarded = guarded_places(conn, scan_id)
+    selected = []
+    try:
+        for number in sorted(set(body.groups)):
+            group = report.groups[number - 1]
+            if number in body.keep:
+                group = similar_images.override_keep(group, body.keep[number], guarded)
+            selected.append(group)
+    except similar_images.SelectionError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    targets = [member.image for group in selected for member in group.removable]
+    if not targets:
+        raise HTTPException(422, "Rien à proposer dans ces groupes.")
+    result = cleanup_command(
+        Action(body.action),
+        targets,
+        root_display(config, scan),
+        scanned=scan["subpath"],
+        protected=config.protected_paths(),
+    )
+    warnings = [
+        "Ressemblantes ne veut pas dire identiques : les photos d'une rafale sont des prises "
+        "différentes. Regarde les aperçus avant de lancer la commande."
+    ]
+    if scan["status"] != "complete":
+        warnings.append("L'analyse est incomplète : vérifie les éléments avant de lancer.")
+    return {
+        "command": result.text,
+        "count": len(targets),
+        "freed": sum(image.size for image in targets),
+        "skipped": [image.rel_path_display for image in result.skipped],
+        "warnings": warnings + refused_warnings(result),
     }
 
 

@@ -20,6 +20,7 @@ Ce guide suit l'ordre dans lequel on découvre l'application. Chaque chapitre se
 | [10. Commandes proposées et sécurité](10-commandes-et-securite.md) | ce que contient une commande, la double vérification, et ce qu'il ne faut jamais faire |
 | [11. Dépannage](11-depannage.md) | les problèmes courants et leurs solutions |
 | [12. Dossiers presque identiques](12-dossiers-presque-identiques.md) | retrouver les copies de dossiers et voir ce qui diffère |
+| [13. Photos ressemblantes](13-photos-ressemblantes.md) | retrouver la même photo en plusieurs versions, ou les photos d'une rafale |
 
 ## Les trois règles à retenir
 
@@ -32,7 +33,7 @@ Ce guide suit l'ordre dans lequel on découvre l'application. Chaque chapitre se
 | Mot | Sens |
 |---|---|
 | **Analyse** | Une lecture complète d'un dossier, dont le résultat est gardé dans l'index. |
-| **Index** | La base de données locale de TreeAudit (`data/`) : les chemins, tailles et dates de tes fichiers, jamais leur contenu. |
+| **Index** | La base de données locale de TreeAudit (`data/`) : les chemins, tailles et dates de tes fichiers, jamais leur contenu (seulement des empreintes et, pour les photos ressemblantes, une vignette de 32 × 32 points en gris). |
 | **Racine** | Un disque ou un dossier que TreeAudit a le droit de lire. |
 | **Recréable** | Un dossier qui se reconstruit tout seul ou avec une commande (`node_modules`, `.venv`, caches…). |
 | **Place occupée** | Ce qu'un élément prend vraiment sur le disque, qui peut différer de sa taille (voir les [fichiers creux](05-explorer.md#fichiers-creux)). |

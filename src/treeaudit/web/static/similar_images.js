@@ -243,6 +243,22 @@ async function signAll(scan, state, field, stopped, stop) {
   field("progress").textContent = stopped()
     ? `Arrêté : ${finished.toLocaleString("fr-FR")} image(s) traitée(s), la suite reprendra là.`
     : `Terminé : ${finished.toLocaleString("fr-FR")} image(s) traitée(s).`;
+  // Every image signed: the groups below are computed again by the server.
+  if (!stopped()) window.location.reload();
 }
 
-document.addEventListener("DOMContentLoaded", setupImageSignatures);
+// The star follows the image the user chooses to keep.
+function setupKeepChoice() {
+  for (const radio of document.querySelectorAll('.gallery input[type="radio"][name^="keep-"]')) {
+    radio.addEventListener("change", () => {
+      for (const other of document.querySelectorAll(`input[name="${radio.name}"]`)) {
+        other.nextElementSibling.textContent = other.checked ? "★ gardée" : "garder celle-ci";
+      }
+    });
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setupImageSignatures();
+  setupKeepChoice();
+});

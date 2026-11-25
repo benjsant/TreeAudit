@@ -16,7 +16,7 @@ Tu peux tout analyser (le disque ou le dossier personnel entier) ou seulement un
 
 La page montre la progression : le nombre d'éléments lus et le dossier en cours. Tu peux **annuler** à tout moment. Une seule tâche tourne à la fois (analyse, doublons, archive…) : tant qu'elle n'est pas finie ou annulée, TreeAudit refuse d'en lancer une autre, et le dit.
 
-TreeAudit lit seulement les **noms, tailles, dates et droits**, jamais le contenu des fichiers (sauf pour les doublons, l'aperçu des images et les archives, quand tu les demandes). Il ne suit jamais les liens symboliques.
+TreeAudit lit seulement les **noms, tailles, dates et droits**, jamais le contenu des fichiers (sauf pour les doublons, l'aperçu des images, les photos ressemblantes et les archives, quand tu les demandes). Il ne suit jamais les liens symboliques.
 
 Une analyse se termine toujours dans l'un de ces états :
 

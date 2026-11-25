@@ -48,6 +48,7 @@ from treeaudit.roots.registry import RootStatus
 from treeaudit.roots.validation import REASON_MESSAGES, RejectReason
 from treeaudit.scanner.walker import SubpathError, parse_subpath
 from treeaudit.shellcmd import host_path, is_displayable, safe_root, visible
+from treeaudit.similar import images as similar_images
 from treeaudit.similar import trees as similar_trees
 from treeaudit.web import explorer, queries, summaries
 from treeaudit.web.api import Config, Db, Jobs, accepted_root, browse_root, root_display
@@ -723,10 +724,27 @@ def similar_page(request: Request, scan_id: int, conn: Db, config: Config) -> Re
 
 
 @router.get("/scans/{scan_id}/images")
-def similar_images_page(request: Request, scan_id: int, conn: Db, config: Config) -> Response:
-    """Similar images (D-069): the page computes the signatures in the browser."""
+def similar_images_page(
+    request: Request,
+    scan_id: int,
+    conn: Db,
+    config: Config,
+    limit: Annotated[int, Query(ge=1, le=10_000)] = 50,
+) -> Response:
+    """Similar images (D-069): the page computes the signatures in the browser,
+    then shows the groups found among the images already signed."""
     scan = _scan_or_404(conn, scan_id)
-    return render(request, "similar_images.html", scan=scan, title=analysis_title(config, scan))
+    report = similar_images.similar_images(conn, scan_id)
+    return render(
+        request,
+        "similar_images.html",
+        scan=scan,
+        title=analysis_title(config, scan),
+        prefix=path_prefix(config, scan),
+        report=report,
+        groups=report.groups[:limit],
+        limit=limit,
+    )
 
 
 @router.get("/scans/{scan_id}/similar/{a_id}/{b_id}")

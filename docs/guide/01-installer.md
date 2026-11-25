@@ -98,7 +98,7 @@ La liste complète est dans le [README](../../README.md#ancien-mode-par-fichier-
 | Archives faites par le bouton « Archiver » | `archives/` dans le dossier du projet | `~/.local/share/treeaudit/archives/` |
 | Fichiers temporaires (grands tris de SQLite) | `data/tmp/` | `$XDG_RUNTIME_DIR/treeaudit/` (vidé à la déconnexion), sinon `~/.cache/treeaudit/` |
 
-**Ce que contient l'index** : les chemins, tailles, dates et droits des fichiers analysés, et les empreintes calculées par la recherche de doublons. **Jamais le contenu des fichiers.** Il reste sur ta machine, lisible par toi seul, mais les chemins en disent long : ne le partage pas.
+**Ce que contient l'index** : les chemins, tailles, dates et droits des fichiers analysés, les empreintes calculées par la recherche de doublons et, pour les [photos ressemblantes](13-photos-ressemblantes.md), une vignette de 32 × 32 points en gris de chaque image traitée. **Jamais le contenu des fichiers lui-même.** Il reste sur ta machine, lisible par toi seul, mais les chemins en disent long : ne le partage pas.
 
 **Effacer une analyse** : sur l'accueil, « Oublier » à côté de l'analyse, puis « Compacter l'index » pour rendre la place au disque. Rien n'est touché sur tes disques.
 

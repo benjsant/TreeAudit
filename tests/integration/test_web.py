@@ -182,6 +182,8 @@ def test_theme_choice(client: TestClient) -> None:
     css = client.get("/static/app.css").text
     assert ':root[data-theme="dark"]' in css
     assert ':root:not([data-theme="light"])' in css
+    # Found on the similar images page: .button's display showed hidden buttons.
+    assert "[hidden] { display: none !important; }" in css
 
 
 def test_foreign_host_rejected_on_pages(client: TestClient) -> None:
@@ -1664,3 +1666,83 @@ def test_the_self_test_image_of_the_page_has_the_expected_pixels(client: TestCli
         formula.group(1)
         == "[(x * 31 + y * 7) % 256, (x * 13 + y * 29) % 256, (x * y * 5 + 40) % 256]"
     )
+
+
+GRADIENT = bytes(range(256)).hex() * 4  # a thumbnail with contrast: correlates with itself
+
+
+def similar_pair(client: TestClient, scan_id: int) -> tuple[int, int]:
+    """a.jpg and the XSS-named image look alike; a.jpg has more pixels."""
+    ids = entry_ids(client, scan_id)
+    big, small = ids[b"photos/a.jpg"], ids[f"photos/{XSS}.jpg".encode()]
+    other = ids[f"photos/{FORMULA}.jpg".encode()]
+    items = [
+        {**signed(big), "thumb": GRADIENT, "width": 4000, "height": 3000},
+        {**signed(small), "thumb": GRADIENT, "width": 800, "height": 600},
+        {**signed(other, "0" * 64), "thumb": bytes(range(255, -1, -1)).hex() * 4},
+    ]
+    response = client.post(
+        f"/api/scans/{scan_id}/images/signatures", json={"algo": 1, "items": items}, headers=CSRF
+    )
+    assert response.status_code == 200
+    return big, small
+
+
+def test_similar_images_are_shown_in_groups(client: TestClient, scanned: int) -> None:
+    assert "Les groupes apparaîtront ici" in client.get(f"/scans/{scanned}/images").text
+    big, small = similar_pair(client, scanned)
+    page = client.get(f"/scans/{scanned}/images")
+    assert_safe_html(page.text)
+    assert "1 groupe(s) parmi 3 image(s)" in page.text
+    assert f'src="/api/scans/{scanned}/entries/{big}/image"' in page.text
+    assert f'src="/api/scans/{scanned}/entries/{small}/image"' in page.text
+    assert "&lt;img src=x onerror=alert(1)&gt;" in page.text and XSS not in page.text
+    assert "4000 \u00d7 3000" in page.text and "la plus grande résolution" in page.text
+    assert 'data-version="' in page.text and 'name="keep-1" value="2"' in page.text
+
+
+def test_the_similar_images_command_removes_what_is_not_kept(
+    client: TestClient, scanned: int
+) -> None:
+    similar_pair(client, scanned)
+    version = re.search(r'data-version="([^"]+)"', client.get(f"/scans/{scanned}/images").text)
+    assert version is not None
+    url = f"/api/scans/{scanned}/images/command"
+    body = {"groups": [1], "action": "trash", "version": version.group(1)}
+    data = client.post(url, json=body, headers=CSRF).json()
+    assert data["count"] == 1 and data["command"].startswith("gio trash -- \\\n  ")
+    assert XSS in data["command"] and "photos/a.jpg" not in data["command"]
+    assert any("rafale" in w for w in data["warnings"])
+    # The user keeps the smaller one instead: the larger one is proposed.
+    kept_small = client.post(url, json={**body, "keep": {"1": 2}}, headers=CSRF).json()
+    assert "photos/a.jpg" in kept_small["command"] and XSS not in kept_small["command"]
+    for wrong, status in [
+        ({"version": "0-0"}, 409),
+        ({"groups": [2]}, 422),
+        ({"keep": {"1": 3}}, 422),
+        ({"action": "archive"}, 422),
+    ]:
+        assert client.post(url, json={**body, **wrong}, headers=CSRF).status_code == status
+    assert client.post(url, json=body).status_code == 403  # CSRF guard
+
+
+def test_similar_image_pairs_are_cached_then_forgotten(client: TestClient, scanned: int) -> None:
+    similar_pair(client, scanned)
+    client.get(f"/scans/{scanned}/images")
+    data_dir = client.app.state.config.data_dir  # type: ignore[attr-defined]
+
+    def cached() -> list[str]:
+        conn = sqlite3.connect(database_path(data_dir))
+        try:
+            return [
+                row[0]
+                for row in conn.execute(
+                    "SELECT key FROM summary_cache WHERE key LIKE 'similar-images:%'"
+                )
+            ]
+        finally:
+            conn.close()
+
+    assert [key.split(":")[1] for key in cached()] == [str(scanned)]
+    assert client.post(f"/api/scans/{scanned}/forget", json={}, headers=CSRF).status_code == 200
+    assert cached() == []

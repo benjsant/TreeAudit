@@ -364,7 +364,7 @@ def forget_scan(conn: sqlite3.Connection, scan_id: int) -> bool:
     runs = [row[0] for row in conn.execute("SELECT id FROM dup_run WHERE scan_id = ?", (scan_id,))]
     conn.execute("BEGIN")  # all or nothing: the connection autocommits otherwise
     try:
-        for prefix in ("parasite-candidates", "parasites"):
+        for prefix in ("parasite-candidates", "parasites", "similar-images"):
             conn.execute(
                 "DELETE FROM summary_cache WHERE key LIKE ? ESCAPE '\\'",
                 (f"{prefix}:{scan_id}:%",),
