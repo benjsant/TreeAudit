@@ -735,7 +735,10 @@ def similar_images_page(
     """Similar images (D-069): the page computes the signatures in the browser,
     then shows the groups found among the images already signed."""
     scan = _scan_or_404(conn, scan_id)
-    report = similar_images.similar_images(conn, scan_id)
+    try:
+        report = similar_images.similar_images(conn, scan_id)
+    except similar_images.SignaturesChangedError as exc:
+        raise HTTPException(409, f"{exc}.") from exc
     return render(
         request,
         "similar_images.html",

@@ -32,6 +32,11 @@ class PreviewError(Exception):
     """No preview for this file; the message says why, in French."""
 
 
+class RootUnavailableError(PreviewError):
+    """The analysed folder itself cannot be opened or was replaced (a disk
+    unplugged): no file of it can be read now, not only this one."""
+
+
 @dataclass(frozen=True, slots=True)
 class Image:
     """The original bytes of an image and its type, guessed from its first bytes."""
@@ -89,25 +94,33 @@ def read_image(
         raise PreviewError("dossier privé : jamais lu")
     if not 0 < expected.size <= MAX_PREVIEW_SIZE:
         raise PreviewError("image trop grande pour un aperçu")
+    reader = TreeReader(root_path, expected_root)
     try:
-        with TreeReader(root_path, expected_root) as reader:
-            fd = reader.open_file(rel_path, expected)
-            try:
-                parts: list[bytes] = []
-                remaining = expected.size
-                while remaining > 0:
-                    chunk = os.read(fd, min(_CHUNK, remaining))
-                    if not chunk:
-                        break
-                    parts.append(chunk)
-                    remaining -= len(chunk)
-                check_unchanged(fd, expected)
-            finally:
-                os.close(fd)
+        reader.__enter__()
+    except (RootChangedError, OSError) as exc:
+        raise RootUnavailableError(
+            "dossier analysé introuvable ou remplacé : disque débranché ?"
+        ) from exc
+    try:
+        fd = reader.open_file(rel_path, expected)
+        try:
+            parts: list[bytes] = []
+            remaining = expected.size
+            while remaining > 0:
+                chunk = os.read(fd, min(_CHUNK, remaining))
+                if not chunk:
+                    break
+                parts.append(chunk)
+                remaining -= len(chunk)
+            check_unchanged(fd, expected)
+        finally:
+            os.close(fd)
     except (RootChangedError, FileChangedError) as exc:
         raise PreviewError("fichier modifié depuis l'analyse : relance une analyse") from exc
     except OSError as exc:
         raise PreviewError("fichier illisible ou déplacé depuis l'analyse") from exc
+    finally:
+        reader.__exit__(None, None, None)
     content = b"".join(parts)
     if remaining or len(content) != expected.size:
         raise PreviewError("fichier modifié pendant la lecture")

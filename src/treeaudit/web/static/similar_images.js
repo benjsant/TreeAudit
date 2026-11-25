@@ -206,29 +206,49 @@ async function signAll(scan, state, field, stopped, stop) {
       `${humanSize(bytes)} lus · encore ${left < 90 ? `${left} s` : `${Math.round(left / 60)} min`}`;
   };
 
-  async function worker() {
-    while (next < todo.length && !stopped()) {
-      const entry = todo[next++];
-      let item;
+  // The first error stops every worker; the images not done stay to do
+  // (found by the audit of 2026-11-25: the others went on in the background).
+  let failure = null;
+  const halted = () => stopped() || failure !== null;
+
+  async function signatureItem(entry) {
+    let response;
+    try {
+      response = await fetch(`/api/scans/${scan}/entries/${entry}/image`, { credentials: "same-origin" });
+    } catch (error) {
+      throw new Error("le serveur ne répond plus");
+    }
+    // This file only (changed or unreadable since the analysis, not an image):
+    // noted, and asked for again at the next computation.
+    if (response.status === 409 || response.status === 422) return { entry, failure: "unreadable" };
+    if (!response.ok) {
+      // The whole folder (disk unplugged, refused, changed) or the server: stop.
+      let detail = "";
       try {
-        const response = await fetch(`/api/scans/${scan}/entries/${entry}/image`, { credentials: "same-origin" });
-        if (!response.ok) {
-          item = { entry, failure: "unreadable" };
-        } else {
-          const blob = await response.blob();
-          bytes += blob.size;
-          try {
-            item = { entry, ...(await signatureOf(blob)) };
-          } catch (error) {
-            item = { entry, failure: "undecodable" };
-          }
-        }
+        detail = (await response.json()).detail || "";
       } catch (error) {
-        throw new Error("le serveur ne répond plus");
+        detail = "";
       }
-      results.push(item);
-      finished++;
-      if (results.length >= SIGNATURE.batch) await flush();
+      throw new Error(detail || `réponse ${response.status} du serveur`);
+    }
+    const blob = await response.blob();
+    bytes += blob.size;
+    try {
+      return { entry, ...(await signatureOf(blob)) };
+    } catch (error) {
+      return { entry, failure: "undecodable" };
+    }
+  }
+
+  async function worker() {
+    try {
+      while (next < todo.length && !halted()) {
+        results.push(await signatureItem(todo[next++]));
+        finished++;
+        if (results.length >= SIGNATURE.batch) await flush();
+      }
+    } catch (error) {
+      failure = failure || error;
     }
   }
 
@@ -238,8 +258,13 @@ async function signAll(scan, state, field, stopped, stop) {
   } finally {
     clearInterval(timer);
     report();
-    await flush();
+    try {
+      await flush();
+    } catch (error) {
+      failure = failure || error;
+    }
   }
+  if (failure) throw failure;
   field("progress").textContent = stopped()
     ? `Arrêté : ${finished.toLocaleString("fr-FR")} image(s) traitée(s), la suite reprendra là.`
     : `Terminé : ${finished.toLocaleString("fr-FR")} image(s) traitée(s).`;

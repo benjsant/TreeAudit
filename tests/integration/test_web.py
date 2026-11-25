@@ -1778,3 +1778,53 @@ def test_tidying_can_leave_whole_categories_in_place(client: TestClient, scanned
     nothing = client.get(url, params=[("dir", root_id), ("choix", "1")])
     assert "Que ranger ?" in nothing.text and "Rien à ranger ici" not in nothing.text
     assert "Ajustement refusé" in client.get(url, params=[("dir", root_id), ("ranger", "x")]).text
+
+
+def test_an_unreadable_image_is_asked_for_again(client: TestClient, scanned: int) -> None:
+    """Found by the audit of 2026-11-25: a disk unplugged during the signing
+    made every image left 'unreadable' for good; such failures are retried."""
+    ids = entry_ids(client, scanned)
+    url = f"/api/scans/{scanned}/images"
+    unreadable, undecodable = ids[b"photos/a.jpg"], ids[f"photos/{XSS}.jpg".encode()]
+    items = [
+        {"entry": unreadable, "failure": "unreadable"},
+        {"entry": undecodable, "failure": "undecodable"},
+    ]
+    client.post(f"{url}/signatures", json={"algo": 1, "items": items}, headers=CSRF)
+    state = client.post(f"{url}/todo", json={}, headers=CSRF).json()
+    assert unreadable in state["todo"] and undecodable not in state["todo"]
+
+
+def test_a_folder_gone_is_told_apart_from_a_file_gone(
+    client: TestClient, scanned: int, root: Path
+) -> None:
+    """503 stops the similar images page, 409 only notes the image."""
+    ids = entry_ids(client, scanned)
+    image = f"/api/scans/{scanned}/entries/{ids[b'photos/a.jpg']}/image"
+    (root / "photos" / "a.jpg").write_bytes(b"changed since the analysis")
+    assert client.get(image).status_code == 409  # this file only
+    root.rename(root.with_name("ailleurs"))
+    try:
+        gone = client.get(image)
+        assert gone.status_code == 503 and "dossier indisponible" in gone.json()["detail"]
+    finally:
+        root.with_name("ailleurs").rename(root)
+
+
+def test_what_a_command_leaves_out_is_not_counted_as_freed() -> None:
+    """Audit of 2026-11-25: the freed figure counted targets left out of the
+    command (an unwritable name, a target the double check refused)."""
+    from dataclasses import dataclass
+
+    from treeaudit.shellcmd import CleanupCommand
+    from treeaudit.web.api import left_out
+
+    @dataclass(frozen=True)
+    class Target:
+        rel_path: bytes
+        rel_path_display: str
+
+    kept, skipped, refused = Target(b"a", "a"), Target(b"b\nc", "b c"), Target(b"d", "d")
+    result = CleanupCommand("gio trash -- a", (skipped,), ((refused, "racine"),))
+    assert left_out(result) == {id(skipped), id(refused)}
+    assert id(kept) not in left_out(result)

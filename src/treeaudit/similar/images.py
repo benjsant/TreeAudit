@@ -55,6 +55,9 @@ class Image:
     thumb: bytes
     thumb_sum: int
     thumb_squares: int
+    names: int = 1
+    """Names of this file on the disk (hard links): removing one of several
+    frees nothing."""
 
     @property
     def pixels(self) -> int:
@@ -170,7 +173,7 @@ class SelectionError(ValueError):
 
 _SIGNED_SQL = (
     "SELECT s.entry_id, s.hash, s.thumb, s.width, s.height, e.rel_path, e.rel_path_display, "
-    "e.size, e.mtime_ns, e.dev, e.ino FROM image_sig s "
+    "e.size, e.mtime_ns, e.dev, e.ino, e.nlink FROM image_sig s "
     "JOIN entry e ON e.scan_id = s.scan_id AND e.entry_id = s.entry_id "
     "WHERE s.scan_id = ? AND s.algo = ? AND s.failure IS NULL ORDER BY e.rel_path"
 )
@@ -200,6 +203,7 @@ def load_images(conn: sqlite3.Connection, scan_id: int) -> list[Image]:
                 thumb=thumb,
                 thumb_sum=sum(thumb),
                 thumb_squares=sum(v * v for v in thumb),
+                names=row["nlink"],
             )
         )
     return images
@@ -250,6 +254,16 @@ def _reasons(kept: Image, others: list[Image]) -> tuple[str, ...]:
     return ("tout est égal : le chemin le plus court",)
 
 
+LINKED = "plusieurs noms sur le disque (liens physiques) : supprimer celui-ci ne libère rien"
+
+
+def _protection(image: Image, guarded: Guarded) -> str | None:
+    """Why this image is never proposed: software or a repository, or a file
+    with other names (found by the audit of 2026-11-25: it was proposed and
+    counted as space freed)."""
+    return protection_reason(image.rel_path, guarded) or (LINKED if image.names > 1 else None)
+
+
 def make_group(images: list[Image], guarded: Guarded, kept: Image | None = None) -> Group:
     """One group: the best version first (or ``kept``, the user's choice),
     every member compared with it."""
@@ -258,12 +272,11 @@ def make_group(images: list[Image], guarded: Guarded, kept: Image | None = None)
         ordered.remove(kept)
         ordered.insert(0, kept)
     kept = ordered[0]
-    members = [Member(kept, 0, 1.0, True, protection_reason(kept.rel_path, guarded))]
+    members = [Member(kept, 0, 1.0, True, _protection(kept, guarded))]
     for image in ordered[1:]:
         bits, likeness = bits_between(kept, image), correlation(kept, image)
         close = bits <= MAX_BITS and likeness >= MIN_CORRELATION
-        protection = protection_reason(image.rel_path, guarded)
-        members.append(Member(image, bits, likeness, close, protection))
+        members.append(Member(image, bits, likeness, close, _protection(image, guarded)))
     return Group(tuple(members), _reasons(kept, ordered[1:]))
 
 
@@ -360,10 +373,29 @@ def mark_copies(group: Group, digests: dict[int, bytes] | None) -> Group:
     return Group(tuple(members), group.reasons)
 
 
+class SignaturesChangedError(RuntimeError):
+    """Signatures kept arriving while they were read: try again later."""
+
+
+def _consistent_images(conn: sqlite3.Connection, scan_id: int) -> tuple[str, list[Image]]:
+    """The signed images and the version they are, read so that both agree.
+
+    Found by the audit of 2026-11-25: read before the images, the version
+    could predate a batch saved in between, so a command checked against it
+    could number other groups than the page showed. The version is read again
+    after the images; a change means another try."""
+    for _ in range(5):
+        version = signatures_version(conn, scan_id)
+        images = load_images(conn, scan_id)
+        if signatures_version(conn, scan_id) == version:
+            return version, images
+    raise SignaturesChangedError("des signatures arrivent encore : réessaie dans un instant")
+
+
 def similar_images(conn: sqlite3.Connection, scan_id: int) -> Report:
-    """The groups of similar images of an analysis, from its stored signatures."""
-    version = signatures_version(conn, scan_id)
-    images = load_images(conn, scan_id)
+    """The groups of similar images of an analysis, from its stored signatures.
+    Raises SignaturesChangedError if they keep changing while being read."""
+    version, images = _consistent_images(conn, scan_id)
     parent = list(range(len(images)))
 
     def root(i: int) -> int:

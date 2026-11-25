@@ -12,7 +12,13 @@ from fastapi.testclient import TestClient
 
 from treeaudit.core.config import AppConfig, RootConfig
 from treeaudit.duplicates.reader import Expected
-from treeaudit.preview.images import MAX_PREVIEW_SIZE, PreviewError, read_image, sniff
+from treeaudit.preview.images import (
+    MAX_PREVIEW_SIZE,
+    PreviewError,
+    RootUnavailableError,
+    read_image,
+    sniff,
+)
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.registry import evaluate_roots
 from treeaudit.web.app import create_app
@@ -82,6 +88,30 @@ def test_a_folder_swapped_for_a_symlink_is_never_followed(tmp_path: Path) -> Non
     (root / "Photos").symlink_to(outside)
     with pytest.raises(PreviewError):
         read_image(str(root), root_id(root), b"Photos/a.png", expected)
+
+
+def test_a_folder_gone_is_not_a_file_gone_and_nothing_leaks(tmp_path: Path) -> None:
+    """The analysed folder itself unavailable (a disk unplugged) is told apart
+    from one file changed (audit of 2026-11-25); no descriptor stays open."""
+    root = tmp_path / "disque"
+    root.mkdir()
+    image = root / "a.png"
+    image.write_bytes(PNG)
+    expected, identity = expected_of(image), root_id(root)
+    before = len(os.listdir("/proc/self/fd"))
+    for _ in range(20):
+        read_image(str(root), identity, b"a.png", expected)
+    image.write_bytes(PNG + b"more")
+    with pytest.raises(PreviewError, match="modifié") as changed:
+        read_image(str(root), identity, b"a.png", expected)
+    assert not isinstance(changed.value, RootUnavailableError)
+    root.rename(tmp_path / "ailleurs")
+    with pytest.raises(RootUnavailableError):
+        read_image(str(root), identity, b"a.png", expected)
+    (tmp_path / "disque").mkdir()  # another folder at the same place
+    with pytest.raises(RootUnavailableError):
+        read_image(str(root), identity, b"a.png", expected)
+    assert len(os.listdir("/proc/self/fd")) == before
 
 
 def test_private_folders_and_big_files_are_never_read(tmp_path: Path) -> None:

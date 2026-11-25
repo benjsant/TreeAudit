@@ -227,6 +227,25 @@ def test_hard_links_count_once(
     assert (report.signed, report.groups) == (1, ())
 
 
+def test_a_file_with_other_names_is_never_proposed(
+    conn: sqlite3.Connection, analyse: Callable[..., tuple[int, dict[str, int]]]
+) -> None:
+    """Found by the audit of 2026-11-25: removing one name of a hard-linked file
+    frees nothing, yet it was proposed and counted as space freed."""
+    scan_id, ids = analyse(["grande.jpg", "petite.jpg"], links={"autre-nom.jpg": "petite.jpg"})
+    h, thumb = random_hash(), random_thumb()
+    sign(
+        conn,
+        scan_id,
+        ids,
+        {"grande.jpg": (h, thumb, 4000, 3000), "petite.jpg": (h, thumb, 800, 600)},
+    )
+    [group] = similar.similar_images(conn, scan_id).groups
+    small = group.members[1]
+    assert small.image.rel_path_display == "petite.jpg" and small.protection == similar.LINKED
+    assert group.removable == () and group.recoverable == 0
+
+
 def test_failures_and_other_versions_are_left_out(
     conn: sqlite3.Connection, analyse: Callable[..., tuple[int, dict[str, int]]]
 ) -> None:
@@ -360,3 +379,41 @@ def test_identical_copies_are_told_apart_from_other_shots(
     assert proven[names[3]] == (None, None)  # it only looked the same
     assert proven[names[2]] == (None, None)
     assert proven_bytes == 4096
+
+
+def test_signatures_saved_while_reading_are_never_mixed(
+    conn: sqlite3.Connection,
+    analyse: Callable[..., tuple[int, dict[str, int]]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Found by the audit of 2026-11-25: a batch saved between reading the
+    version and the images gave groups newer than their version."""
+    scan_id, ids = analyse(["a.jpg", "b.jpg", "c.jpg"])
+    h, thumb = random_hash(), random_thumb()
+    sign(conn, scan_id, ids, {"a.jpg": (h, thumb, 10, 10)})
+    real_load = similar.load_images
+    batches = iter([{"b.jpg": (h, thumb, 10, 10)}])
+
+    def load_then_sign(conn_: sqlite3.Connection, scan: int) -> list[similar.Image]:
+        loaded = real_load(conn_, scan)
+        for batch in batches:  # once: another tab saves a batch meanwhile
+            sign(conn, scan_id, ids, batch)
+        return loaded
+
+    monkeypatch.setattr(similar, "load_images", load_then_sign)
+    report = similar.similar_images(conn, scan_id)
+    assert report.version == similar.signatures_version(conn, scan_id)
+    assert report.signed == 2 and len(report.groups) == 1  # the newer state, whole
+
+    def always_newer(conn_: sqlite3.Connection, scan: int) -> list[similar.Image]:
+        loaded = real_load(conn_, scan)
+        conn.execute("UPDATE image_sig SET width = width + 1 WHERE scan_id = ?", (scan_id,))
+        conn.execute(
+            "INSERT OR REPLACE INTO image_sig SELECT * FROM image_sig WHERE scan_id = ?",
+            (scan_id,),
+        )
+        return loaded
+
+    monkeypatch.setattr(similar, "load_images", always_newer)
+    with pytest.raises(similar.SignaturesChangedError):
+        similar.similar_images(conn, scan_id)

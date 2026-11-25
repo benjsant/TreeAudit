@@ -32,6 +32,7 @@ from treeaudit.preview.images import (
     IMAGE_EXTENSIONS,
     MAX_PREVIEW_SIZE,
     PreviewError,
+    RootUnavailableError,
     previewable,
     read_image,
 )
@@ -246,6 +247,13 @@ def cancel_job(jobs: Jobs) -> dict[str, bool]:
     return {"cancelled": jobs.cancel()}
 
 
+def left_out(result: CleanupCommand[Any]) -> set[int]:
+    """Targets the command does not name (unwritable path, refused by the
+    double check), by identity: what they hold is not freed (audit of
+    2026-11-25: the freed figure counted them)."""
+    return {id(t) for t in result.skipped} | {id(t) for t, _ in result.refused}
+
+
 def refused_warnings(result: CleanupCommand[Any]) -> list[str]:
     """One line per target the double check refused, with why (shellcmd)."""
     return [
@@ -279,9 +287,15 @@ def entry_image(
         raise HTTPException(404, "élément inconnu")
     if not previewable(row["kind"], row["extension"], row["size"]):
         raise HTTPException(422, "pas d'aperçu pour cet élément")
-    root = accepted_root(request, scan["root_id"]).root
+    # The whole folder unavailable (disk unplugged, refused, changed) is 503,
+    # one file 409: the similar images page stops on the first, and only
+    # records the second (found by the audit of 2026-11-25).
+    try:
+        root = accepted_root(request, scan["root_id"]).root
+    except HTTPException as exc:
+        raise HTTPException(503, f"dossier indisponible : {exc.detail}") from exc
     if root.path != scan["root_path"]:
-        raise HTTPException(409, "la racine a changé depuis l'analyse")
+        raise HTTPException(503, "dossier indisponible : la racine a changé depuis l'analyse")
     expected = Expected(
         dev=from_sqlite_int(row["dev"]),
         ino=from_sqlite_int(row["ino"]),
@@ -296,6 +310,8 @@ def entry_image(
             expected,
             private_paths=root.private_paths,
         )
+    except RootUnavailableError as exc:
+        raise HTTPException(503, f"dossier indisponible : {exc}") from exc
     except (PreviewError, OSError) as exc:
         raise HTTPException(409, str(exc) or "aperçu impossible") from exc
     return Response(image.content, media_type=image.media_type, headers=IMAGE_HEADERS)
@@ -471,6 +487,7 @@ def dupes_command(run_id: int, body: DupesCommand, conn: Db, config: Config) -> 
     except SelectionError as exc:
         raise HTTPException(422, str(exc)) from exc
     targets = [copy for group in selected for copy in group.removable]
+    size_of = {id(copy): group.size for group in selected for copy in group.removable}
     result = cleanup_command(
         Action(body.action),
         targets,
@@ -478,10 +495,12 @@ def dupes_command(run_id: int, body: DupesCommand, conn: Db, config: Config) -> 
         scanned=scan["subpath"],
         protected=config.protected_paths(),
     )
+    out = left_out(result)
     return {
         "command": result.text,
         "count": len(targets),
-        "freed": sum(g.recoverable for g in selected),
+        "freed": sum(g.recoverable for g in selected)
+        - sum(size_of[id(copy)] for copy in targets if id(copy) in out),
         "skipped": [c.rel_path_display for c in result.skipped],
         "warnings": refused_warnings(result),
     }
@@ -504,7 +523,10 @@ def images_command(scan_id: int, body: ImagesCommand, conn: Db, config: Config) 
     from the index again: only images directly like the kept one, never a
     protected one (D-069)."""
     scan = _final_scan(conn, scan_id)
-    report = similar_images.similar_images(conn, scan_id)
+    try:
+        report = similar_images.similar_images(conn, scan_id)
+    except similar_images.SignaturesChangedError as exc:
+        raise HTTPException(409, str(exc)) from exc
     if body.version != report.version:
         raise HTTPException(409, "de nouvelles images ont été traitées depuis : recharge la page")
     unknown = sorted(n for n in set(body.groups) if not 1 <= n <= len(report.groups))
@@ -536,10 +558,11 @@ def images_command(scan_id: int, body: ImagesCommand, conn: Db, config: Config) 
     ]
     if scan["status"] != "complete":
         warnings.append("L'analyse est incomplète : vérifie les éléments avant de lancer.")
+    out = left_out(result)
     return {
         "command": result.text,
         "count": len(targets),
-        "freed": sum(image.size for image in targets),
+        "freed": sum(image.size for image in targets if id(image) not in out),
         "skipped": [image.rel_path_display for image in result.skipped],
         "warnings": warnings + refused_warnings(result),
     }
@@ -620,10 +643,11 @@ def basket_command(scan_id: int, body: BasketCommand, conn: Db, config: Config) 
         archive_name=f"scan{scan_id}-panier.tar.gz",
     )
     warnings += refused_warnings(result)
+    out = left_out(result)
     return {
         "command": result.text,
         "count": len(basket.items),
-        "freed": basket.total,
+        "freed": basket.total - sum(i.allocated or 0 for i in basket.items if id(i) in out),
         "skipped": [item.rel_path_display for item in result.skipped],
         "warnings": warnings,
     }

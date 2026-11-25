@@ -72,7 +72,7 @@
         </li>
       {% endfor %}
       </ul>
-      {% if report.groups | length > limit %}<p><a href="/scans/{{ scan.id }}/images?limit={{ report.groups | length }}">Afficher les {{ report.groups | length }} groupes</a></p>{% endif %}
+      {% if report.groups | length > limit %}{% set all = [report.groups | length, 10000] | min %}<p><a href="/scans/{{ scan.id }}/images?limit={{ all }}">Afficher {{ "les " ~ (all | number) if all == report.groups | length else "les " ~ (all | number) ~ " premiers" }} groupes</a></p>{% endif %}
       <p class="muted small">Une image que tu choisis de garder change aussi ce qui est proposé : seules les images qui lui ressemblent directement le sont. Les images d'un logiciel ou d'un dépôt git ne sont jamais proposées.</p>
       {% set allow_archive = false %}
       {% include "command_panel.html" %}

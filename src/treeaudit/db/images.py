@@ -19,6 +19,10 @@ THUMB_BYTES = 32 * 32
 FAILURES = ("undecodable", "unreadable")
 """Why the page has no signature: the browser could not decode the image, or
 the server refused to send it (changed, unreadable since the analysis)."""
+RETRIED = frozenset({"unreadable"})
+"""Failures asked for again at the next computation: a file can become
+readable again (permissions, a disk back). An image the browser cannot
+decode stays aside until another algorithm version."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,7 +112,7 @@ def pending(
     todo: list[int] = []
     for entry_id, algo, failure in conn.execute(sql, (scan_id, max_size, *sorted(extensions))):
         total += 1
-        if algo != ALGO:
+        if algo != ALGO or failure in RETRIED:
             todo.append(entry_id)
         elif failure is None:
             done += 1
