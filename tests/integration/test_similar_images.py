@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import math
 import os
@@ -16,6 +17,7 @@ import pytest
 from treeaudit.core.config import RootConfig
 from treeaudit.db import images as images_db
 from treeaudit.db.connection import connect_memory
+from treeaudit.duplicates.groups import Guarded
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.validation import ValidationContext
 from treeaudit.scanner.runner import ScanRequest, run_scan
@@ -281,3 +283,21 @@ def test_the_correlation_is_pearson_s() -> None:
     assert similar.correlation(image(0, 0, a), image(1, 0, b)) == pytest.approx(expected, abs=1e-12)
     flat = bytes([128]) * images_db.THUMB_BYTES
     assert similar.correlation(image(0, 0, flat), image(1, 0, flat)) == 0.0
+
+
+def test_the_reason_is_what_put_the_kept_one_first() -> None:
+    """A burst copied twice: same pixels and weight everywhere; the kept one is
+    the oldest of the two copies of the best shot, whatever the other shots."""
+    thumb = random_thumb()
+
+    def shot(index: int, size: int, mtime: int) -> similar.Image:
+        return dataclasses.replace(image(index, 0, thumb), size=size, mtime_ns=mtime)
+
+    copies = [shot(1, 1300, 2024), shot(2, 1300, 2025), shot(3, 1200, 2024), shot(4, 1200, 2025)]
+    group = similar.make_group(copies, Guarded(set(), {}))
+    assert group.keep.image.entry_id == 1
+    assert group.reasons == (
+        "à résolution et poids égaux, la plus ancienne (probablement l'originale)",
+    )
+    heavier = similar.make_group([*copies[2:], shot(5, 1400, 2026)], Guarded(set(), {}))
+    assert heavier.reasons == ("à résolution égale, le fichier le plus lourd",)

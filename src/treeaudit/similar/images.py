@@ -218,13 +218,18 @@ def _keep_order(image: Image) -> tuple[int, int, int, int, bytes]:
 
 
 def _reasons(kept: Image, others: list[Image]) -> tuple[str, ...]:
-    if all(kept.pixels > o.pixels for o in others):
+    """The criterion that put ``kept`` before the next best one (``others`` in
+    _keep_order): the first one where they differ, as the sort decided.
+    Found on real photos: ties with the other shots of a burst made every
+    "all others" test fail, and the reason shown was not the real one."""
+    runner_up = others[0]
+    if kept.pixels != runner_up.pixels:
         return ("la plus grande résolution",)
-    if all(kept.pixels >= o.pixels and kept.size > o.size for o in others):
+    if kept.size != runner_up.size:
         return ("à résolution égale, le fichier le plus lourd",)
-    if all(kept.mtime_ns < o.mtime_ns for o in others):
-        return ("la plus ancienne (probablement l'originale)",)
-    return ("chemin le plus court",)
+    if kept.mtime_ns != runner_up.mtime_ns:
+        return ("à résolution et poids égaux, la plus ancienne (probablement l'originale)",)
+    return ("tout est égal : le chemin le plus court",)
 
 
 def make_group(images: list[Image], guarded: Guarded, kept: Image | None = None) -> Group:
