@@ -1,5 +1,13 @@
 TreeAudit trie et explique le contenu de tes disques, **sans jamais rien supprimer ni modifier**. Il tourne sur ta machine, sans Internet.
 
+## Nouveau depuis la 1.0.0-rc.1
+
+- **🖼️ Photos ressemblantes** : la même photo réduite, recompressée ou convertie, et les photos d'une rafale. C'est ton navigateur qui ouvre les images : rien ne sort de ton ordinateur. Les simples copies identiques sont séparées des autres versions.
+- **Ranger** : tu choisis les catégories à ranger, par exemple « seulement le développement et les logiciels », sans toucher à tes photos ni à tes documents. Une application sans marqueur de projet est déplacée en entier.
+- **Doublons** : un programme portable est protégé où qu'il soit rangé ; la progression montre l'étape en cours.
+- TreeAudit refuse de tourner en `root`, en Docker aussi.
+- De nombreuses corrections, trouvées par deux audits complets et des essais sur de vrais disques (clé USB exFAT, NTFS, btrfs, disque dur USB, disque débranché en pleine lecture).
+
 ## Installer : rien à installer
 
 1. Télécharge **`TreeAudit-x86_64.AppImage`** ci-dessous. Pour une machine sans Internet, copie ce fichier sur une clé USB.

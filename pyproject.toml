@@ -1,6 +1,6 @@
 [project]
 name = "treeaudit"
-version = "1.0.0rc1"
+version = "1.0.0rc2"
 description = "Local, read-only file and directory audit tool for Linux"
 readme = "README.md"
 license = "MIT"
@@ -30,6 +30,11 @@ dev = [
   "pyyaml>=6",
   "types-PyYAML>=6",
 ]
+
+# coverage stays on a release at least two weeks old when it was added
+# (DEPENDENCIES.md); kept here so that every "uv lock" keeps the bound.
+[tool.uv]
+exclude-newer-package = { coverage = "2026-11-03T00:00:00Z" }
 
 [build-system]
 requires = ["hatchling>=1.26"]
