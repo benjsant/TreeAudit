@@ -60,7 +60,8 @@ ALLOWED: dict[str, set[str]] = {
     "projects": {"parasites"},
     "roots": {"core"},
     "scanner": {"core", "db", "roots", "shellcmd"},
-    "similar": {"db"},
+    # duplicates: images inside software or a git repository are protected (D-069).
+    "similar": {"db", "duplicates"},
     "core": set(),
     "shellcmd": set(),
     "bench": set(),
