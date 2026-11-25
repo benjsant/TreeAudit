@@ -1,6 +1,8 @@
 /* TreeAudit — simple, calm, readable. No external resource, no inline style (CSP). */
 /* Hidden means hidden: .button's display would otherwise win over the attribute. */
 [hidden] { display: none !important; }
+/* A long name without spaces (a folder, a disk) breaks rather than widen a phone's page. */
+h1, h2, h3 { overflow-wrap: anywhere; }
 :root {
   color-scheme: light dark;
   --bg: #f6f7f5; --fg: #1f2421; --muted: #5f6763; --line: #dfe3df; --panel: #ffffff;

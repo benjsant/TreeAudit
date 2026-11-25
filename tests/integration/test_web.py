@@ -184,6 +184,8 @@ def test_theme_choice(client: TestClient) -> None:
     assert ':root:not([data-theme="light"])' in css
     # Found on the similar images page: .button's display showed hidden buttons.
     assert "[hidden] { display: none !important; }" in css
+    # Found on a phone: a folder named without spaces widened the summary's title.
+    assert "h1, h2, h3 { overflow-wrap: anywhere; }" in css
 
 
 def test_foreign_host_rejected_on_pages(client: TestClient) -> None:
