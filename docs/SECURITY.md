@@ -234,6 +234,21 @@ Relecture de tout ce qui a changé depuis la revue V1 (49 commits, 88 fichiers),
 - **Autres défauts trouvés et corrigés** : le titre d'un dossier au long nom sans espace élargissait la page sur téléphone ; la page des photos lisait toutes les empreintes de la recherche de doublons au lieu de celles des images groupées.
 - **Risques résiduels** : les signatures sont calculées par la page ; le serveur en vérifie la forme mais ne peut pas en vérifier la justesse sans décoder l'image : une page modifiée pourrait fausser des groupes, donc des propositions, jamais lancer une commande. L'index garde une vignette de 32 × 32 points en gris de chaque image traitée (guides 01 et 10) : comme les chemins, il ne doit pas être partagé.
 
+### Second passage : toute l'application (2026-11-25)
+
+Revue de tout `src/treeaudit` (outil de revue de code, puis vérification de chaque point dans le code avant correction), et recherche des motifs dangereux : aucune exécution de commande ou de code, aucun HTML injecté, trois seules écritures (verrou et index dans le dossier de données, archives ; droits 0600 et 0700, `O_NOFOLLOW`).
+
+Défauts confirmés et corrigés, chacun avec un test qui échoue sans la correction :
+
+- **Photos, liens physiques** : un fichier à plusieurs noms était proposé et compté comme place libérée ; en supprimer un nom ne libère rien. Il n'est plus jamais proposé, et la page dit pourquoi.
+- **Photos, course** : la version des signatures était lue avant les images ; un lot enregistré entre les deux pouvait faire viser par une commande d'autres groupes que ceux affichés. La version est relue après, et la lecture recommence si elle a changé.
+- **Photos, panne** : toute erreur à la lecture d'une image était notée « illisible » pour toujours ; un disque débranché pendant le calcul aurait écarté toutes les images restantes. Le serveur distingue maintenant le dossier indisponible (503 : la page s'arrête, toutes ses tâches avec elle) du fichier changé ou illisible (409 : noté, et redemandé au calcul suivant). Essayé dans Chromium en retirant un dossier d'essai en plein calcul, puis en le remettant : arrêt net, rien de faussement « illisible », reprise jusqu'au bout.
+- **Doublons, vérification octet par octet** (`--verify-bytes`) : l'échec du fichier de référence était attribué à chaque copie intacte, qui sortait des résultats. Il est attribué à la référence, et la copie suivante prend sa place.
+- **Ranger** : un « dossier de code » contenant un lien symbolique était déplacé en entier ; un lien relatif aurait pointé ailleurs. Il ne l'est plus (les fichiers cachés restent permis).
+- **Mineurs** : la place libérée annoncée par l'API comptait les éléments retirés de la commande ; le lien « afficher tous les groupes » dépassait la limite de la page au-delà de 10 000 groupes.
+
+Point écarté après vérification : griser autrement la case d'un groupe sans proposition. Un groupe est relié de proche en proche, donc l'image gardée a toujours une voisine directe ; le cas décrit demande une voisine protégée, et changer d'image gardée n'y apporterait presque jamais rien.
+
 ## Toute future fonction destructive est interdite
 Elle exigera une spécification et une revue de sécurité séparées, un aperçu avant action, une confirmation explicite, une journalisation, une stratégie de restauration ou de quarantaine et des tests d'interruption et d'échec.
 
