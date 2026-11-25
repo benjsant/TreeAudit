@@ -305,20 +305,33 @@ SAME_BYTES = "octets"
 SAME_LOOK = "signature"
 
 
-def full_digests(conn: sqlite3.Connection, scan_id: int) -> dict[int, bytes] | None:
-    """SHA-256 of the files the latest finished duplicates search read in full,
-    by entry id (every name of an inode); None if there was no such search."""
+_CHUNK = 500
+
+_DIGESTS_SQL = (
+    "SELECT e.entry_id, h.full FROM entry e "
+    "JOIN entry r ON r.scan_id = e.scan_id AND r.dev = e.dev AND r.ino = e.ino "
+    "JOIN file_hash h ON h.run_id = ? AND h.entry_id = r.entry_id AND h.full IS NOT NULL "
+    "WHERE e.scan_id = ? AND e.entry_id IN ({marks})"
+)
+
+
+def full_digests(
+    conn: sqlite3.Connection, scan_id: int, entry_ids: list[int]
+) -> dict[int, bytes] | None:
+    """SHA-256 of ``entry_ids`` (any name of the inode the latest finished
+    duplicates search read in full); None if there was no such search. Only
+    the images of the groups are asked for: the audit of 2026-11-25 found
+    every digest of the search loaded on each view of the page."""
     run = dupes_db.latest_run(conn, scan_id, micro=False)
     if run is None:
         return None
-    rows = conn.execute(
-        "SELECT e.entry_id, h.full FROM file_hash h "
-        "JOIN entry r ON r.scan_id = ? AND r.entry_id = h.entry_id "
-        "JOIN entry e ON e.scan_id = r.scan_id AND e.dev = r.dev AND e.ino = r.ino "
-        "WHERE h.run_id = ? AND h.full IS NOT NULL",
-        (scan_id, run["id"]),
-    )
-    return {row[0]: bytes(row[1]) for row in rows}
+    found: dict[int, bytes] = {}
+    for start in range(0, len(entry_ids), _CHUNK):
+        chunk = entry_ids[start : start + _CHUNK]
+        sql = _DIGESTS_SQL.format(marks=",".join("?" * len(chunk)))
+        for entry_id, digest in conn.execute(sql, (run["id"], scan_id, *chunk)):
+            found[entry_id] = bytes(digest)
+    return found
 
 
 def mark_copies(group: Group, digests: dict[int, bytes] | None) -> Group:
@@ -365,10 +378,9 @@ def similar_images(conn: sqlite3.Connection, scan_id: int) -> Report:
     for index, image in enumerate(images):
         components[root(index)].append(image)
     guarded = guarded_places(conn, scan_id)
-    digests = full_digests(conn, scan_id)
-    groups = [
-        mark_copies(make_group(m, guarded), digests) for m in components.values() if len(m) > 1
-    ]
+    grouped = [members for members in components.values() if len(members) > 1]
+    digests = full_digests(conn, scan_id, [image.entry_id for m in grouped for image in m])
+    groups = [mark_copies(make_group(m, guarded), digests) for m in grouped]
     groups.sort(key=lambda g: (-g.recoverable, -len(g.members), g.keep.image.rel_path))
     failed = conn.execute(
         "SELECT COUNT(*) FROM image_sig WHERE scan_id = ? AND algo = ? AND failure IS NOT NULL",
