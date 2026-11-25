@@ -624,6 +624,27 @@ def test_a_code_folder_without_a_marker_moves_whole(
     assert moves["Téléchargements/script.py"].category == "Code"
     assert moves["Téléchargements/photos"].category == "Photos"
 
+    # With a link inside, it is not moved whole (the link would point elsewhere),
+    # but hidden settings do not prevent it.
+    tool = root / "Documents" / "outil"
+    touch(tool / "tool.py", b"x")
+    touch(tool / "lib" / "lib.py", b"y")
+    touch(tool / ".streamlit" / "config.toml", b"theme")
+    (tool / "lib" / "data").symlink_to("../../partage")
+    app_hidden = root / "Documents" / "appli"
+    touch(app_hidden / "app.py", b"x")
+    touch(app_hidden / "pages" / "home.py", b"y")
+    touch(app_hidden / ".streamlit" / "config.toml", b"theme")
+    plan, _ = scan_and_plan(tmp_path, root, data_disk_table)
+    moves = {move.source: move for move in plan.moves}
+    assert "Documents/outil" not in moves and "Documents/outil/tool.py" in moves
+    assert moves["Documents/appli"].reason == "dossier de code, déplacé en entier"
+    (tool / "lib" / "data").unlink()
+    for sub in ("outil", "appli"):
+        for path in sorted((root / "Documents" / sub).rglob("*"), reverse=True):
+            path.unlink() if path.is_file() or path.is_symlink() else path.rmdir()
+        (root / "Documents" / sub).rmdir()
+
     # A project known only by its requirements.txt that holds such a folder
     # still moves whole (found on the same disk).
     agent = root / "Bureau" / "agent_ia"

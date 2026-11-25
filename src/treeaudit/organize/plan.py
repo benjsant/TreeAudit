@@ -468,6 +468,9 @@ class _Node:
     """Holds something that must stay put (hidden, link, special, bad name)."""
     has_block: bool = False
     """Holds a project or a program: never moved as a "homogeneous" folder."""
+    has_link: bool = False
+    """Holds a symlink, a special file or a name a script cannot carry: a
+    relative link would point elsewhere once the folder moves."""
 
 
 def _year(mtime_ns: int) -> int:
@@ -588,12 +591,15 @@ def _summarize(node: _Node) -> None:
                 current.space += child.space
                 current.unmovable |= child.unmovable or _hidden(child)
                 current.has_block |= child.has_block or _is_block(child)
+                current.has_link |= child.has_link or not is_displayable(child.rel_path)
             elif child.kind == "file":
                 current.files += 1
                 current.total += child.size
                 current.space += child.allocated
                 if child.name in NEUTRAL_FILES:
                     continue
+                if not is_displayable(child.rel_path):
+                    current.has_link = True
                 if _hidden(child) or not is_displayable(child.rel_path):
                     current.unmovable = True
                     continue
@@ -603,6 +609,7 @@ def _summarize(node: _Node) -> None:
                     current.years[_photo_year(child.name_display, child.mtime_ns)[0]] += 1
             else:  # symlink or special file: never moved alone
                 current.unmovable = True
+                current.has_link = True
 
 
 def _block_kind(node: _Node) -> str | None:
@@ -641,6 +648,9 @@ def _code_folder(node: _Node) -> bool:
     whole, its layout is kept; a personal folder with a few scripts among
     photos and documents stays below the share and is sorted as before.
 
+    Never with a symlink, a special file or an unwritable name inside (found by
+    the audit of 2026-11-25); hidden files are fine (an app's settings follow it).
+
     Decided only when the folder itself is reached, never when judging its
     parent: a project known by a weak marker (requirements.txt) holding such a
     folder must still move whole (found on the same disk).
@@ -651,7 +661,13 @@ def _code_folder(node: _Node) -> bool:
     )
     has_folder = any(child.kind == "dir" for child in node.children)
     counted = sum(node.categories.values())
-    return own_code and has_folder and counted > 0 and node.categories[CODE] >= CODE_SHARE * counted
+    return (
+        own_code
+        and has_folder
+        and not node.has_link  # audit of 2026-11-25: a moved link would point elsewhere
+        and counted > 0
+        and node.categories[CODE] >= CODE_SHARE * counted
+    )
 
 
 PERSONAL = frozenset({PHOTOS, VIDEOS, MUSIC, DOCUMENTS})
