@@ -266,35 +266,47 @@ class _Analysis:
 
     def _verify(self, group: list[dupes.Candidate]) -> None:
         """Compare each file of a group byte by byte with the first one. A
-        difference despite the same SHA-256 is reported, never ignored."""
-        reference = group[0]
-        for other in group[1:]:
-            self._check_cancel()
-            self.progress.stage_done += 1
+        difference despite the same SHA-256 is reported, never ignored.
+
+        A reference that cannot be opened (changed since it was read) is
+        reported itself, and the next copy becomes the reference: found by the
+        audit of 2026-11-25, its failure used to be blamed on every intact copy."""
+        while len(group) >= 2:
+            reference, others = group[0], group[1:]
             try:
                 fd_a = self.reader.open_file(reference.rel_path, _expected(reference))
-                try:
-                    fd_b = self.reader.open_file(other.rel_path, _expected(other))
-                except BaseException:
-                    os.close(fd_a)
-                    raise
             except (OSError, FileChangedError) as exc:
-                self._error(other, "verify", exc)
+                self.progress.stage_done += 1
+                self._error(reference, "verify", exc)
+                group = others
                 continue
             try:
-                identical = same_content(
-                    fd_a, fd_b, other.size, cancel=self.cancel, on_read=self._read
-                )
-            except OSError as exc:
-                identical = False
-                self._error(other, "verify", exc)
+                for other in others:
+                    self._compare(fd_a, other)
             finally:
                 os.close(fd_a)
-                os.close(fd_b)
-            if not identical and other.entry_id in self.full:
-                self._error(
-                    other, "verify", ValueError("same SHA-256 but different bytes (collision?)")
-                )
+            return
+
+    def _compare(self, fd_a: int, other: dupes.Candidate) -> None:
+        """One copy against the open reference; its own failures are its own."""
+        self._check_cancel()
+        self.progress.stage_done += 1
+        try:
+            fd_b = self.reader.open_file(other.rel_path, _expected(other))
+        except (OSError, FileChangedError) as exc:
+            self._error(other, "verify", exc)
+            return
+        try:
+            identical = same_content(fd_a, fd_b, other.size, cancel=self.cancel, on_read=self._read)
+        except OSError as exc:
+            identical = False
+            self._error(other, "verify", exc)
+        finally:
+            os.close(fd_b)
+        if not identical and other.entry_id in self.full:
+            self._error(
+                other, "verify", ValueError("same SHA-256 but different bytes (collision?)")
+            )
 
     def run(self, candidates: list[dupes.Candidate]) -> None:
         """All the stages of the module docstring. Each stage reads only the

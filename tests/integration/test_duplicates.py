@@ -16,6 +16,7 @@ from treeaudit.core.config import RootConfig
 from treeaudit.db import dupes as dupes_db
 from treeaudit.db.connection import connect, connect_memory, database_path
 from treeaudit.duplicates import hashing, runner
+from treeaudit.duplicates import reader as reader_module
 from treeaudit.duplicates.groups import GroupReport, load_groups
 from treeaudit.duplicates.report import (
     SelectionError,
@@ -403,6 +404,38 @@ def test_byte_verification(root: Path, harness: Harness, monkeypatch: pytest.Mon
     assert any(
         "collision" in e["message"] for e in dupes_db.list_errors(harness.conn, outcome.run_id)
     )
+
+
+def test_a_reference_changed_before_the_byte_check_is_the_one_reported(
+    root: Path, harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Found by the audit of 2026-11-25: the reference's failure was blamed on
+    every intact copy, which then left the results."""
+    content = os.urandom(300 * KIB)
+    for name in "abc":
+        touch(root / name, content)
+    checking = threading.Event()
+    real_start = runner.DupProgress.start_stage
+    real_open = runner.TreeReader.open_file
+
+    def start(self: runner.DupProgress, name: str, files: int = 0, whole_bytes: int = 0) -> None:
+        if name == "comparaison octet par octet":
+            checking.set()
+        real_start(self, name, files, whole_bytes)
+
+    def open_file(self: object, rel_path: bytes, expected: object) -> int:
+        if checking.is_set() and rel_path == b"a":
+            raise reader_module.FileChangedError("a changed since it was read")
+        return real_open(self, rel_path, expected)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(runner.DupProgress, "start_stage", start)
+    monkeypatch.setattr(runner.TreeReader, "open_file", open_file)
+    outcome, report = harness.groups(DupOptions(verify_bytes=True))
+    assert outcome.status is ScanStatus.INCOMPLETE
+    errors = dupes_db.list_errors(harness.conn, outcome.run_id)
+    assert [(e["rel_path_display"], e["operation"]) for e in errors] == [("a", "verify")]
+    [group] = report.groups
+    assert sorted(c.rel_path_display for c in group.copies) == ["b", "c"]
 
 
 def test_descriptors_are_bounded_and_released(root: Path, harness: Harness) -> None:
