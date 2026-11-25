@@ -516,3 +516,122 @@ def test_a_folder_renamed_to_avoid_a_clash_keeps_its_dots(
         f"{DESTINATION}/Logiciels/KeePassXC-2.7.10-Win64",
         f"{DESTINATION}/Logiciels/KeePassXC-2.7.10-Win64 (2)",
     ]
+
+
+def test_the_categories_to_tidy_come_from_the_query() -> None:
+    from treeaudit.organize.plan import (
+        CATEGORIES,
+        DEVELOPMENT,
+        AdjustmentError,
+        adjustments_from_query,
+    )
+
+    assert adjustments_from_query([]).only is None
+    dev = [("choix", "1")] + [("ranger", c) for c in sorted(DEVELOPMENT)]
+    assert adjustments_from_query(dev).only == DEVELOPMENT
+    assert adjustments_from_query([("choix", "1")]).only == frozenset()  # none ticked: none
+    everything = [("choix", "1")] + [("ranger", c) for c in CATEGORIES]
+    assert adjustments_from_query(everything).only is None
+    assert "Archives" not in DEVELOPMENT  # often photos or backups
+    with pytest.raises(AdjustmentError):
+        adjustments_from_query([("ranger", "../etc")])
+
+
+def test_only_development_and_software_are_tidied(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    """The personal files stay where they are, even in a mixed folder; the
+    scripts move exactly what the preview shows, and the undo restores it."""
+    from treeaudit.organize.plan import DEVELOPMENT, adjustments_from_query
+
+    root = tmp_path / "disque"
+    touch(root / "Téléchargements" / "setup.exe", b"MZ installer")
+    touch(root / "Téléchargements" / "script.py", b"print(1)")
+    touch(root / "Téléchargements" / "facture.pdf", b"pdf")
+    touch(root / "Téléchargements" / "plage.jpg", b"jpg", PHOTO_TIME)
+    for i in range(3):
+        touch(root / "Album" / f"IMG_{i}.jpg", b"p" * (i + 1), PHOTO_TIME)
+    touch(root / "site" / "package.json", b"{}")
+    touch(root / "site" / "index.js", b"js")
+    touch(root / "Photos de vacances" / "IMG_9.jpg", b"q", PHOTO_TIME)
+    touch(root / "Photos de vacances" / "outil" / "package.json", b"{}")
+    before = snapshot(root)
+
+    config = AppConfig(
+        data_dir=str(tmp_path / "data"), roots=(RootConfig(id="r", path=str(root), label="r"),)
+    )
+    outcome = execute_scan(
+        config,
+        ScanRequest(root=config.roots[0]),
+        mounts=data_disk_table(str(tmp_path)),
+        home=None,
+        cancel=threading.Event(),
+    )
+    conn = connect(config.data_dir)
+    try:
+        start = conn.execute(
+            "SELECT entry_id FROM entry WHERE scan_id = ? AND depth = 0", (outcome.scan_id,)
+        ).fetchone()[0]
+        query = [("choix", "1")] + [("ranger", c) for c in sorted(DEVELOPMENT)]
+        plan = make_plan(conn, outcome.scan_id, start, adjustments_from_query(query))
+    finally:
+        conn.close()
+    assert {m.source: m.target for m in plan.moves} == {
+        "Téléchargements/setup.exe": f"{DESTINATION}/Installateurs/setup.exe",
+        "Téléchargements/script.py": f"{DESTINATION}/Code/script.py",
+        "site": f"{DESTINATION}/Projets/site",
+        "Photos de vacances/outil": f"{DESTINATION}/Projets/outil",
+    }
+    assert plan.not_tidied["Photos"][:2] == [3, 5]  # the album whole, then two photos
+    assert plan.not_tidied["Documents"][:2] == [1, 1]
+
+    meta = {"title": "t", "scan_id": outcome.scan_id, "date": "d"}
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    assert run_script(tidy_script(plan, str(root), **meta), scripts).returncode == 0
+    tidied = snapshot(root)
+    for personal in ("Téléchargements/facture.pdf", "Téléchargements/plage.jpg", "Album/IMG_0.jpg"):
+        assert tidied[personal] == before[personal]
+    assert f"{DESTINATION}/Code/script.py" in tidied
+    assert f"{DESTINATION}/Projets/outil/package.json" in tidied
+    assert run_script(undo_script(plan, str(root), **meta), scripts).returncode == 0
+    assert snapshot(root) == before
+
+
+def test_a_code_folder_without_a_marker_moves_whole(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    """Found on a real disk: an application whose requirements file had another
+    name was split into Rangé/Code/pages, Rangé/Code/config..."""
+    root = tmp_path / "disque"
+    app = root / "Documents" / "interface"
+    touch(app / "app.py", b"import streamlit")
+    touch(app / "__init__.py", b"")
+    touch(app / "requirements_streamlit.txt", b"streamlit")
+    for sub in ("pages", "config", "utils"):
+        touch(app / sub / "__init__.py", b"")
+        touch(app / sub / f"{sub}.py", b"x = 1")
+    # A personal folder with a script among photos and documents: sorted as before.
+    touch(root / "Téléchargements" / "script.py", b"print(1)")
+    touch(root / "Téléchargements" / "lettre.pdf", b"pdf")
+    touch(root / "Téléchargements" / "photos" / "IMG_1.jpg", b"p", PHOTO_TIME)
+    touch(root / "Téléchargements" / "photos" / "IMG_2.jpg", b"q", PHOTO_TIME)
+    plan, _ = scan_and_plan(tmp_path, root, data_disk_table)
+    moves = {move.source: move for move in plan.moves}
+    assert moves["Documents/interface"].target == f"{DESTINATION}/Projets/interface"
+    assert moves["Documents/interface"].reason == "dossier de code, déplacé en entier"
+    assert not any(source.startswith("Documents/interface/") for source in moves)
+    assert moves["Téléchargements/script.py"].category == "Code"
+    assert moves["Téléchargements/photos"].category == "Photos"
+
+    # A project known only by its requirements.txt that holds such a folder
+    # still moves whole (found on the same disk).
+    agent = root / "Bureau" / "agent_ia"
+    touch(agent / "requirements.txt", b"langchain")
+    touch(agent / "data" / "rapport.pdf", b"pdf")
+    touch(agent / "interface" / "app.py", b"import gradio")
+    touch(agent / "interface" / "pages" / "home.py", b"x = 1")
+    plan, _ = scan_and_plan(tmp_path, root, data_disk_table)
+    moves = {move.source: move for move in plan.moves}
+    assert moves["Bureau/agent_ia"].reason == "projet, déplacé en entier"
+    assert not any(source.startswith("Bureau/agent_ia/") for source in moves)

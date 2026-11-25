@@ -228,3 +228,8 @@ meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 9
 /* A long path in a caption breaks anywhere rather than widen the page. */
 .gallery-item > span { overflow-wrap: anywhere; min-width: 0; }
 .facts { margin: .4rem 0 .8rem; padding-left: 1.2rem; }
+
+/* tidying: the categories to tidy */
+.tidy-choice { border: 0; padding: 0; margin: 0 0 .8rem; }
+.tidy-choice legend { font-weight: 600; margin-bottom: .3rem; }
+.tidy-choice label { display: inline-block; margin-right: .9rem; white-space: nowrap; }

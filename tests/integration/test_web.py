@@ -1754,3 +1754,25 @@ def test_similar_image_pairs_are_cached_then_forgotten(client: TestClient, scann
     assert [key.split(":")[1] for key in cached()] == [str(scanned)]
     assert client.post(f"/api/scans/{scanned}/forget", json={}, headers=CSRF).status_code == 200
     assert cached() == []
+
+
+def test_tidying_can_leave_whole_categories_in_place(client: TestClient, scanned: int) -> None:
+    root_id = entry_ids(client, scanned)[b""]
+    url = f"/scans/{scanned}/organize"
+    full = client.get(url, params={"dir": root_id})
+    assert_safe_html(full.text)
+    assert "Que ranger ?" in full.text and 'value="Photos" checked' in full.text
+    shortcut = (
+        "choix=1&amp;ranger=Installateurs&amp;ranger=Code&amp;ranger=Projets&amp;ranger=Logiciels"
+    )
+    assert shortcut in full.text
+    only_code = client.get(url, params=[("dir", root_id), ("choix", "1"), ("ranger", "Code")])
+    assert_safe_html(only_code.text)
+    assert (
+        'value="Code" checked' in only_code.text and 'value="Photos" checked' not in only_code.text
+    )
+    assert "Laissés en place, catégories non cochées : Photos" in only_code.text
+    # Nothing ticked: nothing moves, and the choice stays on screen to change it.
+    nothing = client.get(url, params=[("dir", root_id), ("choix", "1")])
+    assert "Que ranger ?" in nothing.text and "Rien à ranger ici" not in nothing.text
+    assert "Ajustement refusé" in client.get(url, params=[("dir", root_id), ("ranger", "x")]).text

@@ -12,7 +12,7 @@
 {% if error %}
   <p class="notice warn" role="alert">{{ error }}</p>
   <p><a class="button small" href="/scans/{{ scan.id }}/organize?dir={{ node.entry_id }}">Revenir au plan proposé</a></p>
-{% elif not plan.moves and not plan.excluded %}
+{% elif not plan.moves and not plan.excluded and not plan.not_tidied %}
   <p class="notice info">Rien à ranger ici.</p>
 {% else %}
 {% set names = plan.adjustments %}
@@ -21,6 +21,16 @@
   {% if show_all %}<input type="hidden" name="tout" value="true">{% endif %}
 
   <section class="panel">
+    <fieldset class="tidy-choice">
+      <legend>Que ranger ?</legend>
+      <input type="hidden" name="choix" value="1">
+      {% for name in categories %}<label><input type="checkbox" name="ranger" value="{{ name }}"{% if names.tidies(name) %} checked{% endif %}> {{ name }}</label> {% endfor %}
+      <p class="actions">
+        <a class="button small" href="/scans/{{ scan.id }}/organize?dir={{ node.entry_id }}&amp;choix=1{% for name in categories if name in development %}&amp;ranger={{ name | urlencode }}{% endfor %}">💻 Seulement le développement et les logiciels</a>
+        <a class="button small" href="/scans/{{ scan.id }}/organize?dir={{ node.entry_id }}">Tout ranger</a>
+      </p>
+      {% if plan.not_tidied %}<p class="muted small">Laissés en place, catégories non cochées : {% for name in categories if name in plan.not_tidied %}{% set left = plan.not_tidied[name] %}{{ name }} ({{ left[0] | number }} élément(s), {{ left[2] | size }}){{ ", " if not loop.last }}{% endfor %}.</p>{% endif %}
+    </fieldset>
     <p>
       <label>Tout irait dans <span class="path">{{ folder }}/</span><input type="text" name="destination" value="{{ plan.destination }}" data-default="Rangé" maxlength="60" size="14" aria-label="Nom du dossier de rangement"></label>
     </p>

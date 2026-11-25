@@ -650,6 +650,7 @@ def organize_page(
         copies=_copies_of(conn, scan_id, shown),
         show_all=tout,
         categories=organize_plan.CATEGORIES,
+        development=organize_plan.DEVELOPMENT,
         query=request.url.query,
         base_query="&".join(
             f"{quote(key)}={quote(value)}"

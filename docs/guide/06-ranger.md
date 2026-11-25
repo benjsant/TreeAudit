@@ -10,7 +10,7 @@ Tout irait dans un nouveau dossier, **`Rangé/`** par défaut, à l'intérieur d
 |---|---|
 | Photos, Vidéos | classées **par année** : `Rangé/Photos/2019/` (voir plus bas) |
 | Musique, Documents, Archives, Installateurs, Code, Polices | par type de fichier |
-| **Projets** | les projets informatiques, **déplacés en entier** (un dossier avec `package.json`, `.git`…). Un `requirements.txt` ou un `Makefile` seul ne compte que si le dossier ne contient pas d'autre projet. |
+| **Projets** | les projets informatiques, **déplacés en entier** (un dossier avec `package.json`, `.git`…). Un `requirements.txt` ou un `Makefile` seul ne compte que si le dossier ne contient pas d'autre projet. Un **dossier de code** sans marqueur (des fichiers de code à son niveau, des sous-dossiers, et au moins trois quarts de fichiers de code) est déplacé en entier lui aussi : une application n'est jamais dispersée en `Code/pages`, `Code/config`… |
 | **Logiciels** | les jeux et logiciels, **déplacés en entier** (Steam, préfixe Wine, programme Windows…) |
 | Autres | le reste |
 
@@ -18,8 +18,15 @@ Tout irait dans un nouveau dossier, **`Rangé/`** par défaut, à l'intérieur d
 - Un **album** (un dossier qui ne contient qu'un seul type de fichiers) garde son nom et est déplacé tel quel.
 - Un dossier mélangé est réparti fichier par fichier.
 - Restent toujours en place : les fichiers cachés, les liens symboliques, les dossiers vides, et ce qu'on ne peut pas écrire sans ambiguïté dans un script.
-- Deux éléments du même nom au même endroit : le second reçoit un numéro, « (2) ».
+- Deux éléments du même nom au même endroit : le second reçoit un numéro, « (2) » (avant l'extension d'un fichier, à la fin du nom d'un dossier).
+- Un fichier **`.ts`** est du code TypeScript ou une vidéo (enregistrement télé) : à partir de 1 Mio, c'est une vidéo, sauf un fichier `.d.ts`.
 - Si tu as cherché les doublons, un fichier qui existe en plusieurs exemplaires porte la marque **« 📑 en double »** ; clique dessus pour voir où sont les autres. Ranger ne l'écarte pas : à toi de décider.
+
+## Que ranger ?
+
+En haut de l'aperçu, coche les catégories à ranger : toutes le sont par défaut. Ce qui n'est pas coché **reste en place**, et la page dit combien d'éléments de chaque catégorie restent. Un dossier mélangé n'envoie dans `Rangé/` que ses fichiers des catégories cochées ; un album reste entier.
+
+Le bouton **« 💻 Seulement le développement et les logiciels »** coche Code, Installateurs, Projets et Logiciels : les scripts, installateurs et projets éparpillés sont rangés, tes photos, vidéos, musique et documents ne bougent pas. Les archives n'y sont pas, parce qu'elles contiennent souvent des photos ou des sauvegardes : coche-les toi-même si tu veux. **« Tout ranger »** revient au plan complet. Les scripts téléchargés reprennent ce choix.
 
 ## Ajuster le plan
 

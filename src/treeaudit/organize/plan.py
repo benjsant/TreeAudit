@@ -48,6 +48,9 @@ CATEGORIES = (
     SOFTWARE,
     OTHER,
 )
+DEVELOPMENT = frozenset({CODE, INSTALLERS, PROJECTS, SOFTWARE})
+"""Tidy only what development and software leave around. Archives are not
+in it: they often hold photos or backups (a real disk had 5 GB of them)."""
 MAX_FOLDER_NAME = 60
 MAX_ADJUSTMENTS = 100_000
 EXCLUDED = "laissé en place à ta demande"
@@ -279,6 +282,8 @@ class Adjustments:
     subfolders: Mapping[int, str] = field(default_factory=dict)
     names: Mapping[str, str] = field(default_factory=dict)
     destination: str = DESTINATION
+    only: frozenset[str] | None = None
+    """The categories to tidy; None for all. Elements of the others stay."""
 
     def folder(self, category: str) -> str:
         """The folder name of a category: the user's if they renamed it."""
@@ -293,21 +298,30 @@ class Adjustments:
             or self.subfolders
             or self.names
             or self.destination != DESTINATION
+            or self.only is not None
         )
+
+    def tidies(self, category: str) -> bool:
+        """This category is one the user chose to tidy."""
+        return self.only is None or category in self.only
 
 
 def adjustments_from_query(params: Iterable[tuple[str, str]]) -> Adjustments:
     """Read the adjustments from a page's query string, refusing anything odd.
 
     ``exclure=<id>``, ``categorie_<id>=<category>``, ``sous_<id>=<name>``,
-    ``nom_<category>=<name>``, ``destination=<name>``. Empty values mean
-    "unchanged"; other keys are ignored.
+    ``nom_<category>=<name>``, ``destination=<name>``, and the categories to
+    tidy: ``ranger=<category>`` for each, with ``choix=1`` so that none ticked
+    means none (a form sends no unticked box). Empty values mean "unchanged";
+    other keys are ignored.
     """
     excluded: set[int] = set()
     categories: dict[int, str] = {}
     subfolders: dict[int, str] = {}
     names: dict[str, str] = {}
     destination = DESTINATION
+    to_tidy: set[str] = set()
+    choosing = False
     for count, (key, value) in enumerate(params, start=1):
         if count > MAX_ADJUSTMENTS:
             raise AdjustmentError("trop d'ajustements")
@@ -333,12 +347,20 @@ def adjustments_from_query(params: Iterable[tuple[str, str]]) -> Adjustments:
             if not entry.isdigit() or sub is None:
                 raise AdjustmentError(f"nom de sous-dossier refusé : {value}")
             subfolders[int(entry)] = sub
+        elif key == "ranger":
+            if value not in CATEGORIES:
+                raise AdjustmentError(f"catégorie inconnue : {value}")
+            to_tidy.add(value)
+            choosing = True
+        elif key == "choix" and value == "1":
+            choosing = True
         elif key == "destination" and value.strip():
             chosen = clean_folder_name(value)
             if chosen is None:
                 raise AdjustmentError(f"nom de dossier refusé : {value}")
             destination = chosen
-    return Adjustments(frozenset(excluded), categories, subfolders, names, destination)
+    only = frozenset(to_tidy) if choosing and to_tidy != set(CATEGORIES) else None
+    return Adjustments(frozenset(excluded), categories, subfolders, names, destination, only)
 
 
 class PlanTooLargeError(ValueError):
@@ -387,6 +409,9 @@ class Plan:
     adjustments: Adjustments = field(default_factory=Adjustments)
     moves: list[Move] = field(default_factory=list)
     kept: list[Kept] = field(default_factory=list)
+    not_tidied: dict[str, list[int]] = field(default_factory=dict)
+    """Category the user did not choose -> [elements, files, bytes] left where
+    they are: counted, not listed (there can be thousands of photos)."""
 
     def categories(self) -> dict[str, tuple[int, int, int]]:
         """Category -> (elements moved, files, bytes), in display order."""
@@ -604,6 +629,31 @@ def _block_kind(node: _Node) -> str | None:
     return None
 
 
+CODE_SHARE = 3 / 4
+
+
+def _code_folder(node: _Node) -> bool:
+    """A folder of code without any project marker: code files at its own
+    level, at least one sub-folder, and three quarters of its files code.
+
+    Found on a real disk: a Python application whose requirements file had
+    another name was about to be split into Rangé/Code/pages, config... Moved
+    whole, its layout is kept; a personal folder with a few scripts among
+    photos and documents stays below the share and is sorted as before.
+
+    Decided only when the folder itself is reached, never when judging its
+    parent: a project known by a weak marker (requirements.txt) holding such a
+    folder must still move whole (found on the same disk).
+    """
+    own_code = any(
+        child.kind == "file" and category_of(child.extension, child.size, child.name) == CODE
+        for child in node.children
+    )
+    has_folder = any(child.kind == "dir" for child in node.children)
+    counted = sum(node.categories.values())
+    return own_code and has_folder and counted > 0 and node.categories[CODE] >= CODE_SHARE * counted
+
+
 PERSONAL = frozenset({PHOTOS, VIDEOS, MUSIC, DOCUMENTS})
 
 
@@ -669,6 +719,14 @@ class _Planner:
         chosen = self.adjust.categories.get(node.entry_id)
         if chosen is not None and chosen != category:
             category, reason = chosen, "catégorie choisie par toi"
+        if not self.adjust.tidies(category):
+            left = self.plan.not_tidied.setdefault(category, [0, 0, 0])
+            left[0] += 1
+            left[1] += node.files if node.kind == "dir" else 1
+            left[2] += (
+                node.space if node.kind == "dir" else shown_file_size(node.size, node.allocated)
+            )
+            return
         year: int | None = None
         if category in BY_YEAR:
             if node.kind == "dir":
@@ -741,6 +799,9 @@ class _Planner:
         if block is not None:
             reason = "projet, déplacé en entier" if block == PROJECTS else "logiciel ou jeu"
             self._move(node, block, reason)
+            return
+        if _code_folder(node):
+            self._move(node, PROJECTS, "dossier de code, déplacé en entier")
             return
         if not node.files:
             self._keep(node, "dossier vide")
