@@ -56,6 +56,8 @@ ALLOWED: dict[str, set[str]] = {
     "filters": {"core", "db", "shellcmd"},
     "organize": {"core", "duplicates", "shellcmd"},
     "parasites": {"core", "db", "scanner", "shellcmd"},
+    # photos: the date a photo was taken (D-071); the reader alone needs nothing.
+    "photos": set(),
     "preview": {"db", "duplicates"},
     "projects": {"parasites"},
     "roots": {"core"},

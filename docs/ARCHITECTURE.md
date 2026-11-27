@@ -25,6 +25,7 @@ Deux principes structurent tout le code :
 | `db/` | schéma et migrations, écriture par lots, lecture des analyses et doublons, cache des résumés | `schema.py`, `connection.py`, `scans.py`, `dupes.py`, `images.py` (D-069), `cache.py` |
 | `filters/` | recherche : critères, compilation unique des motifs, parcours de l'index en flux | `spec.py`, `search.py` ([FILTERS_AND_REGEX.md](FILTERS_AND_REGEX.md)) |
 | `parasites/` | dossiers « à nettoyer » : catalogue de 45 règles, détection sur l'index, confiance expliquée, cache | `rules.toml`, `rules.py`, `detect.py` (D-023), `cached.py` |
+| `photos/` | date de prise de vue des photos, lue dans leurs métadonnées EXIF (D-071) : Python pur, lectures bornées, rien n'est décodé | `exif.py` |
 | `duplicates/` | doublons exacts : lecture sûre, empreintes en étapes, ordre physique, groupes et copie à garder | `reader.py`, `hashing.py`, `placement.py`, `runner.py` (D-015, D-030), `groups.py` (D-026 ; logiciels reconnus par leur contenu avec `projects/`, D-068) |
 | `archive/` | archive vérifiée : dossier d'archives, écriture, relecture et comparaison | `destination.py`, `output.py`, `runner.py`, `verify.py` (D-024, D-032) |
 | `similar/` | dossiers presque identiques : paires trouvées par les doublons, comparaison en faits et suppositions, familles ; photos ressemblantes : paires trouvées par un index en morceaux de l'empreinte, confirmées par la vignette, groupes et version à garder | `trees.py` (D-058), `images.py` (D-069) |
