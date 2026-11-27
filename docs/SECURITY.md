@@ -40,8 +40,8 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 - En cas d'incertitude, refuser l'accès ou marquer le scan `incomplete`.
 - **Limite** : le nombre de descripteurs ouverts croît avec la profondeur de l'arborescence. Une profondeur maximale configurable est appliquée ; la dépasser est une erreur signalée (scan `incomplete`).
 
-## Lecture du contenu (doublons, D-015)
-- Le contenu des fichiers n'est lu que pour calculer des empreintes SHA-256 ; il n'est jamais stocké ni journalisé (test : un contenu reconnaissable n'apparaît dans aucun fichier du dossier de données).
+## Lecture du contenu (doublons D-015, dates des photos D-071)
+- Le contenu des fichiers n'est lu que pour calculer des empreintes SHA-256 et, pour les photos, lire la date de prise de vue dans leur en-tête EXIF (256 Kio au plus par photo, rien n'est décodé) ; il n'est jamais stocké ni journalisé (test : un contenu reconnaissable n'apparaît dans aucun fichier du dossier de données).
 - Chaque fichier est ouvert en redescendant depuis le descripteur de la racine, dossier par dossier, avec `O_NOFOLLOW` ; un lien substitué depuis le scan provoque une erreur, jamais une lecture hors de la racine.
 - Le fichier est ouvert avec `O_NONBLOCK` : une fifo substituée ne peut pas bloquer l'analyse ; il doit être un fichier régulier.
 - Son identité (périphérique, inode, taille, date de modification) doit correspondre au scan avant et après la lecture ; sinon il est exclu des groupes et signalé.
@@ -87,7 +87,7 @@ La sécurité repose d'abord sur le **confinement des accès**, vérifié par l'
 ## Données produites
 - L'index SQLite et les rapports contiennent les chemins complets des fichiers : ce sont des **données personnelles**.
 - Ils sont créés avec les permissions `0700` (dossier) et `0600` (fichiers), et jamais envoyés à un service distant.
-- Le contenu des fichiers n'est jamais stocké dans l'index ; seules les empreintes le sont.
+- Le contenu des fichiers n'est jamais stocké dans l'index ; seules les empreintes et la date de prise de vue des photos le sont.
 - Les journaux ne contiennent pas le contenu des fichiers.
 
 ## LLM (mode expert retiré, D-052)

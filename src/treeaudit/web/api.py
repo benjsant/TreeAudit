@@ -177,6 +177,29 @@ def start_dupes(scan_id: int, body: DupesStart, jobs: Jobs, conn: Db) -> dict[st
     return {"job": job.snapshot()}
 
 
+class PhotoDatesStart(BaseModel):
+    """Body of a reading of photo dates: the folder Ranger shows."""
+
+    dir: int = Field(ge=1)
+
+
+@router.post("/scans/{scan_id}/photo-dates", status_code=202)
+def start_photo_dates(scan_id: int, body: PhotoDatesStart, jobs: Jobs, conn: Db) -> dict[str, Any]:
+    """Read the dates the photos below a folder were taken (D-071); 409 if
+    another job runs or the analysis is not finished."""
+    _final_scan(conn, scan_id)
+    row = conn.execute(
+        "SELECT kind FROM entry WHERE scan_id = ? AND entry_id = ?", (scan_id, body.dir)
+    ).fetchone()
+    if row is None or row["kind"] != "dir":
+        raise HTTPException(404, "dossier inconnu")
+    try:
+        job = jobs.start_photo_dates(scan_id, body.dir)
+    except JobError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"job": job.snapshot()}
+
+
 def archive_enabled(request: Request) -> None:
     """409 unless the archive folder was accepted at startup (D-032)."""
     status: ArchiveDirStatus = request.app.state.archive_status

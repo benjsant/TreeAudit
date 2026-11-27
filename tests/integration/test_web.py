@@ -1828,3 +1828,25 @@ def test_what_a_command_leaves_out_is_not_counted_as_freed() -> None:
     result = CleanupCommand("gio trash -- a", (skipped,), ((refused, "racine"),))
     assert left_out(result) == {id(skipped), id(refused)}
     assert id(kept) not in left_out(result)
+
+
+def test_reading_photo_dates_goes_back_to_ranger(client: TestClient, scanned: int) -> None:
+    """D-071: the reading of a folder's photo dates is a job like the others."""
+    ids = entry_ids(client, scanned)
+    folder = ids[b"photos"]
+    url = f"/api/scans/{scanned}/photo-dates"
+    assert client.post(url, json={"dir": folder}).status_code == 403  # no CSRF header
+    assert client.post(url, json={"dir": ids[b"photos/a.jpg"]}, headers=CSRF).status_code == 404
+    assert client.post(url, json={"dir": 0}, headers=CSRF).status_code == 422
+    missing = f"/api/scans/{scanned + 99}/photo-dates"
+    assert client.post(missing, json={"dir": folder}, headers=CSRF).status_code == 404
+    snapshot = run_job(client, url, {"dir": folder})
+    assert snapshot["kind"] == "photo_dates"
+    assert snapshot["status"] == "complete"
+    assert snapshot["result_url"] == f"/scans/{scanned}/organize?dir={folder}"
+    assert snapshot["progress"]["total"] == 3  # type: ignore[index]
+    assert snapshot["progress"]["stage"] == "lecture des dates"  # type: ignore[index]
+    # Read once: the next reading has nothing left to open.
+    again = run_job(client, url, {"dir": folder})
+    assert again["progress"]["reused"] == 3  # type: ignore[index]
+    assert again["progress"]["stage_total"] == 0  # type: ignore[index]

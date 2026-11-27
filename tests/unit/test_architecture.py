@@ -41,6 +41,7 @@ ALLOWED: dict[str, set[str]] = {
         "filters",
         "organize",
         "parasites",
+        "photos",
         "preview",
         "projects",
         "roots",
@@ -56,8 +57,9 @@ ALLOWED: dict[str, set[str]] = {
     "filters": {"core", "db", "shellcmd"},
     "organize": {"core", "duplicates", "shellcmd"},
     "parasites": {"core", "db", "scanner", "shellcmd"},
-    # photos: the date a photo was taken (D-071); the reader alone needs nothing.
-    "photos": set(),
+    # photos: the date a photo was taken (D-071). The reader needs nothing; the
+    # job opens the files as duplicates do (TreeReader, disk order).
+    "photos": {"core", "db", "duplicates", "roots", "scanner"},
     "preview": {"db", "duplicates"},
     "projects": {"parasites"},
     "roots": {"core"},

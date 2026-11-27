@@ -188,4 +188,22 @@ _V5 = (
     """,
 )
 
-MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1, _V2, _V3, _V4, _V5)
+# v6: dates the photos were taken, read from their EXIF metadata (D-071). A row
+# per photo read: its date as the camera wrote it, no date, or why it could not
+# be read.
+_V6 = (
+    """
+    CREATE TABLE photo_date (
+        scan_id   INTEGER NOT NULL,
+        entry_id  INTEGER NOT NULL,
+        reader    INTEGER NOT NULL,
+        taken     TEXT,
+        failure   TEXT CHECK (failure IN ('unreadable', 'changed')),
+        PRIMARY KEY (scan_id, entry_id),
+        FOREIGN KEY (scan_id, entry_id) REFERENCES entry(scan_id, entry_id) ON DELETE CASCADE,
+        CHECK (failure IS NULL OR taken IS NULL)
+    )
+    """,
+)
+
+MIGRATIONS: tuple[tuple[str, ...], ...] = (_V1, _V2, _V3, _V4, _V5, _V6)

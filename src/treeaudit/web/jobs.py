@@ -1,8 +1,8 @@
-"""Background jobs for the web interface: one scan, duplicate analysis or archive
-at a time.
+"""Background jobs for the web interface: one scan, duplicate analysis, reading
+of photo dates or archive at a time.
 
 Jobs reuse the engine entry points (execute_scan, execute_duplicates,
-execute_archive), which take the data-directory locks: a job started while the
+execute_photo_dates, execute_archive), which take the data-directory locks: a job started while the
 CLI is running the same kind of work fails cleanly instead of running
 concurrently.
 """
@@ -34,6 +34,7 @@ from treeaudit.core.sizes import human_size
 from treeaudit.db import scans as scans_db
 from treeaudit.db.connection import connect
 from treeaudit.duplicates.runner import DupOptions, DupOutcome, DupProgress, execute_duplicates
+from treeaudit.photos.runner import DatesOutcome, DatesProgress, execute_photo_dates
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.validation import REASON_MESSAGES, RootRejectedError
 from treeaudit.scanner.models import ScanStatus
@@ -45,10 +46,11 @@ logger = logging.getLogger(__name__)
 
 
 class JobKind(StrEnum):
-    """The four kinds of background job: one runs at a time."""
+    """The kinds of background job: one runs at a time."""
 
     SCAN = "scan"
     DUPES = "dupes"
+    PHOTO_DATES = "photo_dates"
     ARCHIVE = "archive"
     COMPACT = "compact"
 
@@ -76,7 +78,7 @@ class JobError(TreeAuditError):
     """The job cannot be started; the message is shown to the user."""
 
 
-Outcome = ScanOutcome | DupOutcome | ArchiveOutcome | CompactOutcome
+Outcome = ScanOutcome | DupOutcome | DatesOutcome | ArchiveOutcome | CompactOutcome
 
 
 @dataclass(slots=True)
@@ -88,7 +90,7 @@ class Job:
     kind: JobKind
     label: str
     cancel: threading.Event = field(default_factory=threading.Event)
-    progress: ScanProgress | DupProgress | ArchiveProgress | StepProgress = field(
+    progress: ScanProgress | DupProgress | DatesProgress | ArchiveProgress | StepProgress = field(
         default_factory=ScanProgress
     )
     started_at: float = field(default_factory=time.time)
@@ -128,6 +130,16 @@ class Job:
                 "done": progress.done,
                 "total": progress.total,
             }
+        elif isinstance(progress, DatesProgress):
+            data["progress"] = {
+                "stage": progress.stage,
+                "total": progress.total,
+                "reused": progress.reused,
+                "stage_done": progress.stage_done,
+                "stage_total": progress.stage_total,
+                "dated": progress.dated,
+                "errors": progress.errors,
+            }
         elif isinstance(progress, ArchiveProgress):
             data["progress"] = {
                 "stage": progress.stage.value,
@@ -157,6 +169,8 @@ class Job:
             data["archive"] = _archive_result(self.outcome)
         if isinstance(self.outcome, CompactOutcome):
             data["result_url"] = self.outcome.result_url + str(self.id)
+        if isinstance(self.outcome, DatesOutcome):
+            data["result_url"] = self.outcome.result_url
         return data
 
 
@@ -302,6 +316,31 @@ class JobManager:
             finally:
                 conn.close()
             return outcome
+
+        return self._start(job, work)
+
+    def start_photo_dates(self, scan_id: int, start_id: int) -> Job:
+        """Read the dates the photos below a folder of a recorded scan were
+        taken (D-071), then go back to Ranger on that folder."""
+        progress = DatesProgress()
+        job = Job(
+            id=next(self._ids),
+            kind=JobKind.PHOTO_DATES,
+            label="Lecture des dates des photos",
+            progress=progress,
+        )
+        config = self.config
+
+        def work(j: Job) -> DatesOutcome:
+            return execute_photo_dates(
+                config,
+                scan_id,
+                start_id,
+                mounts=self._mounts(),
+                home=self._home(),
+                cancel=j.cancel,
+                progress=progress,
+            )
 
         return self._start(job, work)
 

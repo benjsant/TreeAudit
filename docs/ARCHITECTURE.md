@@ -22,10 +22,10 @@ Deux principes structurent tout le code :
 | `core/` | configuration TOML, dossier de données et verrous, bac à sable du noyau, convention des tailles | `config.py`, `datadir.py`, `sandbox.py` (D-038), `sizes.py` (D-047) |
 | `roots/` | ce qui peut être audité : validation d'une racine, table des montages, disques externes et partitions de données, dossier personnel | `validation.py` (D-009), `mountinfo.py`, `external.py` (D-033, D-037), `personal.py`, `registry.py` |
 | `scanner/` | parcours d'une racine par descripteurs (`O_NOFOLLOW`), sélecteur de dossiers, exécution d'une analyse | `walker.py` (D-013, D-022), `browse.py`, `runner.py`, `models.py` |
-| `db/` | schéma et migrations, écriture par lots, lecture des analyses et doublons, cache des résumés | `schema.py`, `connection.py`, `scans.py`, `dupes.py`, `images.py` (D-069), `cache.py` |
+| `db/` | schéma et migrations, écriture par lots, lecture des analyses et doublons, cache des résumés | `schema.py`, `connection.py`, `scans.py`, `dupes.py`, `images.py` (D-069), `photos.py` (D-071), `cache.py` |
 | `filters/` | recherche : critères, compilation unique des motifs, parcours de l'index en flux | `spec.py`, `search.py` ([FILTERS_AND_REGEX.md](FILTERS_AND_REGEX.md)) |
 | `parasites/` | dossiers « à nettoyer » : catalogue de 45 règles, détection sur l'index, confiance expliquée, cache | `rules.toml`, `rules.py`, `detect.py` (D-023), `cached.py` |
-| `photos/` | date de prise de vue des photos, lue dans leurs métadonnées EXIF (D-071) : Python pur, lectures bornées, rien n'est décodé | `exif.py` |
+| `photos/` | date de prise de vue des photos, lue dans leurs métadonnées EXIF (D-071) : Python pur, lectures bornées, rien n'est décodé ; lecture des photos d'un dossier, avec le lecteur sûr des doublons | `exif.py`, `runner.py` |
 | `duplicates/` | doublons exacts : lecture sûre, empreintes en étapes, ordre physique, groupes et copie à garder | `reader.py`, `hashing.py`, `placement.py`, `runner.py` (D-015, D-030), `groups.py` (D-026 ; logiciels reconnus par leur contenu avec `projects/`, D-068) |
 | `archive/` | archive vérifiée : dossier d'archives, écriture, relecture et comparaison | `destination.py`, `output.py`, `runner.py`, `verify.py` (D-024, D-032) |
 | `similar/` | dossiers presque identiques : paires trouvées par les doublons, comparaison en faits et suppositions, familles ; photos ressemblantes : paires trouvées par un index en morceaux de l'empreinte, confirmées par la vignette, groupes et version à garder | `trees.py` (D-058), `images.py` (D-069) |
@@ -101,20 +101,22 @@ Règles de nettoyage, explorateur, panier, recherche, Ranger, Projets : **aucun 
 
 ### Ce qui relit le disque
 
-Seules trois fonctions lisent du contenu, toutes avec le même lecteur sûr (`duplicates/reader.py`, `TreeReader`). Chaque dossier est ouvert depuis la racine avec `O_NOFOLLOW`, et le fichier doit être **celui de l'index** (périphérique, inode, taille, date) avant et après la lecture :
+Seules quatre fonctions lisent du contenu, toutes avec le même lecteur sûr (`duplicates/reader.py`, `TreeReader`). Chaque dossier est ouvert depuis la racine avec `O_NOFOLLOW`, et le fichier doit être **celui de l'index** (périphérique, inode, taille, date) avant et après la lecture :
 
 - les **doublons** : étapes de plus en plus coûteuses (début, fin, empreinte complète), dans l'ordre physique du disque (`FIEMAP`), en réutilisant les empreintes des fichiers inchangés ;
 - les **archives** : écriture sous un nom temporaire, relecture, comparaison membre à membre, publication sans jamais remplacer un fichier ;
-- l'**aperçu des images** : octets d'origine, type reconnu aux premiers octets, jamais de SVG.
+- l'**aperçu des images** : octets d'origine, type reconnu aux premiers octets, jamais de SVG ;
+- la **date des photos** (D-071) : au plus 256 Kio d'en-tête par photo, dans l'ordre physique du disque, une fois par inode, en réutilisant les dates des fichiers inchangés.
 
 ### Les tâches de fond (`web/jobs.py`)
 
-`JobManager` ne fait tourner **qu'une tâche à la fois**. Une deuxième demande est refusée avec un message, jamais mise en attente. Il existe quatre sortes de tâches :
+`JobManager` ne fait tourner **qu'une tâche à la fois**. Une deuxième demande est refusée avec un message, jamais mise en attente. Il existe cinq sortes de tâches :
 
 | `JobKind` | Lancée par | Résultat |
 |---|---|---|
 | `SCAN` | `start_scan` | une analyse |
 | `DUPES` | `start_dupes` | une recherche de doublons |
+| `PHOTO_DATES` | `start_photo_dates` | les dates de prise de vue des photos d'un dossier, puis retour à Ranger (D-071) |
 | `ARCHIVE` | `start_archive` | une archive vérifiée (verrou `archive.lock`) |
 | `COMPACT` | `start_compact` | `VACUUM` de l'index, sous le verrou des analyses |
 

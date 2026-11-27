@@ -135,6 +135,15 @@ function dupesProgress(p) {
   return text;
 }
 
+function datesProgress(p) {
+  const count = (n) => n.toLocaleString("fr-FR");
+  if (!p.stage) return `${count(p.total)} photos dans ce dossier`;
+  let text = `${p.stage} : ${count(p.stage_done)} / ${count(p.stage_total)} photos`;
+  if (p.dated) text += ` · ${count(p.dated)} datées`;
+  if (p.reused) text += ` · ${count(p.reused)} déjà lues`;
+  return text;
+}
+
 function archiveProgress(p) {
   const stage = ARCHIVE_STAGES[p.stage] || p.stage;
   if (p.stage === "preparing") {
@@ -236,6 +245,9 @@ function setupJobMonitor() {
     } else if (job.kind === "compact") {
       field("progress").textContent = "Compactage de l'index…";
       field("current").textContent = "";
+    } else if (job.kind === "photo_dates") {
+      field("progress").textContent = datesProgress(p);
+      field("current").textContent = p.errors ? `${p.errors} photo(s) illisible(s)` : "–";
     } else if (job.kind === "archive") {
       field("progress").textContent = archiveProgress(p);
       field("current").textContent = p.problems ? `${p.problems} élément(s) à signaler` : "";
@@ -266,7 +278,7 @@ function setupJobMonitor() {
     } else if (job.kind === "dupes" && job.run_id) {
       target = `/dupes/${encodeURIComponent(job.run_id)}`;
     } else if (
-      job.kind === "compact" &&
+      (job.kind === "compact" || job.kind === "photo_dates") &&
       job.result_url &&
       (job.result_url.startsWith("/scans/") || job.result_url.startsWith("/?"))
     ) {
