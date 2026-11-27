@@ -143,6 +143,9 @@ class Counts:
     dated: int
     undated: int
     failed: int
+    reusable: int = 0
+    """Not read in this analysis, but by an earlier one for the same unchanged
+    file: the job takes them over without opening the photos again."""
 
     @property
     def unread(self) -> int:
@@ -155,12 +158,23 @@ def counts(
 ) -> Counts:
     """Where the dates below a folder stand, without writing anything (a page
     shows it; the job reuses the dates of earlier analyses when it starts)."""
-    sql = _subtree_sql(extensions, "d.reader, d.taken, d.failure")
-    total = dated = undated = failed = 0
-    for reader, taken, failure in conn.execute(
+    # What reuse_known would copy, without copying it. READER is an int
+    # constant, written into the statement: the column comes before the
+    # statement's other placeholders.
+    known_elsewhere = (
+        "(d.entry_id IS NULL AND EXISTS (SELECT 1 FROM entry o INDEXED BY entry_by_identity "  # noqa: S608 - an int constant
+        "CROSS JOIN photo_date k ON k.scan_id = o.scan_id AND k.entry_id = o.entry_id "
+        "WHERE o.dev = e.dev AND o.ino = e.ino AND o.size = e.size "
+        "AND o.mtime_ns = e.mtime_ns AND o.scan_id != e.scan_id "
+        f"AND k.reader = {READER:d} AND k.failure IS NULL))"
+    )
+    sql = _subtree_sql(extensions, f"d.reader, d.taken, d.failure, {known_elsewhere}")
+    total = dated = undated = failed = reusable = 0
+    for reader, taken, failure, elsewhere in conn.execute(
         sql, (start_id, scan_id, scan_id, *sorted(extensions))
     ):
         total += 1
+        reusable += bool(elsewhere)
         if reader != READER:
             continue
         if failure is not None:
@@ -169,7 +183,7 @@ def counts(
             undated += 1
         else:
             dated += 1
-    return Counts(total, dated, undated, failed)
+    return Counts(total, dated, undated, failed, reusable)
 
 
 def save(conn: sqlite3.Connection, scan_id: int, results: Sequence[Result]) -> None:

@@ -35,6 +35,7 @@
     <div class="photo-dates actions">
       <p>📷 <strong>Dates de prise de vue</strong> : lues pour {{ (photo_dates.dated + photo_dates.undated) | number }} photo(s) sur {{ photo_dates.total | number }}{% if photo_dates.dated + photo_dates.undated %}, dont {{ photo_dates.dated | number }} datée(s){% endif %}{% if photo_dates.failed %} ; {{ photo_dates.failed | number }} n'ont pas pu être lues{% endif %}.</p>
       {% if photo_dates.unread or photo_dates.failed %}
+      {% if photo_dates.reusable %}<p class="small">{{ photo_dates.reusable | number }} déjà lue(s) lors d'une analyse précédente : le bouton les reprend sans rouvrir les photos.</p>{% endif %}
       <p><button type="button" class="button small" data-start-photo-dates data-scan="{{ scan.id }}" data-dir="{{ node.entry_id }}">📷 Lire les dates des photos</button>
       <span class="muted small">TreeAudit n'ouvre chaque photo qu'en lecture, pour son en-tête seulement ; une date déjà lue n'est pas relue.</span></p>
       {% endif %}

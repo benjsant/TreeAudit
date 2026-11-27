@@ -36,7 +36,7 @@ En haut de l'aperçu, la ligne **« 📷 Dates de prise de vue »** dit pour com
 
 - TreeAudit ouvre chaque photo **en lecture seule** et n'en lit que l'en-tête : 256 Kio au plus, jamais l'image elle-même. Il ne modifie rien, pas même la date d'accès quand le système le permet.
 - Formats lus : JPEG, HEIC/HEIF (iPhone), AVIF, TIFF et les fichiers bruts des appareils (DNG, NEF, CR2, ARW, ORF, RW2, PEF…), PNG et WebP. Les vidéos ne sont pas datées ainsi : elles gardent la date de leur nom ou de modification.
-- Seules les photos du dossier affiché et de ses sous-dossiers sont lues. Une date lue est gardée : elle sert aux autres dossiers de l'analyse et aux analyses suivantes, tant que le fichier ne change pas.
+- Seules les photos du dossier affiché et de ses sous-dossiers sont lues. Une date lue est gardée : elle sert aux autres dossiers de l'analyse et aux analyses suivantes, tant que le fichier ne change pas. Après une nouvelle analyse, la ligne dit combien de dates sont **déjà lues** : le bouton les reprend en quelques secondes, sans rouvrir les photos.
 - Beaucoup de photos n'ont pas de date : captures d'écran, images enregistrées depuis le web ou une messagerie qui efface les métadonnées. Elles gardent la date de leur nom ou de modification.
 - Une photo **qui n'a pas pu être lue** (droits, disque débranché, fichier modifié depuis l'analyse) est comptée à part et redemandée la fois suivante.
 - Tu peux annuler la lecture : ce qui est déjà lu est gardé.

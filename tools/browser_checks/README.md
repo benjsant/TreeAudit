@@ -11,6 +11,7 @@ Ils ne cliquent jamais sur un bouton qui modifie un fichier, et ne lancent jamai
 | `signatures.cjs` | Le calcul des signatures d'images, avec arrêt et reprise, et le refus d'un navigateur qui brouille les images (`firefox-rfp`). |
 | `groups.cjs` | La page des groupes : changer l'image gardée, préparer la commande, captures d'écran. |
 | `ranger.cjs` | Ranger : le raccourci « seulement le développement et les logiciels », et le script téléchargé. |
+| `photo_dates.cjs` | Ranger et les dates de prise de vue (D-071) : lecture par le bouton, retour sur Ranger, option « par mois » ; compte les destinations des photos par année et par mois dans le script téléchargé, sans jamais afficher un nom. |
 
 ## Lancer
 
