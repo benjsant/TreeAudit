@@ -7,7 +7,8 @@ Deterministic and explainable, for everyone (no AI, no graphics card):
 2. shared words: among what is left, the names sharing a rare word ("maths",
    "Dupont", "Daft Punk") are grouped under that word, the most shared first.
 3. days: photos and videos left over, often named by a camera, go to the day
-   they were taken ("2019-07-14"), when at least MIN_DAY share it (D-057).
+   they were taken ("2019-07-14"), when at least MIN_DAY share it (D-057;
+   the date read from the photo first, D-071).
 A sub-folder holds at least two elements and never all of them (it would sort
 nothing); its name goes through the same checks as a name typed by the user.
 Photos and videos are already sorted by year by the plan itself. Nothing
@@ -370,13 +371,18 @@ def _looks_copied(times: list[int]) -> bool:
 def _days(moves: Sequence[Move]) -> dict[date, tuple[list[int], str]]:
     """Day -> (files taken that day, where the date comes from), fullest first.
 
-    The date written in the name first; else the modification date, unless
-    the files of that day look like a copy. Folders (albums) keep their own
-    sorting and are left out."""
+    The date the photo was taken, read from it (D-071), first; else the date
+    written in the name; else the modification date, unless the files of that
+    day look like a copy. A day takes the most reliable source of its files.
+    Folders (albums) keep their own sorting and are left out."""
+    by_taken: dict[date, list[int]] = defaultdict(list)
     by_name: dict[date, list[int]] = defaultdict(list)
     by_mtime: dict[date, list[Move]] = defaultdict(list)
     for move in moves:
         if move.kind != "file":
+            continue
+        if move.taken is not None:
+            by_taken[move.taken].append(move.entry_id)
             continue
         mtime_day = _mtime_day(move.mtime_s)
         found = name_date(
@@ -387,8 +393,13 @@ def _days(moves: Sequence[Move]) -> dict[date, tuple[list[int], str]]:
         elif mtime_day is not None:
             by_mtime[mtime_day].append(move)
     days: dict[date, tuple[list[int], str]] = {}
+    for day, entries in by_taken.items():
+        days[day] = (entries, "date de prise de vue")
     for day, entries in by_name.items():
-        days[day] = (entries, "date écrite dans le nom")
+        if day in days:
+            days[day] = (days[day][0] + entries, "date de prise de vue ou écrite dans le nom")
+        else:
+            days[day] = (entries, "date écrite dans le nom")
     for day, group in by_mtime.items():
         if day in days or _looks_copied([m.mtime_s for m in group]):
             continue

@@ -11,6 +11,7 @@ import os
 import sqlite3
 from collections.abc import Iterator
 from typing import Annotated, Any, Literal
+from urllib.parse import parse_qsl, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi import Path as PathParam
@@ -27,6 +28,7 @@ from treeaudit.duplicates.groups import guarded_places, load_groups
 from treeaudit.duplicates.reader import Expected
 from treeaudit.duplicates.report import SelectionError, override_keep
 from treeaudit.duplicates.runner import expected_root_of
+from treeaudit.organize import plan as organize_plan
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.preview.images import (
     IMAGE_EXTENSIONS,
@@ -177,10 +179,16 @@ def start_dupes(scan_id: int, body: DupesStart, jobs: Jobs, conn: Db) -> dict[st
     return {"job": job.snapshot()}
 
 
+MAX_RANGER_QUERY = 1_000_000
+"""Length of the adjustments a Ranger page sends back (its own address)."""
+
+
 class PhotoDatesStart(BaseModel):
-    """Body of a reading of photo dates: the folder Ranger shows."""
+    """Body of a reading of photo dates: the folder Ranger shows, and the
+    page's adjustments, to show them again afterwards."""
 
     dir: int = Field(ge=1)
+    query: str = Field(default="", max_length=MAX_RANGER_QUERY)
 
 
 @router.post("/scans/{scan_id}/photo-dates", status_code=202)
@@ -193,8 +201,20 @@ def start_photo_dates(scan_id: int, body: PhotoDatesStart, jobs: Jobs, conn: Db)
     ).fetchone()
     if row is None or row["kind"] != "dir":
         raise HTTPException(404, "dossier inconnu")
+    # Only the adjustments Ranger accepts come back, re-encoded by the server:
+    # the address it goes back to is always a Ranger page of this analysis.
+    pairs = [
+        (key, value)
+        for key, value in parse_qsl(body.query, keep_blank_values=True)
+        if key not in ("dir", "tout", "proposer")
+    ]
     try:
-        job = jobs.start_photo_dates(scan_id, body.dir)
+        organize_plan.adjustments_from_query(pairs)
+    except organize_plan.AdjustmentError as exc:
+        raise HTTPException(422, f"Ajustement refusé : {exc}") from exc
+    back = urlencode([("dir", str(body.dir)), *pairs])
+    try:
+        job = jobs.start_photo_dates(scan_id, body.dir, back_to=f"/scans/{scan_id}/organize?{back}")
     except JobError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"job": job.snapshot()}

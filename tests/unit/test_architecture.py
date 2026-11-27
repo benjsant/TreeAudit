@@ -55,7 +55,8 @@ ALLOWED: dict[str, set[str]] = {
     # projects: software is recognised by its content, as on the projects page (D-068).
     "duplicates": {"core", "db", "projects", "roots", "scanner", "shellcmd"},
     "filters": {"core", "db", "shellcmd"},
-    "organize": {"core", "duplicates", "shellcmd"},
+    # organize -> db: the plan reads the photo dates with the entries (D-071).
+    "organize": {"core", "db", "duplicates", "shellcmd"},
     "parasites": {"core", "db", "scanner", "shellcmd"},
     # photos: the date a photo was taken (D-071). The reader needs nothing; the
     # job opens the files as duplicates do (TreeReader, disk order).

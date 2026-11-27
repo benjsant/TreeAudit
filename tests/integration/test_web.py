@@ -1850,3 +1850,34 @@ def test_reading_photo_dates_goes_back_to_ranger(client: TestClient, scanned: in
     again = run_job(client, url, {"dir": folder})
     assert again["progress"]["reused"] == 3  # type: ignore[index]
     assert again["progress"]["stage_total"] == 0  # type: ignore[index]
+
+
+def test_ranger_offers_to_read_the_photo_dates(client: TestClient, scanned: int) -> None:
+    folder = entry_ids(client, scanned)[b"photos"]
+    page = client.get(f"/scans/{scanned}/organize", params={"dir": str(folder)}).text
+    assert "lues pour 0 photo(s) sur 3" in page
+    assert f'data-start-photo-dates data-scan="{scanned}" data-dir="{folder}"' in page
+    assert 'name="par_mois" value="1">' in page  # not ticked by default
+    run_job(client, f"/api/scans/{scanned}/photo-dates", {"dir": folder})
+    page = client.get(
+        f"/scans/{scanned}/organize", params={"dir": str(folder), "par_mois": "1"}
+    ).text
+    assert "lues pour 3 photo(s) sur 3, dont 0 datée(s)" in page
+    assert "data-start-photo-dates" not in page  # nothing left to read
+    assert 'name="par_mois" value="1" checked>' in page
+
+
+def test_the_reading_goes_back_to_ranger_with_its_adjustments(
+    client: TestClient, scanned: int
+) -> None:
+    folder = entry_ids(client, scanned)[b"photos"]
+    url = f"/api/scans/{scanned}/photo-dates"
+    # The page's address comes back re-encoded; its own folder wins over another.
+    query = "dir=1&par_mois=1&choix=1&ranger=Photos&tout=true&x=%22%3E%3Cscript%3E&next=//evil"
+    snapshot = run_job(client, url, {"dir": folder, "query": query})
+    assert snapshot["result_url"] == (
+        f"/scans/{scanned}/organize?dir={folder}&par_mois=1&choix=1&ranger=Photos"
+        "&x=%22%3E%3Cscript%3E&next=%2F%2Fevil"
+    )
+    refused = client.post(url, json={"dir": folder, "query": "ranger=Inconnue"}, headers=CSRF)
+    assert refused.status_code == 422 and "Ajustement refusé" in refused.json()["detail"]

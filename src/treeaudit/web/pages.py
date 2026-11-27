@@ -32,6 +32,7 @@ from treeaudit.core.config import ROOT_ID_PATTERN, AppConfig, RootConfig
 from treeaudit.core.datadir import index_size
 from treeaudit.core.sizes import decimal, human_size, is_sparse
 from treeaudit.db import dupes as dupes_db
+from treeaudit.db import photos as photos_db
 from treeaudit.db import scans as scans_db
 from treeaudit.duplicates.groups import load_groups
 from treeaudit.filters.search import Sort, search
@@ -42,6 +43,7 @@ from treeaudit.organize.subfolders import NO_SUBFOLDERS
 from treeaudit.parasites.cached import parasite_findings
 from treeaudit.parasites.commands import recreate_command
 from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE, Band
+from treeaudit.photos import exif
 from treeaudit.preview.images import looks_like_image
 from treeaudit.projects.detect import PROJECT, SOFTWARE, find_projects
 from treeaudit.roots.registry import RootStatus
@@ -597,9 +599,11 @@ def organize_page(
     if node is None or node.kind != "dir":
         raise HTTPException(404, "Ce dossier n'existe pas dans cette analyse.")
     plan, error = None, None
+    photo_dates: photos_db.Counts | None = None
     try:
         adjustments = organize_plan.adjustments_from_query(request.query_params.multi_items())
         plan = organize_plan.make_plan(conn, scan_id, node.entry_id, adjustments)
+        photo_dates = photos_db.counts(conn, scan_id, node.entry_id, extensions=exif.EXTENSIONS)
     except organize_plan.AdjustmentError as exc:
         error = f"Ajustement refusé : {exc}"
     except organize_plan.PlanTooLargeError:
@@ -658,6 +662,7 @@ def organize_page(
             if key not in ("tout", "proposer")
         ),
         suggestions=found,
+        photo_dates=photo_dates,
         unfolded=unfolded,
         no_subfolders=NO_SUBFOLDERS,
         # A group holds at least MIN_MEMBERS elements and never all of them.

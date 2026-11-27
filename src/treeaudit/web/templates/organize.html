@@ -31,6 +31,17 @@
       </p>
       {% if plan.not_tidied %}<p class="muted small">Laissés en place, catégories non cochées : {% for name in categories if name in plan.not_tidied %}{% set left = plan.not_tidied[name] %}{{ name }} ({{ left[0] | number }} élément(s), {{ left[2] | size }}){{ ", " if not loop.last }}{% endfor %}.</p>{% endif %}
     </fieldset>
+    {% if photo_dates and photo_dates.total %}
+    <div class="photo-dates actions">
+      <p>📷 <strong>Dates de prise de vue</strong> : lues pour {{ (photo_dates.dated + photo_dates.undated) | number }} photo(s) sur {{ photo_dates.total | number }}{% if photo_dates.dated + photo_dates.undated %}, dont {{ photo_dates.dated | number }} datée(s){% endif %}{% if photo_dates.failed %} ; {{ photo_dates.failed | number }} n'ont pas pu être lues{% endif %}.</p>
+      {% if photo_dates.unread or photo_dates.failed %}
+      <p><button type="button" class="button small" data-start-photo-dates data-scan="{{ scan.id }}" data-dir="{{ node.entry_id }}">📷 Lire les dates des photos</button>
+      <span class="muted small">TreeAudit n'ouvre chaque photo qu'en lecture, pour son en-tête seulement ; une date déjà lue n'est pas relue.</span></p>
+      {% endif %}
+      <p class="error-text" data-error role="alert" hidden></p>
+    </div>
+    {% endif %}
+    <p><label><input type="checkbox" name="par_mois" value="1"{% if names.by_month %} checked{% endif %}> Photos et vidéos aussi par mois : <span class="path">Photos/2023/2023-07/</span></label></p>
     <p>
       <label>Tout irait dans <span class="path">{{ folder }}/</span><input type="text" name="destination" value="{{ plan.destination }}" data-default="Rangé" maxlength="60" size="14" aria-label="Nom du dossier de rangement"></label>
     </p>
@@ -46,7 +57,7 @@
     </table>
     <ul class="plain small muted">
       <li>📁 Les albums et dossiers d'un seul type gardent leur nom ; les projets, jeux et logiciels sont déplacés en entier.</li>
-      <li>Les photos et vidéos sont classées par année : celle d'une date écrite dans le nom (« IMG_20190714… »), sinon la date de modification.</li>
+      <li>Les photos et vidéos sont classées par année : la date de prise de vue, une fois lue dans la photo, sinon une date écrite dans le nom (« IMG_20190714… »), sinon la date de modification. La ligne de chaque élément dit laquelle.</li>
       <li>Tu peux renommer les dossiers ci-dessus, et pour chaque élément : le laisser en place ou changer sa catégorie.</li>
       {% if plan.renamed %}<li>⚠ {{ plan.renamed | length }} élément(s) portent le même nom qu'un autre : ils recevront un numéro « (2) ».</li>{% endif %}
     </ul>

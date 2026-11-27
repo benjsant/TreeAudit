@@ -8,7 +8,9 @@ From the most careful to the finest:
 2. homogeneous folders (all their files of one category, e.g. an album)
    move whole, under their own name: the user's own sorting is kept;
 3. loose files of mixed folders move one by one, by type (and by year for
-   photos and videos: a date in the name, else the modification date, D-056).
+   photos and videos, optionally by month: the date the photo was taken, read
+   from it beforehand by a job the user starts (D-071), else a date in the
+   name, else the modification date, D-056).
 Hidden entries, links, special files, names a command cannot carry
 unambiguously, and the destination folder itself stay where they are.
 """
@@ -23,6 +25,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 
 from treeaudit.core.sizes import shown_file_size
+from treeaudit.db.photos import READER as PHOTO_DATE_READER
 from treeaudit.duplicates.groups import SOFTWARE_DIRS
 from treeaudit.shellcmd import is_displayable
 
@@ -284,6 +287,8 @@ class Adjustments:
     destination: str = DESTINATION
     only: frozenset[str] | None = None
     """The categories to tidy; None for all. Elements of the others stay."""
+    by_month: bool = False
+    """Photos and videos go into a month inside their year (D-071)."""
 
     def folder(self, category: str) -> str:
         """The folder name of a category: the user's if they renamed it."""
@@ -299,6 +304,7 @@ class Adjustments:
             or self.names
             or self.destination != DESTINATION
             or self.only is not None
+            or self.by_month
         )
 
     def tidies(self, category: str) -> bool:
@@ -312,8 +318,8 @@ def adjustments_from_query(params: Iterable[tuple[str, str]]) -> Adjustments:
     ``exclure=<id>``, ``categorie_<id>=<category>``, ``sous_<id>=<name>``,
     ``nom_<category>=<name>``, ``destination=<name>``, and the categories to
     tidy: ``ranger=<category>`` for each, with ``choix=1`` so that none ticked
-    means none (a form sends no unticked box). Empty values mean "unchanged";
-    other keys are ignored.
+    means none (a form sends no unticked box); ``par_mois=1`` for photos and
+    videos by month. Empty values mean "unchanged"; other keys are ignored.
     """
     excluded: set[int] = set()
     categories: dict[int, str] = {}
@@ -322,6 +328,7 @@ def adjustments_from_query(params: Iterable[tuple[str, str]]) -> Adjustments:
     destination = DESTINATION
     to_tidy: set[str] = set()
     choosing = False
+    by_month = False
     for count, (key, value) in enumerate(params, start=1):
         if count > MAX_ADJUSTMENTS:
             raise AdjustmentError("trop d'ajustements")
@@ -354,13 +361,17 @@ def adjustments_from_query(params: Iterable[tuple[str, str]]) -> Adjustments:
             choosing = True
         elif key == "choix" and value == "1":
             choosing = True
+        elif key == "par_mois" and value == "1":
+            by_month = True
         elif key == "destination" and value.strip():
             chosen = clean_folder_name(value)
             if chosen is None:
                 raise AdjustmentError(f"nom de dossier refusé : {value}")
             destination = chosen
     only = frozenset(to_tidy) if choosing and to_tidy != set(CATEGORIES) else None
-    return Adjustments(frozenset(excluded), categories, subfolders, names, destination, only)
+    return Adjustments(
+        frozenset(excluded), categories, subfolders, names, destination, only, by_month
+    )
 
 
 class PlanTooLargeError(ValueError):
@@ -388,6 +399,9 @@ class Move:
     subfolder: str | None = None
     space: int = 0
     """What the explorer shows: a file's size, or the place a folder uses."""
+    taken: date | None = None
+    """The day a photo was taken, read from the file (D-071): the same-day
+    sub-folders trust it before any date of the name or of the file."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -455,6 +469,8 @@ class _Node:
     size: int
     allocated: int
     mtime_ns: int
+    taken: str | None = None
+    """When the photo was taken, as stored by the job of D-071 (camera clock)."""
     children: list[_Node] = field(default_factory=list)
     # Filled bottom-up for folders:
     categories: Counter[str] = field(default_factory=Counter)
@@ -487,6 +503,9 @@ _NAME_DATE = re.compile(
 )
 FIRST_PHOTO_YEAR = 1990
 NAME_YEAR = "année tirée du nom"
+TAKEN_YEAR = "date de prise de vue"
+TAKEN, NAME, MODIFIED = "taken", "name", "modified"
+"""Where the date of a photo comes from, the most reliable first (D-071)."""
 
 
 def name_date(name: str, mtime_year: int) -> date | None:
@@ -511,18 +530,51 @@ def _name_year(name: str, mtime_year: int) -> int | None:
     return None if found is None else found.year
 
 
-def _photo_year(name: str, mtime_ns: int) -> tuple[int, bool]:
-    """(year, taken from the name); year 0 when unknown."""
+def _modified_day(mtime_ns: int) -> date | None:
+    try:
+        return datetime.fromtimestamp(mtime_ns / 1e9, UTC).date()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def taken_date(taken: str | None, mtime_year: int) -> date | None:
+    """The day a photo was taken, as read from it (D-071), if it is plausible:
+    like a date of the name, from 1990 on and never after the modification
+    date. A camera whose clock was never set starts from a factory date, the
+    first of January at midnight sharp (2000, 2001...): not believed either."""
+    if taken is None:
+        return None
+    try:
+        moment = datetime.strptime(taken, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+    if moment.year < FIRST_PHOTO_YEAR or (mtime_year != 0 and moment.year > mtime_year):
+        return None
+    if (moment.month, moment.day, moment.hour, moment.minute, moment.second) == (1, 1, 0, 0, 0):
+        return None
+    return moment.date()
+
+
+def photo_date(name: str, mtime_ns: int, taken: str | None) -> tuple[date | None, str]:
+    """(day, where it comes from): the day the photo was taken, else a date
+    written in its name, else its modification date; None when unknown."""
     mtime_year = _year(mtime_ns)
-    year = _name_year(name, mtime_year)
-    return (year, True) if year is not None else (mtime_year, False)
+    found = taken_date(taken, mtime_year)
+    if found is not None:
+        return found, TAKEN
+    found = name_date(name, mtime_year)
+    if found is not None:
+        return found, NAME
+    return _modified_day(mtime_ns), MODIFIED
 
 
 def _load(conn: sqlite3.Connection, scan_id: int, start_id: int) -> _Node:
     """The chosen folder's subtree as a tree of nodes, children sorted by path.
     PlanTooLargeError beyond MAX_ENTRIES (it is held in memory); KeyError if
     the folder is not in the analysis."""
-    rows = conn.execute(LOAD_SQL, (start_id, scan_id, scan_id, MAX_ENTRIES + 1)).fetchall()
+    rows = conn.execute(
+        LOAD_SQL, (start_id, scan_id, scan_id, PHOTO_DATE_READER, MAX_ENTRIES + 1)
+    ).fetchall()
     if len(rows) > MAX_ENTRIES:
         raise PlanTooLargeError(len(rows))
     nodes = {
@@ -538,6 +590,7 @@ def _load(conn: sqlite3.Connection, scan_id: int, start_id: int) -> _Node:
             size=row["size"],
             allocated=row["allocated_size"],
             mtime_ns=row["mtime_ns"],
+            taken=row["taken"],
         )
         for row in rows
     }
@@ -561,8 +614,10 @@ LOAD_SQL = (
     "  ON e.scan_id = ? AND e.parent_id = sub.id"
     ") "
     "SELECT e.entry_id, e.parent_id, e.name, e.name_display, e.rel_path, "
-    "e.rel_path_display, e.kind, e.extension, e.size, e.allocated_size, e.mtime_ns "
-    "FROM sub CROSS JOIN entry e ON e.scan_id = ? AND e.entry_id = sub.id LIMIT ?"
+    "e.rel_path_display, e.kind, e.extension, e.size, e.allocated_size, e.mtime_ns, d.taken "
+    "FROM sub CROSS JOIN entry e ON e.scan_id = ? AND e.entry_id = sub.id "
+    "LEFT JOIN photo_date d ON d.scan_id = e.scan_id AND d.entry_id = e.entry_id "
+    "AND d.reader = ? LIMIT ?"
 )
 
 
@@ -606,7 +661,8 @@ def _summarize(node: _Node) -> None:
                 category = category_of(child.extension, child.size, child.name)
                 current.categories[category] += 1
                 if category in BY_YEAR:
-                    current.years[_photo_year(child.name_display, child.mtime_ns)[0]] += 1
+                    day, _ = photo_date(child.name_display, child.mtime_ns, child.taken)
+                    current.years[0 if day is None else day.year] += 1
             else:  # symlink or special file: never moved alone
                 current.unmovable = True
                 current.has_link = True
@@ -705,7 +761,13 @@ class _Planner:
         self.plan.kept.append(Kept(self._relative(node), reason))
 
     def _target(
-        self, category: str, year: int | None, sub: str | None, name: str, is_dir: bool
+        self,
+        category: str,
+        year: int | None,
+        sub: str | None,
+        name: str,
+        is_dir: bool,
+        month: int | None = None,
     ) -> tuple[str, bool]:
         """Target path below the destination, and whether it was renamed:
         a name already given in this plan gets " (2)", " (3)"... before a
@@ -715,6 +777,7 @@ class _Planner:
         never overwrites (mv -n)."""
         folder = f"{self.adjust.destination}/{self.adjust.folder(category)}"
         folder += f"/{year}" if year else ""
+        folder += f"/{year}-{month:02d}" if year and month else ""
         folder += f"/{sub}" if sub else ""
         target = f"{folder}/{name}"
         number = 1
@@ -729,9 +792,10 @@ class _Planner:
 
     def _move(self, node: _Node, category: str, reason: str) -> None:
         """Add a move to the plan, in the user's category if they chose one.
-        Photos and videos go into a year: a file's own (from its name, else
-        its date), a folder's most frequent one; none for a folder without
-        any photo or video (the user put it there)."""
+        Photos and videos go into a year: a file's own (photo_date), a
+        folder's most frequent one; none for a folder without any photo or
+        video (the user put it there). With ``by_month``, a file also goes
+        into its month; an album keeps its year only, under its own name."""
         chosen = self.adjust.categories.get(node.entry_id)
         if chosen is not None and chosen != category:
             category, reason = chosen, "catégorie choisie par toi"
@@ -744,18 +808,27 @@ class _Planner:
             )
             return
         year: int | None = None
+        month: int | None = None
+        taken: date | None = None
         if category in BY_YEAR:
             if node.kind == "dir":
                 # No photo nor video inside (a folder the user put here): no year.
                 common = node.years.most_common(1)
                 year = (common[0][0] or None) if common else None
             else:
-                found, from_name = _photo_year(node.name_display, node.mtime_ns)
-                year = found or None
-                if from_name:
+                day, source = photo_date(node.name_display, node.mtime_ns, node.taken)
+                if day is not None:
+                    year = day.year
+                    month = day.month if self.adjust.by_month else None
+                if source == TAKEN:
+                    taken = day
+                    reason = f"{reason} · {TAKEN_YEAR}"
+                elif source == NAME:
                     reason = f"{reason} · {NAME_YEAR}"
         sub = self.adjust.subfolders.get(node.entry_id)
-        target, renamed = self._target(category, year, sub, node.name_display, node.kind == "dir")
+        target, renamed = self._target(
+            category, year, sub, node.name_display, node.kind == "dir", month
+        )
         self.plan.moves.append(
             Move(
                 entry_id=node.entry_id,
@@ -772,6 +845,7 @@ class _Planner:
                 space=node.space
                 if node.kind == "dir"
                 else shown_file_size(node.size, node.allocated),
+                taken=taken,
             )
         )
 

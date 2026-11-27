@@ -72,6 +72,22 @@ function setupStartButtons() {
       }
     });
   }
+  for (const button of document.querySelectorAll("[data-start-photo-dates]")) {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        // The page's adjustments come back with the result (checked by the server).
+        await post(`/api/scans/${encodeURIComponent(button.dataset.scan)}/photo-dates`, {
+          dir: Number(button.dataset.dir),
+          query: window.location.search.replace(/^\?/, ""),
+        });
+        window.location.assign("/jobs/current");
+      } catch (error) {
+        showError(button.closest(".actions, .choice"), error.message);
+        button.disabled = false;
+      }
+    });
+  }
   for (const button of document.querySelectorAll("[data-start-dupes]")) {
     button.addEventListener("click", async () => {
       button.disabled = true;

@@ -15,7 +15,7 @@ import os
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any
 
@@ -319,9 +319,10 @@ class JobManager:
 
         return self._start(job, work)
 
-    def start_photo_dates(self, scan_id: int, start_id: int) -> Job:
+    def start_photo_dates(self, scan_id: int, start_id: int, *, back_to: str | None = None) -> Job:
         """Read the dates the photos below a folder of a recorded scan were
-        taken (D-071), then go back to Ranger on that folder."""
+        taken (D-071), then go back to Ranger on that folder (``back_to``: the
+        Ranger page with the user's adjustments, built by the caller)."""
         progress = DatesProgress()
         job = Job(
             id=next(self._ids),
@@ -332,7 +333,7 @@ class JobManager:
         config = self.config
 
         def work(j: Job) -> DatesOutcome:
-            return execute_photo_dates(
+            outcome = execute_photo_dates(
                 config,
                 scan_id,
                 start_id,
@@ -341,6 +342,7 @@ class JobManager:
                 cancel=j.cancel,
                 progress=progress,
             )
+            return outcome if back_to is None else replace(outcome, result_url=back_to)
 
         return self._start(job, work)
 

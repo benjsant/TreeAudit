@@ -135,6 +135,43 @@ def pending(
     return Pending(total, dated, undated, failed, tuple(todo))
 
 
+@dataclass(frozen=True, slots=True)
+class Counts:
+    """How far the dates of the photos below a folder were read."""
+
+    total: int
+    dated: int
+    undated: int
+    failed: int
+
+    @property
+    def unread(self) -> int:
+        """Photos never read by this reader version (failures not included)."""
+        return self.total - self.dated - self.undated - self.failed
+
+
+def counts(
+    conn: sqlite3.Connection, scan_id: int, start_id: int, *, extensions: Collection[str]
+) -> Counts:
+    """Where the dates below a folder stand, without writing anything (a page
+    shows it; the job reuses the dates of earlier analyses when it starts)."""
+    sql = _subtree_sql(extensions, "d.reader, d.taken, d.failure")
+    total = dated = undated = failed = 0
+    for reader, taken, failure in conn.execute(
+        sql, (start_id, scan_id, scan_id, *sorted(extensions))
+    ):
+        total += 1
+        if reader != READER:
+            continue
+        if failure is not None:
+            failed += 1
+        elif taken is None:
+            undated += 1
+        else:
+            dated += 1
+    return Counts(total, dated, undated, failed)
+
+
 def save(conn: sqlite3.Connection, scan_id: int, results: Sequence[Result]) -> None:
     """Store what reading gave, in one transaction; a row read again replaces
     the previous one."""

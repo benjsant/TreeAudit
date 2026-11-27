@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import os
+import struct
 import subprocess
 import threading
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from treeaudit.core.config import AppConfig, RootConfig
 from treeaudit.db.connection import connect
-from treeaudit.organize.plan import DESTINATION, Plan, make_plan
+from treeaudit.organize import subfolders
+from treeaudit.organize.plan import DESTINATION, Plan, adjustments_from_query, make_plan
 from treeaudit.organize.script import tidy_script, undo_script
+from treeaudit.photos.runner import execute_photo_dates
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.scanner.runner import ScanRequest, execute_scan
 
@@ -154,6 +158,115 @@ def test_a_copied_photo_goes_by_the_date_in_its_name(
     assert moves["Album"].target == f"{DESTINATION}/Photos/2015/Album"
 
 
+def exif_photo(taken: str | None, salt: bytes) -> bytes:
+    """A JPEG whose EXIF holds this DateTimeOriginal ("2019:07:14 10:00:00")."""
+    tiff = b"II*\0" + struct.pack("<IHI", 8, 0, 0)
+    if taken is not None:
+        value = taken.encode() + b"\0"
+        tiff = (
+            b"II*\0"
+            + struct.pack("<I", 8)
+            + struct.pack("<HHHIII", 1, 0x8769, 4, 1, 26, 0)
+            + struct.pack("<HHHIII", 1, 0x9003, 2, len(value), 44, 0)
+            + value
+        )
+    app1 = b"Exif\0\0" + tiff
+    return b"\xff\xd8\xff\xe1" + struct.pack(">H", len(app1) + 2) + app1 + b"\xff\xd9" + salt
+
+
+def test_the_date_a_photo_was_taken_comes_first_once_read(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    """D-071: a backup copy gave every file the date of the copy (May 2024)."""
+    copy_time = 1_717_000_000
+    root = tmp_path / "Sauvegarde"
+    # Sent later: the name says 17 August, the camera 12 August.
+    touch(
+        root / "Vrac" / "IMG_20170817_101010.jpg",
+        exif_photo("2017:08:12 10:10:10", b"a"),
+        copy_time,
+    )
+    for i in range(5):  # one outing, names that say nothing
+        touch(
+            root / "Vrac" / f"IMG_{1001 + i}.jpg",
+            exif_photo(f"2019:07:14 1{i}:00:00", bytes([i])),
+            copy_time,
+        )
+    touch(root / "Vrac" / "reçue.jpg", exif_photo(None, b"r"), copy_time)  # EXIF, no date
+    touch(root / "Vrac" / "notes.txt", b"n", copy_time)  # a mixed folder: sorted file by file
+    touch(root / "Vrac" / "horloge.jpg", exif_photo("2000:01:01 00:00:00", b"h"), copy_time)
+    for i in range(3):
+        touch(
+            root / "Album" / f"P{i}.jpg",
+            exif_photo(f"2015:03:0{i + 1} 12:00:00", bytes([i])),
+            copy_time,
+        )
+    config = AppConfig(
+        data_dir=str(tmp_path / "data"), roots=(RootConfig(id="r", path=str(root), label="r"),)
+    )
+    mounts = data_disk_table(str(tmp_path))
+    scan_id = execute_scan(
+        config,
+        ScanRequest(root=config.roots[0]),
+        mounts=mounts,
+        home=None,
+        cancel=threading.Event(),
+    ).scan_id
+    conn = connect(config.data_dir)
+    try:
+        start = conn.execute(
+            "SELECT entry_id FROM entry WHERE scan_id = ? AND depth = 0", (scan_id,)
+        ).fetchone()[0]
+        before = {m.source: m for m in make_plan(conn, scan_id, start).moves}
+        assert before["Vrac/IMG_1001.jpg"].target == f"{DESTINATION}/Photos/2024/IMG_1001.jpg"
+        outcome = execute_photo_dates(
+            config, scan_id, start, mounts=mounts, home=None, cancel=threading.Event()
+        )
+        assert (outcome.read, outcome.dated) == (11, 10)
+        moves = {m.source: m for m in make_plan(conn, scan_id, start).moves}
+        by_month = make_plan(
+            conn, scan_id, start, adjustments_from_query([("par_mois", "1")])
+        ).moves
+        # Dates read by another version of the reader are not used.
+        conn.execute("UPDATE photo_date SET reader = reader + 1")
+        other_version = {m.source: m for m in make_plan(conn, scan_id, start).moves}
+    finally:
+        conn.close()
+    sent = moves["Vrac/IMG_20170817_101010.jpg"]
+    assert sent.target == f"{DESTINATION}/Photos/2017/IMG_20170817_101010.jpg"
+    assert "date de prise de vue" in sent.reason and "nom" not in sent.reason
+    assert sent.taken == date(2017, 8, 12)
+    outing = moves["Vrac/IMG_1001.jpg"]
+    assert outing.target == f"{DESTINATION}/Photos/2019/IMG_1001.jpg"
+    assert other_version["Vrac/IMG_1001.jpg"].target == f"{DESTINATION}/Photos/2024/IMG_1001.jpg"
+    # No date read: the date of the copy, as before (the clock never set is not believed).
+    assert moves["Vrac/reçue.jpg"].target == f"{DESTINATION}/Photos/2024/reçue.jpg"
+    assert moves["Vrac/horloge.jpg"].target == f"{DESTINATION}/Photos/2024/horloge.jpg"
+    assert moves["Vrac/horloge.jpg"].taken is None
+    # An album moves whole, under the year most of its photos were taken.
+    assert moves["Album"].target == f"{DESTINATION}/Photos/2015/Album"
+    # By month: files go into their month; an album keeps its year and its name.
+    targets = {m.source: m.target for m in by_month}
+    assert targets["Vrac/IMG_1001.jpg"] == f"{DESTINATION}/Photos/2019/2019-07/IMG_1001.jpg"
+    assert targets["Vrac/IMG_20170817_101010.jpg"] == (
+        f"{DESTINATION}/Photos/2017/2017-08/IMG_20170817_101010.jpg"
+    )
+    assert targets["Vrac/reçue.jpg"] == f"{DESTINATION}/Photos/2024/2024-05/reçue.jpg"
+    assert targets["Album"] == f"{DESTINATION}/Photos/2015/Album"
+    # The outing makes a day of its own, from the dates read.
+    found = subfolders.propose("Photos", [m for m in moves.values() if m.category == "Photos"])
+    day = [entry for entry, name in found.by_entry.items() if name == "2019-07-14"]
+    assert len(day) == 5
+    assert found.reasons[day[0]] == "même journée (14/07/2019, date de prise de vue)"
+
+
+def test_by_month_comes_from_the_address() -> None:
+    assert adjustments_from_query([("par_mois", "1")]).by_month
+    assert adjustments_from_query([("par_mois", "1")]).any
+    assert not adjustments_from_query([("par_mois", "0")]).by_month
+    assert not adjustments_from_query([]).any
+
+
 def test_scripts_tidy_then_restore_everything_exactly(
     tmp_path: Path, messy: Path, data_disk_table: Callable[..., MountTable]
 ) -> None:
@@ -205,12 +318,16 @@ def test_walking_down_uses_the_parent_index() -> None:
     conn = connect_memory()
     try:
         plan = [
-            row["detail"] for row in conn.execute("EXPLAIN QUERY PLAN " + LOAD_SQL, (1, 1, 1, 1))
+            row["detail"] for row in conn.execute("EXPLAIN QUERY PLAN " + LOAD_SQL, (1, 1, 1, 1, 1))
         ]
     finally:
         conn.close()
     assert "SEARCH e USING INDEX entry_by_parent (scan_id=? AND parent_id=?)" in plan
     assert not any("entry_by_inode" in step for step in plan), plan
+    # The photo dates (D-071) are looked up by key, never scanned.
+    assert any(
+        step.startswith("SEARCH d USING INDEX sqlite_autoindex_photo_date") for step in plan
+    ), plan
 
 
 # --- adjustments made by the user ----------------------------------------------------------

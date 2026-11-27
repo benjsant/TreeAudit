@@ -1,12 +1,13 @@
-"""The year of a photo read from a date written in its name (D-056)."""
+"""The date of a photo: taken (read from it, D-071), else in its name (D-056),
+else its modification date."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
-from treeaudit.organize.plan import _name_year, _photo_year
+from treeaudit.organize.plan import MODIFIED, NAME, TAKEN, _name_year, photo_date
 
 
 def ns(year: int) -> int:
@@ -52,14 +53,42 @@ def test_no_date_in_the_name(name: str) -> None:
 def test_a_date_later_than_the_modification_is_not_believed() -> None:
     # A file cannot have been modified before it was taken.
     assert _name_year("IMG_20250101_000000.jpg", 2023) is None
-    assert _photo_year("IMG_20250101_000000.jpg", ns(2023)) == (2023, False)
+    assert photo_date("IMG_20250101_000000.jpg", ns(2023), None) == (date(2023, 6, 1), MODIFIED)
 
 
 def test_the_name_wins_over_the_date_of_a_copy() -> None:
-    assert _photo_year("IMG_20170812_101010.jpg", ns(2026)) == (2017, True)
-    assert _photo_year("plage.jpg", ns(2026)) == (2026, False)
+    assert photo_date("IMG_20170812_101010.jpg", ns(2026), None) == (date(2017, 8, 12), NAME)
+    assert photo_date("plage.jpg", ns(2026), None) == (date(2026, 6, 1), MODIFIED)
 
 
 def test_a_broken_modification_date_still_lets_the_name_speak() -> None:
-    assert _photo_year("IMG_20170812_101010.jpg", 10**30) == (2017, True)
-    assert _photo_year("plage.jpg", 10**30) == (0, False)
+    assert photo_date("IMG_20170812_101010.jpg", 10**30, None) == (date(2017, 8, 12), NAME)
+    assert photo_date("plage.jpg", 10**30, None) == (None, MODIFIED)
+    assert photo_date("plage.jpg", 10**30, "2015-05-05 10:00:00") == (date(2015, 5, 5), TAKEN)
+
+
+def test_the_date_taken_wins_over_the_name_and_the_file() -> None:
+    # A photo renamed or sent later: the camera's date is the one it was taken.
+    taken = "2019-06-01 12:00:00"
+    assert photo_date("IMG_20190617_160000.jpg", ns(2026), taken) == (date(2019, 6, 1), TAKEN)
+    assert photo_date("plage.jpg", ns(2026), taken) == (date(2019, 6, 1), TAKEN)
+
+
+@pytest.mark.parametrize(
+    "taken",
+    [
+        "1980-06-01 10:00:00",  # too old for a photo
+        "2000-01-01 00:00:00",  # a camera whose clock was never set
+        "2004-01-01 00:00:00",
+        "2000-01-01 00:00:00x",  # not as stored
+        "2027-03-01 10:00:00",  # later than the modification
+        "2023-02-30 10:00:00",  # impossible
+    ],
+)
+def test_an_implausible_date_taken_is_not_believed(taken: str) -> None:
+    assert photo_date("IMG_20170812_101010.jpg", ns(2026), taken) == (date(2017, 8, 12), NAME)
+    assert photo_date("plage.jpg", ns(2026), taken) == (date(2026, 6, 1), MODIFIED)
+
+
+def test_new_year_photos_are_believed() -> None:
+    assert photo_date("plage.jpg", ns(2026), "2020-01-01 00:00:07") == (date(2020, 1, 1), TAKEN)
