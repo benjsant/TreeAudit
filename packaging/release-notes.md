@@ -1,6 +1,14 @@
 TreeAudit trie et explique le contenu de tes disques, **sans jamais rien supprimer ni modifier**. Il tourne sur ta machine, sans Internet.
 
-## Nouveau depuis la 1.0.0-rc.1
+## Nouveau dans la 1.0.0-rc.3
+
+- **📷 Ranger date tes photos et vidéos par leur prise de vue** : un bouton lit la date écrite par l'appareil dans la photo (JPEG, HEIC d'iPhone, AVIF, TIFF, fichiers bruts des appareils, PNG, WebP) ou la vidéo (MP4, MOV, 3GP). Une copie ou une sauvegarde qui a changé toutes les dates ne mélange plus les années. Seul l'en-tête de chaque fichier est lu, en lecture seule ; une date déjà lue n'est pas relue.
+- **Par mois** : en plus de l'année, `Photos/2023/2023-07/`, si tu le demandes.
+- **Les photos d'une même journée** sont proposées en sous-dossiers dès le premier lot de propositions.
+- **Graphismes** : les icônes, SVG et jeux d'icônes ne partent plus avec tes photos de vacances.
+- **À nettoyer** : les bibliothèques web recopiées (Bootstrap, jQuery, Font Awesome, jeux d'icônes…) sont reconnues par leur nom et ce qu'elles contiennent, toujours « douteuses », jamais cochées d'avance.
+
+## Déjà dans la 1.0.0-rc.2
 
 - **🖼️ Photos ressemblantes** : la même photo réduite, recompressée ou convertie, et les photos d'une rafale. C'est ton navigateur qui ouvre les images : rien ne sort de ton ordinateur. Les simples copies identiques sont séparées des autres versions.
 - **Ranger** : tu choisis les catégories à ranger, par exemple « seulement le développement et les logiciels », sans toucher à tes photos ni à tes documents. Une application sans marqueur de projet est déplacée en entier.

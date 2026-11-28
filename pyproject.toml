@@ -1,6 +1,6 @@
 [project]
 name = "treeaudit"
-version = "1.0.0rc2"
+version = "1.0.0rc3"
 description = "Local, read-only file and directory audit tool for Linux"
 readme = "README.md"
 license = "MIT"

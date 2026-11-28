@@ -890,7 +890,7 @@ wheels = [
 
 [[package]]
 name = "treeaudit"
-version = "1.0.0rc2"
+version = "1.0.0rc3"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
