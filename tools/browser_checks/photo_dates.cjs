@@ -1,6 +1,6 @@
 // Ranger and the dates photos were taken (D-071), by clicks only (not shipped):
 //   node photo_dates.cjs <base url> <out dir>
-// Home -> new analysis -> summary -> Ranger -> "Lire les dates des photos" ->
+// Home -> new analysis -> summary -> Ranger -> "Lire les dates de prise de vue" ->
 // back to Ranger -> "par mois". Prints counts only (photo targets by year,
 // by month, how many dates were read), never a file name; screenshots of the
 // dates panel, desktop light and phone dark. The tidy script is fetched, never run.

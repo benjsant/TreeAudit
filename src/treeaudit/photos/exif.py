@@ -1,4 +1,4 @@
-"""The date a photo was taken, read from its EXIF metadata (D-071).
+"""The date a photo or a video was taken, read from its metadata (D-071).
 
 Pure Python and the standard library only: nothing is decoded, no image
 library parses the file. The file is untrusted, so every read goes through a
@@ -9,6 +9,12 @@ Formats: JPEG (APP1 segment), TIFF and the raw formats built on it (DNG, NEF,
 CR2, ARW, ORF, RW2, PEF...), HEIF, HEIC and AVIF (the "Exif" item), PNG
 (eXIf chunk) and WebP (EXIF chunk). Only DateTimeOriginal, else
 DateTimeDigitized, is taken: DateTime (0x0132) is the date of the last edit.
+
+Videos: MP4, MOV, M4V and 3GP, the creation time of their movie header
+("mvhd" in "moov"). The movie is often after the image data, at the end of
+the file: the boxes before it are skipped by their size, never read. That
+time is in UTC; it is given in the computer's local time, like the camera
+clock of a photo.
 """
 
 from __future__ import annotations
@@ -28,6 +34,7 @@ EXTENSIONS = frozenset(
         "tif", "tiff", "dng", "nef", "nrw", "cr2", "arw", "srf", "sr2", "orf", "rw2", "pef",
         "heic", "heif", "hif", "avif",
         "png", "webp",
+        "mp4", "m4v", "mov", "3gp", "3g2",
     }
 )  # fmt: skip
 """Extensions worth reading (lower case, without the dot)."""
@@ -42,6 +49,8 @@ _MAX_ENTRIES = 512
 _MAX_STEPS = 256
 """Segments, chunks or boxes walked at most in one file."""
 _TIFF_MAGIC = {b"II*\x00", b"MM\x00*", b"IIRO", b"MMOR", b"IIU\x00"}
+_MP4_EPOCH = 2_082_844_800
+"""Seconds from 1904-01-01, the origin of MP4 and QuickTime times, to 1970-01-01."""
 """TIFF, and the headers of Olympus ORF and Panasonic RW2 built like it."""
 
 
@@ -70,7 +79,8 @@ class _Budget:
 
 def taken_at(read: Reader, size: int) -> datetime | None:
     """When the photo was taken, as the camera wrote it (its own clock, no
-    time zone); None when the file has no such date or is damaged."""
+    time zone), or when the video was recorded (local time); None when the
+    file has no such date or is damaged."""
     budget = _Budget(read, size)
     try:
         head = budget.get(0, min(16, size))
@@ -79,7 +89,7 @@ def taken_at(read: Reader, size: int) -> datetime | None:
         if head[:4] in _TIFF_MAGIC:
             return _from_tiff(budget, 0, budget.size)
         if head[4:8] == b"ftyp":
-            return _from_heif(budget)
+            return _from_iso_media(budget)
         if head.startswith(b"\x89PNG\r\n\x1a\n"):
             return _from_png(budget)
         if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
@@ -214,11 +224,42 @@ def _boxes(budget: _Budget, start: int, end: int) -> list[tuple[bytes, int, int]
     return found
 
 
-def _from_heif(budget: _Budget) -> datetime | None:
-    """HEIF/HEIC/AVIF: the "Exif" item, found in iinf, located by iloc."""
-    meta = next((b for b in _boxes(budget, 0, budget.size) if b[0] == b"meta"), None)
-    if meta is None:
+def _from_iso_media(budget: _Budget) -> datetime | None:
+    """An ISO base media file: the Exif of a HEIF image first (a HEIC with
+    a movie inside is still a photo), else the creation time of a movie."""
+    top = _boxes(budget, 0, budget.size)
+    meta = next((box for box in top if box[0] == b"meta"), None)
+    if meta is not None:
+        found = _from_heif(budget, meta)
+        if found is not None:
+            return found
+    moov = next((box for box in top if box[0] == b"moov"), None)
+    return None if moov is None else _from_moov(budget, moov[1], moov[2])
+
+
+def _from_moov(budget: _Budget, start: int, end: int) -> datetime | None:
+    """The creation time of the movie header, in local time; None when unset (0)."""
+    mvhd = next((box for box in _boxes(budget, start, end) if box[0] == b"mvhd"), None)
+    if mvhd is None:
         return None
+    content, box_end = mvhd[1], mvhd[2]
+    version = budget.get(content, 1)[0]
+    if version not in (0, 1):
+        return None
+    width = 8 if version == 1 else 4
+    if content + 4 + width > box_end:
+        return None
+    created = int.from_bytes(budget.get(content + 4, width), "big")
+    if created == 0:
+        return None
+    try:
+        return datetime.fromtimestamp(created - _MP4_EPOCH)
+    except (OverflowError, OSError, ValueError):  # beyond what the platform can tell
+        return None
+
+
+def _from_heif(budget: _Budget, meta: tuple[bytes, int, int]) -> datetime | None:
+    """HEIF/HEIC/AVIF: the "Exif" item, found in iinf, located by iloc."""
     children = _boxes(budget, meta[1] + 4, meta[2])  # meta is a full box
     by_kind = {kind: (start, end) for kind, start, end in children}
     if b"iinf" not in by_kind or b"iloc" not in by_kind:

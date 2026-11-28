@@ -8,7 +8,7 @@ import sqlite3
 import struct
 import threading
 from collections.abc import Callable, Iterator
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -41,6 +41,20 @@ def photo(taken: str | None, filler: int = 64) -> bytes:
     app1 = b"Exif\0\0" + tiff
     segment = b"\xff\xe1" + struct.pack(">H", len(app1) + 2) + app1
     return b"\xff\xd8" + segment + b"\xff\xda\0\x08" + b"\x55" * filler + b"\xff\xd9"
+
+
+def video(recorded: datetime, *, filler: int = 64) -> bytes:
+    """An MP4 whose movie header, after the image data, holds this creation
+    time (UTC; the local time of the test machine decides the hour shown)."""
+    since_1904 = int(recorded.timestamp()) + exif._MP4_EPOCH
+    mvhd = struct.pack(">I4sI", 108, b"mvhd", 0) + struct.pack(
+        ">IIII", since_1904, since_1904, 600, 0
+    )
+    mvhd += b"\0" * (108 - len(mvhd))
+    moov = struct.pack(">I4s", 8 + len(mvhd), b"moov") + mvhd
+    ftyp = struct.pack(">I4s", 20, b"ftyp") + b"isom\0\0\0\0isom"
+    mdat = struct.pack(">I4s", 8 + filler, b"mdat") + b"\x55" * filler
+    return ftyp + mdat + moov
 
 
 @dataclasses.dataclass
@@ -201,7 +215,7 @@ def test_another_reader_version_reads_everything_again(
     tree: Tree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tree.read()
-    monkeypatch.setattr(photos_db, "READER", 2)
+    monkeypatch.setattr(photos_db, "READER", photos_db.READER + 1)
     assert len(tree.pending().todo) == 6
     assert tree.dates() == {}  # dates of another version are not used
     assert tree.read().read == 6
@@ -407,3 +421,14 @@ def test_forgetting_the_analysis_forgets_its_dates(tree: Tree) -> None:
     tree.read()
     assert scans.forget_scan(tree.conn, tree.scan_id)
     assert tree.conn.execute("SELECT COUNT(*) FROM photo_date").fetchone()[0] == 0
+
+
+def test_a_video_is_dated_by_its_recording_time(tree: Tree) -> None:
+    recorded = datetime(2022, 4, 3, 12, 0, 0, tzinfo=UTC)
+    (tree.root / "Voyage" / "clip.mp4").write_bytes(video(recorded, filler=3 * exif.MAX_READ))
+    (tree.root / "Voyage" / "vieux.mov").write_bytes(video(datetime(1904, 1, 1, tzinfo=UTC)))
+    tree.scan()
+    outcome = tree.read()
+    assert (outcome.total, outcome.dated) == (8, 4)
+    assert tree.dates()["Voyage/clip.mp4"] == recorded.astimezone().replace(tzinfo=None)
+    assert "Voyage/vieux.mov" not in tree.dates()  # creation time unset

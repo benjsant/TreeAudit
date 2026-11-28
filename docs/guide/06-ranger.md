@@ -15,7 +15,7 @@ Tout irait dans un nouveau dossier, **`Rangé/`** par défaut, à l'intérieur d
 | Autres | le reste |
 
 - **L'année d'une photo**, du plus sûr au moins sûr :
-  1. sa **date de prise de vue**, écrite dans la photo par l'appareil (voir « Lire les dates des photos » ci-dessous) ;
+  1. sa **date de prise de vue**, écrite dans la photo par l'appareil (voir « Lire les dates de prise de vue » ci-dessous) ;
   2. une date complète écrite dans son nom (`IMG_20190714_…`, `Capture d'écran 2024-01-02…`) ;
   3. sa date de modification.
 
@@ -28,15 +28,15 @@ Tout irait dans un nouveau dossier, **`Rangé/`** par défaut, à l'intérieur d
 - Un fichier **`.ts`** est du code TypeScript ou une vidéo (enregistrement télé) : à partir de 1 Mio, c'est une vidéo, sauf un fichier `.d.ts`.
 - Si tu as cherché les doublons, un fichier qui existe en plusieurs exemplaires porte la marque **« 📑 en double »** ; clique dessus pour voir où sont les autres. Ranger ne l'écarte pas : à toi de décider.
 
-## Lire les dates des photos
+## Lire les dates de prise de vue
 
-L'analyse ne lit que les noms, tailles et dates des fichiers, jamais leur contenu. La date de prise de vue est écrite *dans* la photo (ses métadonnées EXIF) : il faut ouvrir chaque photo pour la lire. C'est une étape à part, que tu lances toi-même.
+L'analyse ne lit que les noms, tailles et dates des fichiers, jamais leur contenu. La date de prise de vue est écrite *dans* la photo (ses métadonnées EXIF) ou la vidéo : il faut ouvrir chaque fichier pour la lire. C'est une étape à part, que tu lances toi-même.
 
-En haut de l'aperçu, la ligne **« 📷 Dates de prise de vue »** dit pour combien de photos du dossier elle a déjà été lue. **« 📷 Lire les dates des photos »** les lit, puis revient sur cet aperçu, avec tes ajustements.
+En haut de l'aperçu, la ligne **« 📷 Dates de prise de vue des photos et vidéos »** dit pour combien de fichiers du dossier elle a déjà été lue. **« 📷 Lire les dates de prise de vue »** les lit, puis revient sur cet aperçu, avec tes ajustements.
 
-- TreeAudit ouvre chaque photo **en lecture seule** et n'en lit que l'en-tête : 256 Kio au plus, jamais l'image elle-même. Il ne modifie rien, pas même la date d'accès quand le système le permet.
-- Formats lus : JPEG, HEIC/HEIF (iPhone), AVIF, TIFF et les fichiers bruts des appareils (DNG, NEF, CR2, ARW, ORF, RW2, PEF…), PNG et WebP. Les vidéos ne sont pas datées ainsi : elles gardent la date de leur nom ou de modification.
-- Seules les photos du dossier affiché et de ses sous-dossiers sont lues. Une date lue est gardée : elle sert aux autres dossiers de l'analyse et aux analyses suivantes, tant que le fichier ne change pas. Après une nouvelle analyse, la ligne dit combien de dates sont **déjà lues** : le bouton les reprend en quelques secondes, sans rouvrir les photos.
+- TreeAudit ouvre chaque photo ou vidéo **en lecture seule** et n'en lit que les en-têtes : 256 Kio au plus, jamais l'image ni le film eux-mêmes. Il ne modifie rien, pas même la date d'accès quand le système le permet.
+- Formats lus : JPEG, HEIC/HEIF (iPhone), AVIF, TIFF et les fichiers bruts des appareils (DNG, NEF, CR2, ARW, ORF, RW2, PEF…), PNG et WebP ; pour les vidéos, MP4, MOV (iPhone, appareils photo), M4V et 3GP. Une vidéo est datée par l'heure d'enregistrement de son film, convertie à l'heure de ton ordinateur. Les autres vidéos (MKV, AVI…) gardent la date de leur nom ou de modification.
+- Seules les photos du dossier affiché et de ses sous-dossiers sont lues. Une date lue est gardée : elle sert aux autres dossiers de l'analyse et aux analyses suivantes, tant que le fichier ne change pas. Après une nouvelle analyse, la ligne dit combien de dates sont **déjà lues** : le bouton les reprend en quelques secondes, sans rouvrir les fichiers.
 - Beaucoup de photos n'ont pas de date : captures d'écran, images enregistrées depuis le web ou une messagerie qui efface les métadonnées. Elles gardent la date de leur nom ou de modification.
 - Une photo **qui n'a pas pu être lue** (droits, disque débranché, fichier modifié depuis l'analyse) est comptée à part et redemandée la fois suivante.
 - Tu peux annuler la lecture : ce qui est déjà lu est gardé.

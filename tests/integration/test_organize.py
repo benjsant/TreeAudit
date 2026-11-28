@@ -158,6 +158,10 @@ def test_a_copied_photo_goes_by_the_date_in_its_name(
     assert moves["Album"].target == f"{DESTINATION}/Photos/2015/Album"
 
 
+def box_ftyp() -> bytes:
+    return struct.pack(">I4s", 20, b"ftyp") + b"isom\0\0\0\0isom"
+
+
 def exif_photo(taken: str | None, salt: bytes) -> bytes:
     """A JPEG whose EXIF holds this DateTimeOriginal ("2019:07:14 10:00:00")."""
     tiff = b"II*\0" + struct.pack("<IHI", 8, 0, 0)
@@ -194,6 +198,11 @@ def test_the_date_a_photo_was_taken_comes_first_once_read(
         )
     touch(root / "Vrac" / "reçue.jpg", exif_photo(None, b"r"), copy_time)  # EXIF, no date
     touch(root / "Vrac" / "notes.txt", b"n", copy_time)  # a mixed folder: sorted file by file
+    # A video copied the same day: dated by its recording time (mvhd, UTC).
+    recorded = struct.pack(">I", 1_500_000_000 + 2_082_844_800)  # July 2017
+    mvhd = struct.pack(">I4sI", 108, b"mvhd", 0) + recorded * 2 + b"\0" * 88
+    movie = struct.pack(">I4s", 116, b"moov") + mvhd
+    touch(root / "Vrac" / "clip.mp4", box_ftyp() + movie, copy_time)
     touch(root / "Vrac" / "horloge.jpg", exif_photo("2000:01:01 00:00:00", b"h"), copy_time)
     for i in range(3):
         touch(
@@ -222,7 +231,7 @@ def test_the_date_a_photo_was_taken_comes_first_once_read(
         outcome = execute_photo_dates(
             config, scan_id, start, mounts=mounts, home=None, cancel=threading.Event()
         )
-        assert (outcome.read, outcome.dated) == (11, 10)
+        assert (outcome.read, outcome.dated) == (12, 11)
         moves = {m.source: m for m in make_plan(conn, scan_id, start).moves}
         by_month = make_plan(
             conn, scan_id, start, adjustments_from_query([("par_mois", "1")])
@@ -232,6 +241,9 @@ def test_the_date_a_photo_was_taken_comes_first_once_read(
         other_version = {m.source: m for m in make_plan(conn, scan_id, start).moves}
     finally:
         conn.close()
+    clip = moves["Vrac/clip.mp4"]
+    assert clip.target == f"{DESTINATION}/Vidéos/2017/clip.mp4"
+    assert "date de prise de vue" in clip.reason
     sent = moves["Vrac/IMG_20170817_101010.jpg"]
     assert sent.target == f"{DESTINATION}/Photos/2017/IMG_20170817_101010.jpg"
     assert "date de prise de vue" in sent.reason and "nom" not in sent.reason

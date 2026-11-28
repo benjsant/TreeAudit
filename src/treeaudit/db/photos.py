@@ -16,9 +16,10 @@ from datetime import datetime
 
 from treeaudit.db.connection import from_sqlite_int
 
-READER = 1
+READER = 2
 """Version of the reading (photos/exif.py): rows of another version are read
-again, so a reader that learns a new format finds the dates it missed."""
+again, so a reader that learns a new format finds the dates it missed.
+2: videos (MP4, MOV, M4V, 3GP)."""
 FAILURES = ("unreadable", "changed")
 """Why a photo could not be read: the file could not be opened or read, or it
 is not the one of the analysis any more. Both are asked for again next time:

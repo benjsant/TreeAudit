@@ -33,11 +33,11 @@
     </fieldset>
     {% if photo_dates and photo_dates.total %}
     <div class="photo-dates actions">
-      <p>📷 <strong>Dates de prise de vue</strong> : lues pour {{ (photo_dates.dated + photo_dates.undated) | number }} photo(s) sur {{ photo_dates.total | number }}{% if photo_dates.dated + photo_dates.undated %}, dont {{ photo_dates.dated | number }} datée(s){% endif %}{% if photo_dates.failed %} ; {{ photo_dates.failed | number }} n'ont pas pu être lues{% endif %}.</p>
+      <p>📷 <strong>Dates de prise de vue des photos et vidéos</strong> : lues pour {{ (photo_dates.dated + photo_dates.undated) | number }} sur {{ photo_dates.total | number }}{% if photo_dates.dated + photo_dates.undated %}, dont {{ photo_dates.dated | number }} datée(s){% endif %}{% if photo_dates.failed %} ; {{ photo_dates.failed | number }} n'ont pas pu être lues{% endif %}.</p>
       {% if photo_dates.unread or photo_dates.failed %}
-      {% if photo_dates.reusable %}<p class="small">{{ photo_dates.reusable | number }} déjà lue(s) lors d'une analyse précédente : le bouton les reprend sans rouvrir les photos.</p>{% endif %}
-      <p><button type="button" class="button small" data-start-photo-dates data-scan="{{ scan.id }}" data-dir="{{ node.entry_id }}">📷 Lire les dates des photos</button>
-      <span class="muted small">TreeAudit n'ouvre chaque photo qu'en lecture, pour son en-tête seulement ; une date déjà lue n'est pas relue.</span></p>
+      {% if photo_dates.reusable %}<p class="small">{{ photo_dates.reusable | number }} déjà lue(s) lors d'une analyse précédente : le bouton les reprend sans rouvrir les fichiers.</p>{% endif %}
+      <p><button type="button" class="button small" data-start-photo-dates data-scan="{{ scan.id }}" data-dir="{{ node.entry_id }}">📷 Lire les dates de prise de vue</button>
+      <span class="muted small">TreeAudit n'ouvre chaque photo ou vidéo qu'en lecture, pour ses en-têtes seulement ; une date déjà lue n'est pas relue.</span></p>
       {% endif %}
       <p class="error-text" data-error role="alert" hidden></p>
     </div>
@@ -58,7 +58,7 @@
     </table>
     <ul class="plain small muted">
       <li>📁 Les albums et dossiers d'un seul type gardent leur nom ; les projets, jeux et logiciels sont déplacés en entier.</li>
-      <li>Les photos et vidéos sont classées par année : la date de prise de vue, une fois lue dans la photo, sinon une date écrite dans le nom (« IMG_20190714… »), sinon la date de modification. La ligne de chaque élément dit laquelle.</li>
+      <li>Les photos et vidéos sont classées par année : la date de prise de vue, une fois lue dans le fichier, sinon une date écrite dans le nom (« IMG_20190714… »), sinon la date de modification. La ligne de chaque élément dit laquelle.</li>
       <li>Tu peux renommer les dossiers ci-dessus, et pour chaque élément : le laisser en place ou changer sa catégorie.</li>
       {% if plan.renamed %}<li>⚠ {{ plan.renamed | length }} élément(s) portent le même nom qu'un autre : ils recevront un numéro « (2) ».</li>{% endif %}
     </ul>

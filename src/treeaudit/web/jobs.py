@@ -327,7 +327,7 @@ class JobManager:
         job = Job(
             id=next(self._ids),
             kind=JobKind.PHOTO_DATES,
-            label="Lecture des dates des photos",
+            label="Lecture des dates de prise de vue",
             progress=progress,
         )
         config = self.config

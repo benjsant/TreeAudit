@@ -153,8 +153,8 @@ function dupesProgress(p) {
 
 function datesProgress(p) {
   const count = (n) => n.toLocaleString("fr-FR");
-  if (!p.stage) return `${count(p.total)} photos dans ce dossier`;
-  let text = `${p.stage} : ${count(p.stage_done)} / ${count(p.stage_total)} photos`;
+  if (!p.stage) return `${count(p.total)} photos et vidéos dans ce dossier`;
+  let text = `${p.stage} : ${count(p.stage_done)} / ${count(p.stage_total)} fichiers`;
   if (p.dated) text += ` · ${count(p.dated)} datées`;
   if (p.reused) text += ` · ${count(p.reused)} déjà lues`;
   return text;
@@ -263,7 +263,7 @@ function setupJobMonitor() {
       field("current").textContent = "";
     } else if (job.kind === "photo_dates") {
       field("progress").textContent = datesProgress(p);
-      field("current").textContent = p.errors ? `${p.errors} photo(s) illisible(s)` : "–";
+      field("current").textContent = p.errors ? `${p.errors} fichier(s) illisible(s)` : "–";
     } else if (job.kind === "archive") {
       field("progress").textContent = archiveProgress(p);
       field("current").textContent = p.problems ? `${p.problems} élément(s) à signaler` : "";

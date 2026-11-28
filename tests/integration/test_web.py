@@ -1855,26 +1855,26 @@ def test_reading_photo_dates_goes_back_to_ranger(client: TestClient, scanned: in
 def test_ranger_offers_to_read_the_photo_dates(client: TestClient, scanned: int) -> None:
     folder = entry_ids(client, scanned)[b"photos"]
     page = client.get(f"/scans/{scanned}/organize", params={"dir": str(folder)}).text
-    assert "lues pour 0 photo(s) sur 3" in page
+    assert "lues pour 0 sur 3" in page
     assert f'data-start-photo-dates data-scan="{scanned}" data-dir="{folder}"' in page
     assert 'name="par_mois" value="1">' in page  # not ticked by default
     run_job(client, f"/api/scans/{scanned}/photo-dates", {"dir": folder})
     page = client.get(
         f"/scans/{scanned}/organize", params={"dir": str(folder), "par_mois": "1"}
     ).text
-    assert "lues pour 3 photo(s) sur 3, dont 0 datée(s)" in page
+    assert "lues pour 3 sur 3, dont 0 datée(s)" in page
     assert "data-start-photo-dates" not in page  # nothing left to read
     assert 'name="par_mois" value="1" checked>' in page
     # A new analysis of the same files: the dates are known, not yet taken over.
     rescanned = int(run_job(client, "/api/scans", {"root_id": "main", "subpath": ""})["scan_id"])  # type: ignore[call-overload]
     folder = entry_ids(client, rescanned)[b"photos"]
     page = client.get(f"/scans/{rescanned}/organize", params={"dir": str(folder)}).text
-    assert "lues pour 0 photo(s) sur 3" in page
+    assert "lues pour 0 sur 3" in page
     assert "3 déjà lue(s) lors d'une analyse précédente" in page
     snapshot = run_job(client, f"/api/scans/{rescanned}/photo-dates", {"dir": folder})
     assert snapshot["progress"]["reused"] == 3  # type: ignore[index]
     page = client.get(f"/scans/{rescanned}/organize", params={"dir": str(folder)}).text
-    assert "déjà lue(s)" not in page and "lues pour 3 photo(s) sur 3" in page
+    assert "déjà lue(s)" not in page and "lues pour 3 sur 3" in page
 
 
 def test_the_reading_goes_back_to_ranger_with_its_adjustments(

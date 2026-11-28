@@ -1,10 +1,13 @@
-"""The date a photo was taken, read from EXIF (D-071), on files built byte by byte."""
+"""The date a photo was taken, read from EXIF, or a video recorded (D-071), on
+files built byte by byte."""
 
 from __future__ import annotations
 
 import random
 import struct
-from datetime import datetime
+import time
+from collections.abc import Iterator
+from datetime import UTC, datetime
 
 import pytest
 
@@ -107,6 +110,42 @@ def webp(payload: bytes, *, prefix: bytes = b"") -> bytes:
 
     body = b"WEBP" + chunk(b"VP8X", b"\x08" + b"\0" * 9) + chunk(b"EXIF", prefix + payload)
     return b"RIFF" + struct.pack("<I", len(body)) + body
+
+
+def mp4(
+    created: int | None,
+    *,
+    version: int = 0,
+    movie_first: bool = False,
+    data: bytes = b"\0" * 64,
+    brand: bytes = b"isom",
+) -> bytes:
+    """ftyp, mdat and moov, or moov before mdat."""
+    ftyp = box(b"ftyp", brand + b"\0\0\0\0" + brand + b"mp41")
+    movie, mdat = moov(created, version=version), box(b"mdat", data)
+    return ftyp + (movie + mdat if movie_first else mdat + movie)
+
+
+def moov(created: int | None, *, version: int = 0) -> bytes:
+    """The movie box: its header (mvhd) with this creation time, then a track."""
+    when = 0 if created is None else created + exif._MP4_EPOCH
+    times = struct.pack(">QQ" if version == 1 else ">II", when, when)
+    mvhd = full_box(b"mvhd", version, times + struct.pack(">II", 600, 6000) + b"\0" * 80)
+    return box(b"moov", mvhd + box(b"trak", b"\0" * 32))
+
+
+RECORDED = int(datetime(2021, 8, 15, 7, 30, 0, tzinfo=UTC).timestamp())
+"""15 August 2021, 07:30 UTC: 09:30 in Paris."""
+
+
+@pytest.fixture
+def paris() -> Iterator[None]:
+    """The computer's local time is Paris time (summer: UTC + 2)."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("TZ", "Europe/Paris")
+        time.tzset()
+        yield
+    time.tzset()
 
 
 class Recorder:
@@ -256,7 +295,7 @@ def test_the_announced_size_bounds_every_read() -> None:
 
 
 def test_truncated_files_never_raise() -> None:
-    for build in (jpeg, png, webp, heif):
+    for build in (jpeg, png, webp, heif, lambda _: mp4(RECORDED)):
         whole = build(tiff())
         for cut in range(len(whole)):
             taken(whole[:cut])
@@ -264,7 +303,7 @@ def test_truncated_files_never_raise() -> None:
 
 def test_random_damage_never_raises() -> None:
     chance = random.Random(71)  # noqa: S311 - reproducible damage, not secrecy
-    for build in (lambda p: p, jpeg, png, webp, heif):
+    for build in (lambda p: p, jpeg, png, webp, heif, lambda _: mp4(RECORDED)):
         whole = bytearray(build(tiff(chance.choice("<>"))))
         for _ in range(400):
             damaged = bytearray(whole)
@@ -277,3 +316,64 @@ def test_random_damage_never_raises() -> None:
 def test_the_extensions_read() -> None:
     assert {"jpg", "jpeg", "heic", "avif", "dng", "nef", "cr2", "png", "webp"} <= exif.EXTENSIONS
     assert "gif" not in exif.EXTENSIONS and "svg" not in exif.EXTENSIONS
+    assert {"mp4", "mov", "m4v", "3gp"} <= exif.EXTENSIONS
+    assert "mkv" not in exif.EXTENSIONS and "avi" not in exif.EXTENSIONS
+
+
+# --- videos: the creation time of the movie header ------------------------------------------
+
+
+@pytest.mark.usefixtures("paris")
+@pytest.mark.parametrize("version", [0, 1])
+@pytest.mark.parametrize("movie_first", [False, True])
+@pytest.mark.parametrize("brand", [b"isom", b"qt  ", b"3gp5"])
+def test_a_video_gives_its_recording_time_in_local_time(
+    version: int, movie_first: bool, brand: bytes
+) -> None:
+    data = mp4(RECORDED, version=version, movie_first=movie_first, brand=brand)
+    assert taken(data) == datetime(2021, 8, 15, 9, 30, 0)
+
+
+def test_an_unset_recording_time_is_none() -> None:
+    assert taken(mp4(None)) is None
+    assert taken(mp4(None, version=1)) is None
+
+
+def test_an_absurd_recording_time_is_none() -> None:
+    data = mp4(0, version=1)
+    absurd = data.replace(struct.pack(">Q", exif._MP4_EPOCH) * 2, b"\xff" * 16)
+    assert absurd != data
+    assert taken(absurd) is None
+
+
+@pytest.mark.usefixtures("paris")
+def test_the_image_data_before_the_movie_is_skipped_unread() -> None:
+    """A 4 GiB video whose movie header is at the end: only box headers are read."""
+    head = box(b"ftyp", b"isom\0\0\0\0isom")
+    data_size = 4 * 1024**3
+    mdat_header = struct.pack(">I", 1) + b"mdat" + struct.pack(">Q", 16 + data_size)
+    movie = moov(RECORDED)
+    size = len(head) + len(mdat_header) + data_size + len(movie)
+    moov_at = size - len(movie)
+    read: list[tuple[int, int]] = []
+
+    def reader(offset: int, length: int) -> bytes:
+        read.append((offset, length))
+        if offset + length <= len(head):
+            return head[offset : offset + length]
+        if len(head) <= offset and offset + length <= len(head) + len(mdat_header):
+            start = offset - len(head)
+            return mdat_header[start : start + length]
+        if offset >= moov_at:
+            return movie[offset - moov_at : offset - moov_at + length]
+        raise AssertionError(f"the image data was read at {offset}")
+
+    assert exif.taken_at(reader, size) == datetime(2021, 8, 15, 9, 30, 0)
+    assert sum(length for _, length in read) < 200
+
+
+@pytest.mark.usefixtures("paris")
+def test_a_heic_with_a_movie_is_dated_by_its_photo() -> None:
+    """A moving photo: the photo's own date first, the movie's when it has none."""
+    assert taken(heif(tiff()) + moov(RECORDED)) == TAKEN
+    assert taken(heif(tiff(tags={})) + moov(RECORDED)) == datetime(2021, 8, 15, 9, 30, 0)
