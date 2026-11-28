@@ -556,7 +556,7 @@ evidence = [
   { kind = "child", value = "bower.json", weight = 5, label = "décrite par un bower.json" },
   { kind = "child", value = "dist", weight = 5, label = "contient sa version distribuée (dist)" },
   { kind = "any_file_glob", value = "*.pdf", weight = -40, label = "contient des PDF : sans doute pas une bibliothèque" },
-  { kind = "any_file_glob", value = "*.doc", weight = -40, label = "contient des documents Word : sans doute pas une bibliothèque" },
-  { kind = "any_file_glob", value = "*.docx", weight = -40, label = "contient des documents Word : sans doute pas une bibliothèque" },
+  { kind = "any_file_glob", value = "*.doc", weight = -40, label = "contient des documents Word (.doc) : sans doute pas une bibliothèque" },
+  { kind = "any_file_glob", value = "*.docx", weight = -40, label = "contient des documents Word (.docx) : sans doute pas une bibliothèque" },
   { kind = "any_file_glob", value = "*.od[tsp]", weight = -40, label = "contient des documents LibreOffice : sans doute pas une bibliothèque" },
 ]
