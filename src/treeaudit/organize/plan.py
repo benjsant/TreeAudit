@@ -7,6 +7,8 @@ From the most careful to the finest:
 1. blocks: projects, git repositories, software and games move whole;
 2. homogeneous folders (all their files of one category, e.g. an album)
    move whole, under their own name: the user's own sorting is kept;
+   A folder made mostly of vector images, icons or tiny images (an icon
+   set, a theme's images) is "Graphismes", never photos (D-072);
 3. loose files of mixed folders move one by one, by type (and by year for
    photos and videos, optionally by month: the date the photo was taken, read
    from it beforehand by a job the user starts (D-071), else a date in the
@@ -37,10 +39,12 @@ a sub-folder instead."""
 PHOTOS, VIDEOS, MUSIC, DOCUMENTS = "Photos", "Vidéos", "Musique", "Documents"
 ARCHIVES, INSTALLERS, CODE, FONTS, OTHER = "Archives", "Installateurs", "Code", "Polices", "Autres"
 PROJECTS, SOFTWARE = "Projets", "Logiciels"
+GRAPHICS = "Graphismes"
 BY_YEAR = frozenset({PHOTOS, VIDEOS})
 CATEGORIES = (
     PHOTOS,
     VIDEOS,
+    GRAPHICS,
     MUSIC,
     DOCUMENTS,
     ARCHIVES,
@@ -83,9 +87,10 @@ _EXTENSIONS: dict[str, frozenset[str]] = {
             "raf",
             "psd",
             "xcf",
-            "svg",
         ]
     ),
+    # Drawn, not taken: icons and vector images have no year (D-072).
+    GRAPHICS: frozenset(["svg", "svgz", "ico", "icns", "cur", "ai", "eps"]),
     VIDEOS: frozenset(
         [
             "mp4",
@@ -477,6 +482,8 @@ class _Node:
     years: Counter[int] = field(default_factory=Counter)
     files: int = 0
     total: int = 0
+    small_images: int = 0
+    """Tiny images in the formats of icons (ICON_FORMATS, below SMALL_IMAGE)."""
     space: int = 0
     """Place used on the disk by the folder and everything below, as the explorer
     shows it (a file shows its own size)."""
@@ -641,6 +648,7 @@ def _summarize(node: _Node) -> None:
             if child.kind == "dir":
                 current.categories.update(child.categories)
                 current.years.update(child.years)
+                current.small_images += child.small_images
                 current.files += child.files
                 current.total += child.total
                 current.space += child.space
@@ -660,6 +668,8 @@ def _summarize(node: _Node) -> None:
                     continue
                 category = category_of(child.extension, child.size, child.name)
                 current.categories[category] += 1
+                if child.extension in ICON_FORMATS and child.size < SMALL_IMAGE:
+                    current.small_images += 1
                 if category in BY_YEAR:
                     day, _ = photo_date(child.name_display, child.mtime_ns, child.taken)
                     current.years[0 if day is None else day.year] += 1
@@ -726,7 +736,7 @@ def _code_folder(node: _Node) -> bool:
     )
 
 
-PERSONAL = frozenset({PHOTOS, VIDEOS, MUSIC, DOCUMENTS})
+PERSONAL = frozenset({PHOTOS, VIDEOS, GRAPHICS, MUSIC, DOCUMENTS})
 
 
 def _mostly_personal(node: _Node) -> bool:
@@ -738,6 +748,23 @@ def _mostly_personal(node: _Node) -> bool:
     counted = sum(node.categories.values())
     personal = sum(node.categories[category] for category in PERSONAL)
     return counted > 0 and personal * 2 > counted
+
+
+SMALL_IMAGE = 16 * 1024
+"""Below this, a PNG, GIF, BMP or WebP is an icon or a button: a screenshot
+weighs far more. JPEG never counts: an old phone or web photo can be that
+small (the tests' albums are, too)."""
+ICON_FORMATS = frozenset({"png", "gif", "bmp", "webp"})
+
+
+def _graphics_folder(node: _Node) -> bool:
+    """A folder of images only, most of them vector images, icons or tiny
+    images (D-072): an icon set, a theme's or a web page's images. It moves
+    whole to "Graphismes", never into a year of "Photos"."""
+    counted = sum(node.categories.values())
+    images = node.categories[PHOTOS] + node.categories[GRAPHICS]
+    drawn = node.categories[GRAPHICS] + node.small_images
+    return counted > 0 and images == counted and drawn * 2 > counted
 
 
 def _is_block(node: _Node) -> bool:
@@ -896,9 +923,16 @@ class _Planner:
         if not node.files:
             self._keep(node, "dossier vide")
             return
+        if not node.unmovable and not node.has_block and _graphics_folder(node):
+            self._move(node, GRAPHICS, "icônes ou graphismes, dossier gardé tel quel")
+            return
         if len(node.categories) == 1 and not node.unmovable and not node.has_block:
             (category,) = node.categories
             self._move(node, category, "dossier homogène, gardé tel quel")
+            return
+        if set(node.categories) == {PHOTOS, GRAPHICS} and not node.unmovable and not node.has_block:
+            # Mostly photos with a drawing or two (a logo, a map): still an album.
+            self._move(node, PHOTOS, "dossier homogène, gardé tel quel")
             return
         for child in node.children:
             self._visit(child)

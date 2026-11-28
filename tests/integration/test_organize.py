@@ -279,6 +279,47 @@ def test_by_month_comes_from_the_address() -> None:
     assert not adjustments_from_query([]).any
 
 
+def test_icons_and_vector_images_go_to_graphics_without_a_year(
+    tmp_path: Path, data_disk_table: Callable[..., MountTable]
+) -> None:
+    """D-072: drawn, not taken. A real disk's icon set was about to become an album."""
+    root = tmp_path / "Disque"
+    for i in range(26):  # an icon set: vector images only
+        touch(root / "icones" / f"arrow-{i}.svg", b"<svg/>" * (i + 1), PHOTO_TIME)
+    for i in range(6):  # a theme: small PNG and GIF buttons, two SVG
+        touch(root / "theme" / f"bouton-{i}.png", b"\x89PNG" + b"b" * (300 * i), PHOTO_TIME)
+    touch(root / "theme" / "fond.gif", b"GIF89a" + b"g" * 900, PHOTO_TIME)
+    touch(root / "theme" / "logo.svg", b"<svg/>", PHOTO_TIME)
+    for i in range(6):  # old phone photos: tiny, but JPEG
+        touch(root / "Nokia 2006" / f"Image{i:03d}.jpg", b"j" * (5000 + i), PHOTO_TIME)
+    for i in range(3):  # screenshots: large PNG, with one drawing among them
+        touch(root / "Captures" / f"capture-{i}.png", b"s" * 200_000 + bytes([i]), PHOTO_TIME)
+    touch(root / "Captures" / "schema.svg", b"<svg/>", PHOTO_TIME)
+    touch(root / "Bazar" / "logo-asso.svg", b"<svg/>", PHOTO_TIME)
+    touch(root / "Bazar" / "favicon.ico", b"ico", PHOTO_TIME)
+    touch(root / "Bazar" / "lettre.pdf", b"pdf", PHOTO_TIME)
+    plan, _ = scan_and_plan(tmp_path, root, data_disk_table)
+    moves = {move.source: move for move in plan.moves}
+    assert moves["icones"].target == f"{DESTINATION}/Graphismes/icones"
+    assert moves["icones"].reason == "icônes ou graphismes, dossier gardé tel quel"
+    assert moves["theme"].target == f"{DESTINATION}/Graphismes/theme"
+    assert moves["Nokia 2006"].target == f"{DESTINATION}/Photos/2019/Nokia 2006"
+    # Mostly real images with a drawing: still an album, moved whole as before.
+    assert moves["Captures"].target == f"{DESTINATION}/Photos/2019/Captures"
+    assert moves["Bazar/logo-asso.svg"].target == f"{DESTINATION}/Graphismes/logo-asso.svg"
+    assert moves["Bazar/favicon.ico"].target == f"{DESTINATION}/Graphismes/favicon.ico"
+    assert plan.categories()["Graphismes"][0] == 4
+
+
+def test_graphics_are_not_development() -> None:
+    """Graphics may be the user's own work: the development shortcut leaves them."""
+    from treeaudit.organize.plan import CATEGORIES, DEVELOPMENT, GRAPHICS, category_of
+
+    assert GRAPHICS in CATEGORIES and GRAPHICS not in DEVELOPMENT
+    assert category_of("svg") == GRAPHICS and category_of("jpg") == "Photos"
+    assert category_of("psd") == "Photos"  # retouching, often of photos
+
+
 def test_scripts_tidy_then_restore_everything_exactly(
     tmp_path: Path, messy: Path, data_disk_table: Callable[..., MountTable]
 ) -> None:
