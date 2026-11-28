@@ -335,3 +335,22 @@ def test_held_out_cases_stay_sorted(case: object) -> None:
 def test_vague_sub_folder_names_are_never_proposed(name: str, generic: bool) -> None:
     """Seen on a real folder and in the benchmark (D-049)."""
     assert is_generic_name(name) is generic
+
+
+def test_days_of_mute_names_are_not_pushed_back_by_small_word_groups() -> None:
+    """A real folder (D-071, step 4): 30 groups of two or three shared words
+    filled the first batch; the days of camera-named photos only came three
+    batches later. Those photos share no word, so their days compete with
+    the words by size."""
+    letters = "bcdfghjklmnpqrstvwxz"
+    words = [f"{letters[i // 20]}a{letters[i % 20]}o" for i in range(40)]
+    names = [f"{word} {n}.jpg" for word in words for n in (1, 2)]  # 40 pairs
+    names += [f"IMG_20190714_{h:02d}0000.jpg" for h in range(8, 14)]  # six that day
+    found = propose(PHOTOS, timed([NOON + 10**8] * len(names), *names))
+    assert found.more  # more groups than one batch holds
+    assert found.subfolders[0] == "2019-07-14"  # the fullest first
+    day = [e for e, name in found.by_entry.items() if name == "2019-07-14"]
+    assert sorted(day) == list(range(81, 87))
+    assert found.reasons[81] == "même journée (14/07/2019, date écrite dans le nom)"
+    # Only the photos without any word: the words keep all of theirs.
+    assert all(found.by_entry.get(e) != "2019-07-14" for e in range(1, 81))

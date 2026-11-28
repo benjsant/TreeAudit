@@ -6,9 +6,11 @@ Deterministic and explainable, for everyone (no AI, no graphics card):
    of paper ("facture");
 2. shared words: among what is left, the names sharing a rare word ("maths",
    "Dupont", "Daft Punk") are grouped under that word, the most shared first.
-3. days: photos and videos left over, often named by a camera, go to the day
-   they were taken ("2019-07-14"), when at least MIN_DAY share it (D-057;
-   the date read from the photo first, D-071).
+3. days: photos and videos, often named by a camera, go to the day they were
+   taken ("2019-07-14"), when at least MIN_DAY share it (D-057; the date read
+   from the photo first, D-071). Those whose name holds no word at all
+   (IMG_1234, DSC_0042) cannot share one: their days compete with the shared
+   words, the fullest first; the others' days come after the words.
 A sub-folder holds at least two elements and never all of them (it would sort
 nothing); its name goes through the same checks as a name typed by the user.
 Photos and videos are already sorted by year by the plan itself. Nothing
@@ -463,7 +465,9 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
             for entry in members:
                 reasons[entry] = f"le nom contient « {matched[entry]} »"
 
-    # 2. Shared words, the most shared first (a heap with lazy recounts).
+    # 2. Shared words, the most shared first (a heap with lazy recounts),
+    # and the days of photos whose name holds no word (no member in common
+    # with any word: they go in the same heap, by size).
     holders: dict[str, set[int]] = defaultdict(set)
     forms: dict[str, Counter[str]] = defaultdict(Counter)
     for entry, pairs in words.items():
@@ -472,15 +476,29 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
         for word, written in pairs:
             holders[_key(word)].add(entry)
             forms[_key(word)][written] += 1
-    heap = [(-len(e), -len(k), k) for k, e in holders.items() if len(e) >= MIN_MEMBERS]
+    heap: list[tuple[int, int, int, str]] = [
+        (-len(e), -len(k), 1, k) for k, e in holders.items() if len(e) >= MIN_MEMBERS
+    ]
+    mute_days: dict[str, tuple[list[int], str]] = {}
+    if category in (PHOTOS, VIDEOS):
+        mute = [m for m in moves if m.entry_id in words and not words[m.entry_id]]
+        for day, (members, source) in _days(mute).items():
+            mute_days[day.isoformat()] = (members, f"même journée ({day:%d/%m/%Y}, {source})")
+            heap.append((-len(members), 0, 0, day.isoformat()))
     heapq.heapify(heap)
     while heap and len(order) < limit:
-        size, length, key = heapq.heappop(heap)
+        size, length, is_word, key = heapq.heappop(heap)
+        if not is_word:
+            members, why = mute_days[key]
+            if keep(key, members) is not None:
+                for entry in members:
+                    reasons[entry] = why
+            continue
         group = holders[key] - by_entry.keys()
         if len(group) < MIN_MEMBERS:
             continue
         if len(group) < -size:  # some were taken since: put it back at its true rank
-            heapq.heappush(heap, (-len(group), length, key))
+            heapq.heappush(heap, (-len(group), length, is_word, key))
             continue
         if category in (PHOTOS, VIDEOS) and _device_series(group, key, names):
             continue
@@ -497,7 +515,7 @@ def propose(category: str, moves: Sequence[Move]) -> Suggestions:
         for entry in group if name is not None else ():
             reasons[entry] = f"mot en commun : « {name} »"
 
-    # 3. Photos and videos whose name says nothing: the day they were taken.
+    # 3. Photos and videos left over: the day they were taken.
     if category in (PHOTOS, VIDEOS):
         rest = [m for m in moves if m.subfolder is None and m.entry_id not in by_entry]
         for day, (members, source) in _days(rest).items():
