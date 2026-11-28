@@ -18,6 +18,14 @@ Les éléments sous 30 % ne sont pas affichés. Le seuil se change dans « Optio
 
 Ce ne sont que des estimations. Un dossier vert peut, exceptionnellement, contenir quelque chose d'important : en cas de doute, ouvre-le dans l'explorateur.
 
+### Bibliothèques web recopiées
+
+Une bibliothèque web, un jeu d'icônes ou un composant copié tel qu'on le télécharge (Bootstrap, jQuery, Font Awesome, Bootstrap Icons, DataTables, TinyMCE…, y compris avec leur version : `bootstrap-5.3.2-dist`) est signalé en 🔴 **Douteux**, jamais plus. Il peut être retéléchargé, mais il a pu être modifié à la main, et un site qui l'utilise ne marchera plus sans lui.
+
+- Seuls des noms de bibliothèques connues sont regardés : un dossier `img`, `icons`, `assets` ou `vendor` est le contenu propre d'un projet, jamais proposé.
+- Le nom ne suffit pas : il faut aussi des fichiers minifiés (`.min.css`, `.min.js`), une licence, un `package.json` ou un dossier `dist`.
+- Un dossier qui contient des PDF ou des documents Word ou LibreOffice n'est pas proposé : un cours de statistiques sur la méthode du « bootstrap » reste tranquille.
+
 ## Préparer la commande
 
 1. Coche ce que tu veux (les éléments verts le sont déjà). « Tout décocher » repart de zéro.

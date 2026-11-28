@@ -12,7 +12,7 @@ import pytest
 
 from treeaudit.core.config import RootConfig
 from treeaudit.db.connection import connect_memory
-from treeaudit.parasites.detect import Band, Finding, find_parasites
+from treeaudit.parasites.detect import DEFAULT_MIN_CONFIDENCE, Band, Finding, find_parasites
 from treeaudit.parasites.rules import load_default_rules
 from treeaudit.roots.mountinfo import MountTable
 from treeaudit.roots.validation import ValidationContext
@@ -283,3 +283,52 @@ def test_home_cache_is_never_checked_by_default(
     assert found["me/.cache"].band is Band.ORANGE  # listed, unchecked: look first
     assert "Jeux/MonJeu/cache" not in found
     assert found["Jeux/MonJeu/.cache"].confidence < 30
+
+
+# --- copied web libraries (D-073) -----------------------------------------------------------
+
+
+def test_copied_web_libraries_are_recognised_by_what_they_hold(
+    root: Path, analyse: Callable[..., dict[str, Finding]]
+) -> None:
+    site = root / "mon-site" / "static"
+    touch(site / "bootstrap-5.3.2-dist" / "css" / "bootstrap.min.css", b"x")
+    touch(site / "bootstrap-5.3.2-dist" / "js" / "bootstrap.bundle.min.js", b"x")
+    touch(site / "fontawesome-free-6.5.1-web" / "LICENSE.txt", b"x")
+    touch(site / "fontawesome-free-6.5.1-web" / "css" / "all.min.css", b"x")
+    touch(site / "bootstrap-icons" / "package.json", b"{}")
+    touch(site / "bootstrap-icons" / "icons" / "alarm.svg", b"<svg/>")
+    touch(site / "bootstrap-icons" / "font" / "bootstrap-icons.min.css", b"x")
+    touch(site / "bootstrap-icons" / "LICENSE", b"x")
+    touch(site / "bootstrap-icons" / "dist" / "bootstrap-icons.svg", b"x")
+    touch(site / "img" / "logo.min.png", b"x")  # the site's own images: a generic name
+    findings = analyse()
+    library = findings["mon-site/static/bootstrap-5.3.2-dist"]
+    assert library.rule.id == "vendored-web-library"
+    assert library.confidence == 40 and library.band is Band.RED  # never pre-checked
+    assert findings["mon-site/static/fontawesome-free-6.5.1-web"].confidence == 45  # capped
+    icons = findings["mon-site/static/bootstrap-icons"]
+    assert icons.confidence == 45 and icons.band is Band.RED  # 20 + 35 of clues, capped
+    assert {e.evidence.label for e in icons.evidence if e.matched} == {
+        "contient des fichiers minifiés",
+        "contient la licence de la bibliothèque",
+        "décrite par un package.json",
+        "contient sa version distribuée (dist)",
+    }
+    assert "mon-site/static/img" not in findings
+
+
+def test_a_folder_only_named_like_a_library_is_not_shown(
+    root: Path, analyse: Callable[..., dict[str, Finding]]
+) -> None:
+    """A statistics course on the bootstrap method, a jquery folder of notes."""
+    touch(root / "Cours" / "bootstrap" / "chapitre-3.pdf", b"x")
+    touch(root / "Cours" / "bootstrap" / "exemple.min.R", b"x")
+    touch(root / "Notes" / "jquery" / "memo.txt", b"x")
+    touch(root / "Notes" / "jquery-3" / "plan.docx", b"x")
+    shown = analyse(min_confidence=DEFAULT_MIN_CONFIDENCE)  # what the page shows
+    assert not [p for p in shown if p.startswith(("Cours/", "Notes/"))]
+    everything = analyse(min_confidence=0)
+    assert everything["Cours/bootstrap"].confidence == 0
+    assert everything["Notes/jquery"].confidence == 20
+    assert everything["Notes/jquery-3"].confidence == 0

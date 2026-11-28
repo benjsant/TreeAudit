@@ -524,14 +524,39 @@ recreate_note = "Les applications le recréent au besoin."
 
 # --- Copied libraries (ambiguous: always to check) ----------------------------------
 
+# Names of widely used web libraries, icon sets and components only: a generic
+# name (img, icons, assets, lib, vendor...) is a project's own content. The
+# name alone stays below the display threshold; what the folder holds decides
+# (D-073). Never above "à vérifier": it may have been changed by hand.
 [[rule]]
 id = "vendored-web-library"
 label = "Bibliothèque web recopiée"
 target = "dir"
-names = ["bootstrap", "jquery", "font-awesome", "fontawesome"]
+names = [
+  "bootstrap", "bootstrap-icons", "jquery", "jquery-ui", "jqueryui",
+  "font-awesome", "fontawesome", "fontawesome-free",
+  "material-design-icons", "materialdesignicons", "ionicons", "heroicons", "tabler-icons",
+  "remixicon", "boxicons",
+  "datatables", "DataTables", "select2", "fancybox", "owl-carousel", "owl.carousel",
+  "popper.js", "animate.css", "normalize.css", "chart.js", "highlight.js",
+  "codemirror", "tinymce", "ckeditor", "ckeditor5",
+]
+# Downloaded with their version: bootstrap-5.3.2-dist, jquery-3.7.1, font-awesome-4.7.0...
+globs = [
+  "bootstrap-[0-9]*", "bootstrap-icons-[0-9]*", "jquery-[0-9]*", "jquery-ui-[0-9]*",
+  "font-awesome-[0-9]*", "fontawesome-free-[0-9]*",
+]
 base = 20
 max_confidence = 45
-explanation = "Bibliothèque recopiée dans le projet. Elle peut être réinstallée par un gestionnaire de paquets, mais elle a pu être modifiée à la main : à vérifier."
+explanation = "Bibliothèque web, jeu d'icônes ou composant recopié tel qu'on le télécharge. Elle peut être téléchargée ou réinstallée par un gestionnaire de paquets, mais elle a pu être modifiée à la main, et un site qui l'utilise ne marchera plus sans elle : à vérifier."
 evidence = [
   { kind = "any_file_glob", value = "*.min.*", weight = 20, label = "contient des fichiers minifiés" },
+  { kind = "child_glob", value = "LICEN[CS]E*", weight = 5, label = "contient la licence de la bibliothèque" },
+  { kind = "child", value = "package.json", weight = 5, label = "décrite par un package.json" },
+  { kind = "child", value = "bower.json", weight = 5, label = "décrite par un bower.json" },
+  { kind = "child", value = "dist", weight = 5, label = "contient sa version distribuée (dist)" },
+  { kind = "any_file_glob", value = "*.pdf", weight = -40, label = "contient des PDF : sans doute pas une bibliothèque" },
+  { kind = "any_file_glob", value = "*.doc", weight = -40, label = "contient des documents Word : sans doute pas une bibliothèque" },
+  { kind = "any_file_glob", value = "*.docx", weight = -40, label = "contient des documents Word : sans doute pas une bibliothèque" },
+  { kind = "any_file_glob", value = "*.od[tsp]", weight = -40, label = "contient des documents LibreOffice : sans doute pas une bibliothèque" },
 ]

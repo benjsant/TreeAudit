@@ -49,6 +49,9 @@
 - Motif trop long refusé ; regex pathologique interrompue par annulation.
 - La regex est compilée une seule fois par recherche.
 
+## À nettoyer (D-023, `test_parasites.py`)
+- Bibliothèques web recopiées (D-073) : versions téléchargées reconnues par leur nom et leur contenu, plafond à 45 % (jamais coché d'avance), dossier `img` d'un site jamais proposé, cours et notes nommés comme une bibliothèque jamais affichés.
+
 ## Doublons (phase 4)
 - Deux fichiers identiques avec des noms différents.
 - Fichiers de même taille mais de contenu différent (début identique, fin différente ; début différent).
